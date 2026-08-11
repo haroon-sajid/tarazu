@@ -1,6 +1,6 @@
-"""rules module — public interface (placeholder).
+"""Public interface of the rules module (placeholder).
 
-The ONLY file other modules may import from modules/rules/.
-Deterministic rule evaluation only. This module must never import an AI client.
-Accepts and returns app/shared/ schema objects exclusively.
+This is the only file other modules may import from modules/rules/.
+Deterministic rule evaluation only; this module must never import an AI client.
+It accepts and returns app/shared/ schema objects exclusively.
 """

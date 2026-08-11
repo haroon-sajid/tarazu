@@ -1,5 +1,5 @@
-"""extraction module — public interface (placeholder).
+"""Public interface of the extraction module (placeholder).
 
-The ONLY file other modules may import from modules/extraction/.
-Accepts and returns app/shared/ schema objects exclusively.
+This is the only file other modules may import from modules/extraction/.
+It accepts and returns app/shared/ schema objects exclusively.
 """

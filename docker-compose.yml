@@ -1,22 +1,23 @@
-# docker-compose.yml — PLACEHOLDER (comments only, no runnable services yet)
+# docker-compose.yml — placeholder (comments only, no runnable services yet).
 #
-# Local development composition for Tarazu — AI Audit Assistant (modular monolith).
+# Local development composition for Tarazu — AI Audit Assistant.
 # Two containers only:
 #
-#   frontend  — Next.js dev server                         (port TBD)
-#   backend   — ONE FastAPI app (backend/app/main.py)      (port TBD)
-#               all modules (extraction, matching, rules,
-#               assistant, reports) run inside this single app
+#   frontend  Next.js dev server                      (port to be decided)
+#   backend   single FastAPI app (backend/app/main.py) (port to be decided)
+#             All modules (extraction, matching, rules, assistant, reports)
+#             run inside this one app.
 #
 # Notes:
-#   - Supabase (Postgres, auth, storage) is a hosted dependency; for local dev,
-#     either point at a Supabase project or add the supabase local stack here later.
-#   - Env vars come from .env (see .env.example for the variable names).
+#   - Supabase (Postgres, auth, storage) is a hosted dependency. For local
+#     development, either point at a Supabase project or add the Supabase local
+#     stack here later.
+#   - Environment variables come from .env (see .env.example for the names).
 #   - Module boundaries are enforced in code (see CLAUDE.md), not by containers.
 #
 # version: "3.9"
 # services:
 #   frontend:
-#     ...to be defined when the frontend is scaffolded internally.
+#     # To be defined when the frontend is scaffolded.
 #   backend:
-#     ...to be defined when the backend app is runnable.
+#     # To be defined when the backend app is runnable.

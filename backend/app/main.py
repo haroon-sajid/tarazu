@@ -1,7 +1,7 @@
-"""Tarazu — AI Audit Assistant — FastAPI application entry point (placeholder).
+"""Tarazu — AI Audit Assistant: FastAPI application entry point (placeholder).
 
-Wiring only: create the FastAPI app, attach auth middleware from core/,
-and include each module's router. No business logic in this file.
+Wiring only: create the FastAPI app, attach auth middleware from core/, and
+include each module's router. No business logic belongs in this file.
 
 Planned:
     app = FastAPI(title="Tarazu")

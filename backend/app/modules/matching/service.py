@@ -1,6 +1,6 @@
-"""matching module — public interface (placeholder).
+"""Public interface of the matching module (placeholder).
 
-The ONLY file other modules may import from modules/matching/.
-Deterministic pandas logic only. This module must never import an AI client.
-Accepts and returns app/shared/ schema objects exclusively.
+This is the only file other modules may import from modules/matching/.
+Deterministic pandas logic only; this module must never import an AI client.
+It accepts and returns app/shared/ schema objects exclusively.
 """

@@ -1,21 +1,24 @@
 # modules/rules/
 
 **Purpose:** Deterministic red-flag rules applied to transactions and matches.
-Initial rules: suspiciously round numbers, duplicate payments, weekend/holiday
-entries, amounts just under approval limits. Every rule is plain, testable Python.
-ZERO AI.
+The initial rules cover suspiciously round numbers, duplicate payments, weekend
+and holiday entries, and amounts just under approval limits. Every rule is
+plain, testable Python. This module uses no AI.
 
-**Inputs:** Extracted transactions and match results (`app/shared/` schemas); rule
-configuration (e.g. approval-limit thresholds).
-**Outputs:** Flags, each with: the rule id that fired, the evidence (source
-provenance), and severity. All flags are suggestions pending human approve/reject.
-Writes flag events to the immutable audit trail.
+**Inputs:** Extracted transactions and match results (`app/shared/` schemas),
+plus rule configuration such as approval-limit thresholds.
 
-**Public interface:** `service.py` only — other modules import nothing else from here.
+**Outputs:** Flags, each carrying the rule id that fired, the evidence (source
+provenance), and a severity. All flags are suggestions pending human approval or
+rejection. Writes flag events to the immutable audit trail.
 
-**Must NEVER do:**
-- **Never call an AI model. Never import any AI client — rules are deterministic code only.**
-- Never auto-reject or auto-approve a transaction; flags are for human review.
+**Public interface:** `service.py` only. Other modules import nothing else from
+this package.
+
+**Must never do:**
+
+- **Never call an AI model and never import any AI client.** Rules are deterministic code only.
+- Never auto-approve or auto-reject a transaction. Flags exist for human review.
 - Never hide or suppress a fired rule based on heuristics.
-- Never perform matching (→ `matching/`) or extraction (→ `extraction/`).
-- Never explain flags in natural language via AI — plain-language explanations are `assistant/`'s job, built on this module's structured output.
+- Never perform matching (that belongs to `matching/`) or extraction (that belongs to `extraction/`).
+- Never explain flags in natural language via AI. Plain-language explanations are the job of `assistant/`, built on this module's structured output.
