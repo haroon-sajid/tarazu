@@ -1,0 +1,145 @@
+{
+  "case_id": "CASE-2026-06-STX",
+  "client_name": "Sethi Textiles (Pvt) Ltd",
+  "period_start": "2026-06-01",
+  "period_end": "2026-06-30",
+  "total_review_items": 10,
+  "match_status": {
+    "matched": 8,
+    "partial": 1,
+    "unmatched": 1
+  },
+  "decisions": {
+    "pending": 8,
+    "approved": 1,
+    "rejected": 1
+  },
+  "extraction_confidence": {
+    "high": 8,
+    "medium": 1,
+    "low": 1
+  },
+  "flagged_item_count": 5,
+  "total_flags": 8,
+  "flags_by_severity": {
+    "high": 6,
+    "medium": 1,
+    "low": 1
+  },
+  "benford": {
+    "sample_size": 10,
+    "digits": [
+      {
+        "digit": 1,
+        "observed_count": 2,
+        "observed_frequency": 0.2,
+        "expected_frequency": 0.301,
+        "deviation": -0.101
+      },
+      {
+        "digit": 2,
+        "observed_count": 1,
+        "observed_frequency": 0.1,
+        "expected_frequency": 0.1761,
+        "deviation": -0.0761
+      },
+      {
+        "digit": 3,
+        "observed_count": 1,
+        "observed_frequency": 0.1,
+        "expected_frequency": 0.1249,
+        "deviation": -0.0249
+      },
+      {
+        "digit": 4,
+        "observed_count": 3,
+        "observed_frequency": 0.3,
+        "expected_frequency": 0.0969,
+        "deviation": 0.2031
+      },
+      {
+        "digit": 5,
+        "observed_count": 0,
+        "observed_frequency": 0.0,
+        "expected_frequency": 0.0792,
+        "deviation": -0.0792
+      },
+      {
+        "digit": 6,
+        "observed_count": 1,
+        "observed_frequency": 0.1,
+        "expected_frequency": 0.0669,
+        "deviation": 0.0331
+      },
+      {
+        "digit": 7,
+        "observed_count": 0,
+        "observed_frequency": 0.0,
+        "expected_frequency": 0.058,
+        "deviation": -0.058
+      },
+      {
+        "digit": 8,
+        "observed_count": 0,
+        "observed_frequency": 0.0,
+        "expected_frequency": 0.0512,
+        "deviation": -0.0512
+      },
+      {
+        "digit": 9,
+        "observed_count": 2,
+        "observed_frequency": 0.2,
+        "expected_frequency": 0.0458,
+        "deviation": 0.1542
+      }
+    ],
+    "chi_square": 12.21,
+    "degrees_of_freedom": 8,
+    "deviates_significantly": false
+  },
+  "audit_readiness_score": {
+    "score": 60,
+    "matched": { "percent": 80.0, "count": 8, "total": 10 },
+    "flags_reviewed": { "percent": 0.0, "count": 0, "total": 8 },
+    "completeness": { "percent": 100.0, "count": 10, "total": 10 }
+  },
+  "data_confidence": "Based on 1 month of data, 1 unmatched item and 1 partial match remain.",
+  "next_best_actions": [
+    {
+      "action": "Check the duplicate payment to Karachi Packaging Co.",
+      "severity": "high",
+      "rule_id": "duplicate-invoice",
+      "review_item_id": "RI-0002",
+      "party_name": "Karachi Packaging Co."
+    },
+    {
+      "action": "Review the structuring flag on Hussain Brothers & Sons",
+      "severity": "high",
+      "rule_id": "structuring",
+      "review_item_id": "RI-0005",
+      "party_name": "Hussain Brothers & Sons"
+    },
+    {
+      "action": "Confirm the near-limit payment to Hussain Brothers & Sons",
+      "severity": "high",
+      "rule_id": "near-limit",
+      "review_item_id": "RI-0005",
+      "party_name": "Hussain Brothers & Sons"
+    },
+    {
+      "action": "Confirm the near-limit payment to Hussain Brothers & Sons",
+      "severity": "high",
+      "rule_id": "near-limit",
+      "review_item_id": "RI-0006",
+      "party_name": "Hussain Brothers & Sons"
+    },
+    {
+      "action": "Confirm the weekend entry for Indus Power Solutions",
+      "severity": "medium",
+      "rule_id": "weekend-entry",
+      "review_item_id": "RI-0007",
+      "party_name": "Indus Power Solutions"
+    }
+  ],
+  "estimated_hours_saved": 0.7
+}

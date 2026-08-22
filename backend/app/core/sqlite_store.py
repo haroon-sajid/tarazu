@@ -1,0 +1,928 @@
+"""Local implementation of `CaseRepository`, `IdentityStore`, and `DocumentStore`.
+
+SQLite plus a directory of files. This exists so the whole pipeline can be run,
+tested, and demoed before the Supabase project is provisioned, and so the test
+suite never needs a network. It mirrors the Postgres schema in
+`infra/supabase/schema.sql` and its tenancy migration
+`infra/supabase/0002-organizations.sql`, including the two parts that matter:
+
+**Every tenant-owned row carries an `org_id`, and every read filters on it.**
+The filter is in the SQL, not in a check the caller could forget, so another
+firm's case is not "found but refused" — it is simply not found. That is the
+same shape as the Postgres row-level security policies, which make a row outside
+your `organization_members` invisible rather than forbidden.
+
+**`audit_trail` is append-only here too.** Two SQLite triggers abort UPDATE and
+DELETE on the table. That is the same guarantee the Postgres schema makes with
+revoked privileges, RLS, and its own trigger — so a test that proves the trail
+cannot be rewritten proves it about the shape of the system, not about one
+database. Adding `org_id` to the trail is an added column and an added read
+filter; no statement in this file updates or deletes an audit row, and the
+migration below fills the new column with `alter table ... add column ... default`
+precisely so that it never has to.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import secrets
+import sqlite3
+import threading
+from datetime import datetime, timezone
+from pathlib import Path
+from uuid import uuid4
+
+from app.core.config import DEFAULT_ORG_ID
+from app.core.repository import StoredDocument
+from app.shared.schemas import (
+    ApiKeyRecord,
+    AuditRecord,
+    BenfordResult,
+    CaseRecord,
+    CaseStatus,
+    ExtractionResult,
+    OrganizationMember,
+    Organization,
+    OrgRole,
+    ReviewItem,
+)
+
+__all__ = [
+    "AuditTrailImmutable",
+    "LocalDocumentStore",
+    "SqliteCaseRepository",
+    "hash_password",
+    "verify_password_hash",
+]
+
+
+class AuditTrailImmutable(RuntimeError):
+    """Something tried to change or remove an audit record. It was refused."""
+
+
+#: Every tenant-owned table, and the audit trail. Used by the migration below.
+ORG_SCOPED_TABLES = (
+    "cases",
+    "documents",
+    "extractions",
+    "review_items",
+    "flags",
+    "benford_results",
+    "audit_trail",
+)
+
+
+#: Created first, and before the migration runs: the migration backfills into
+#: the default organization, so the organization has to be there to back into.
+TENANCY_SCHEMA = """
+pragma journal_mode = wal;
+pragma foreign_keys  = on;
+
+-- ---------------------------------------------------------------------------
+-- Tenancy. One organization is one accounting firm; membership is the only
+-- thing that grants access to its rows.
+-- ---------------------------------------------------------------------------
+
+create table if not exists organizations (
+  org_id     text primary key,
+  name       text not null,
+  created_at text not null
+);
+
+create table if not exists organization_members (
+  org_id     text not null references organizations (org_id) on delete cascade,
+  user_id    text not null,
+  role       text not null default 'member' check (role in ('owner', 'member')),
+  created_at text not null,
+  primary key (org_id, user_id)
+);
+
+create index if not exists organization_members_user_idx
+  on organization_members (user_id, created_at);
+
+-- Local identities, so signup and login work without Supabase. With Supabase
+-- configured this table is unused: identities live in auth.users.
+create table if not exists users (
+  user_id       text primary key,
+  email         text not null unique collate nocase,
+  password_hash text not null,
+  created_at    text not null
+);
+"""
+
+
+SCHEMA = """
+create table if not exists cases (
+  case_id       text primary key,
+  org_id        text not null,
+  client_name   text not null,
+  period_start  text,
+  period_end    text,
+  status        text not null default 'uploaded',
+  status_detail text,
+  created_by    text not null,
+  created_at    text not null
+);
+
+create table if not exists documents (
+  document_id   text primary key,
+  org_id        text not null,
+  case_id       text not null references cases (case_id) on delete cascade,
+  document_type text not null,
+  filename      text not null,
+  storage_path  text not null,
+  size_bytes    integer not null default 0,
+  uploaded_by   text not null,
+  created_at    text not null
+);
+
+create table if not exists extractions (
+  document_id        text primary key,
+  org_id             text not null,
+  case_id            text not null references cases (case_id) on delete cascade,
+  model              text not null,
+  needs_human_review integer not null default 0,
+  payload            text not null,
+  created_at         text not null
+);
+
+create table if not exists review_items (
+  review_item_id        text primary key,
+  org_id                text not null,
+  case_id               text not null references cases (case_id) on delete cascade,
+  position              integer not null,
+  match_status          text not null,
+  match_strength        text not null,
+  extraction_confidence text not null,
+  flag_count            integer not null default 0,
+  decision              text not null default 'pending',
+  decided_by            text,
+  decided_at            text,
+  rejection_reason      text,
+  payload               text not null
+);
+
+-- `flag_id` is minted by `rules/`, which numbers flags within the case it was
+-- given. That makes it unique per case and no wider, so the key is the case's
+-- as well — otherwise one firm's upload would replace a row belonging to
+-- another firm that happened to raise its first flag too.
+create table if not exists flags (
+  flag_id        text not null,
+  org_id         text not null,
+  case_id        text not null references cases (case_id) on delete cascade,
+  review_item_id text not null,
+  rule_id        text not null,
+  severity       text not null,
+  explanation    text not null,
+  source_row_id  text not null,
+  payload        text not null,
+  primary key (org_id, case_id, flag_id)
+);
+
+create table if not exists benford_results (
+  case_id text primary key references cases (case_id) on delete cascade,
+  org_id  text not null,
+  payload text not null
+);
+
+-- API keys. One organization's machine credentials, for n8n, Zapier, or its own
+-- software. `key_hash` is a SHA-256 digest and `key_prefix` is the non-secret
+-- head of the key; the raw key is never written here.
+--
+-- There is no delete path. A key is revoked by stamping `revoked_at`, and the
+-- row stays so that "which key did this, and when was it turned off" remains
+-- answerable long after the integration is gone.
+create table if not exists api_keys (
+  key_id       text primary key,
+  org_id       text not null,
+  created_by   text not null,
+  name         text not null,
+  key_prefix   text not null,
+  key_hash     text not null unique,
+  scopes       text not null,
+  last_used_at text,
+  revoked_at   text,
+  created_at   text not null
+);
+
+create index if not exists api_keys_org_idx on api_keys (org_id, created_at);
+
+create table if not exists audit_trail (
+  audit_id    text primary key,
+  org_id      text not null,
+  case_id     text not null,
+  actor_type  text not null,
+  actor_id    text not null,
+  action      text not null,
+  item_id     text,
+  detail      text,
+  occurred_at text not null
+);
+
+-- Named for the columns they lead with, so a database migrated from the
+-- single-tenant schema gains them rather than keeping the narrower ones under
+-- a name `create index if not exists` would skip.
+create index if not exists audit_trail_org_case_idx
+  on audit_trail (org_id, case_id, occurred_at);
+create index if not exists review_items_org_case_idx
+  on review_items (org_id, case_id, position);
+create index if not exists cases_org_idx on cases (org_id, created_at);
+
+-- The append-only guarantee, enforced by the database rather than by us
+-- remembering. Mirrors the REVOKE + RLS + trigger in the Postgres schema.
+create trigger if not exists audit_trail_no_update
+  before update on audit_trail
+begin
+  select raise(abort, 'audit_trail is append-only: UPDATE is not permitted');
+end;
+
+create trigger if not exists audit_trail_no_delete
+  before delete on audit_trail
+begin
+  select raise(abort, 'audit_trail is append-only: DELETE is not permitted');
+end;
+"""
+
+
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+# --------------------------------------------------------------------------- #
+# Local password hashing
+#
+# PBKDF2-HMAC-SHA256 from the standard library, so the local store needs no
+# extra dependency. Supabase hashes with bcrypt on its side; nothing here is
+# ever used when Supabase is configured.
+# --------------------------------------------------------------------------- #
+
+_PBKDF2_ITERATIONS = 200_000
+
+
+def hash_password(password: str, *, salt: bytes | None = None) -> str:
+    salt = salt or secrets.token_bytes(16)
+    derived = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), salt, _PBKDF2_ITERATIONS
+    )
+    return f"pbkdf2_sha256${_PBKDF2_ITERATIONS}${salt.hex()}${derived.hex()}"
+
+
+def verify_password_hash(password: str, stored: str) -> bool:
+    try:
+        algorithm, iterations, salt_hex, expected = stored.split("$")
+        if algorithm != "pbkdf2_sha256":
+            return False
+        derived = hashlib.pbkdf2_hmac(
+            "sha256", password.encode("utf-8"), bytes.fromhex(salt_hex), int(iterations)
+        )
+    except (ValueError, TypeError):
+        return False
+    return secrets.compare_digest(derived.hex(), expected)
+
+
+class SqliteCaseRepository:
+    """`CaseRepository` and `IdentityStore` backed by a SQLite file (or `:memory:`)."""
+
+    def __init__(
+        self,
+        database_path: Path | str = ":memory:",
+        default_org_id: str = DEFAULT_ORG_ID,
+    ) -> None:
+        self._path = str(database_path)
+        self._default_org_id = default_org_id
+        if self._path != ":memory:":
+            Path(self._path).parent.mkdir(parents=True, exist_ok=True)
+        # check_same_thread=False because FastAPI's threadpool moves sync
+        # handlers between threads; the lock below serialises access.
+        self._connection = sqlite3.connect(self._path, check_same_thread=False)
+        self._connection.row_factory = sqlite3.Row
+        self._lock = threading.Lock()
+        with self._lock:
+            self._connection.executescript(TENANCY_SCHEMA)
+            self._connection.commit()
+        # Before the rest of the schema, because that half indexes `org_id` and
+        # a database written before tenancy has no such column yet.
+        self._migrate_to_multi_tenant()
+        with self._lock:
+            self._connection.executescript(SCHEMA)
+            self._connection.commit()
+
+    def close(self) -> None:
+        self._connection.close()
+
+    # -- migration ---------------------------------------------------------- #
+
+    def _migrate_to_multi_tenant(self) -> None:
+        """Add `org_id` to a database written before tenancy existed, and backfill.
+
+        The mirror of `infra/supabase/0002-organizations.sql`, and idempotent for
+        the same reason: it is run on every open. Existing rows are assigned to
+        the default organization.
+
+        The column is added with a DEFAULT rather than added and then UPDATEd,
+        because an UPDATE on `audit_trail` is refused by the append-only trigger
+        — correctly. `alter table ... add column` is DDL: it fills the existing
+        rows without ever issuing a row update, so the trail gains its tenant
+        column with its immutability entirely intact.
+        """
+        with self._lock:
+            added: list[str] = []
+            for table in ORG_SCOPED_TABLES:
+                columns = {
+                    row["name"]
+                    for row in self._connection.execute(f"pragma table_info({table})")
+                }
+                if not columns or "org_id" in columns:
+                    continue
+                self._connection.execute(
+                    f"alter table {table} add column org_id text not null "
+                    f"default '{self._default_org_id}'"
+                )
+                added.append(table)
+            if added:
+                self._connection.execute(
+                    "insert or ignore into organizations (org_id, name, created_at) "
+                    "values (?, ?, ?)",
+                    (self._default_org_id, "Tarazu (default organization)", _now()),
+                )
+                # Whoever created the pre-tenancy cases owns the default org.
+                for row in self._connection.execute(
+                    "select distinct created_by from cases where org_id = ?",
+                    (self._default_org_id,),
+                ).fetchall():
+                    self._connection.execute(
+                        "insert or ignore into organization_members "
+                        "(org_id, user_id, role, created_at) values (?, ?, 'owner', ?)",
+                        (self._default_org_id, row["created_by"], _now()),
+                    )
+            self._rekey_flags_by_organization()
+            self._connection.commit()
+
+    def _rekey_flags_by_organization(self) -> None:
+        """Widen the `flags` primary key from `flag_id` to `(org_id, case_id, flag_id)`.
+
+        SQLite cannot alter a primary key in place, so the table is rebuilt with
+        its rows carried across. `flags` is derived output — it is written whole
+        by `save_review_items` and never read back by the app — so a rebuild
+        loses nothing, and leaving the narrow key in place would let one firm's
+        upload silently replace another firm's flag row.
+
+        Called with the lock held, inside the migration's transaction.
+        """
+        info = self._connection.execute("pragma table_info(flags)").fetchall()
+        key = [row["name"] for row in info if row["pk"]]
+        if not info or key != ["flag_id"]:
+            return
+        self._connection.executescript(
+            """
+            create table flags_rekeyed (
+              flag_id        text not null,
+              org_id         text not null,
+              case_id        text not null references cases (case_id) on delete cascade,
+              review_item_id text not null,
+              rule_id        text not null,
+              severity       text not null,
+              explanation    text not null,
+              source_row_id  text not null,
+              payload        text not null,
+              primary key (org_id, case_id, flag_id)
+            );
+            insert into flags_rekeyed
+              select flag_id, org_id, case_id, review_item_id, rule_id, severity,
+                     explanation, source_row_id, payload
+              from flags;
+            drop table flags;
+            alter table flags_rekeyed rename to flags;
+            """
+        )
+
+    # -- internals ---------------------------------------------------------- #
+
+    def _write(self, statements: list[tuple[str, tuple]]) -> None:
+        with self._lock:
+            try:
+                for sql, params in statements:
+                    self._connection.execute(sql, params)
+                self._connection.commit()
+            except sqlite3.IntegrityError as error:
+                self._connection.rollback()
+                if "append-only" in str(error):
+                    raise AuditTrailImmutable(str(error)) from error
+                raise
+
+    def _rows(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
+        with self._lock:
+            return self._connection.execute(sql, params).fetchall()
+
+    # -- organizations ------------------------------------------------------ #
+
+    def create_organization(self, organization: Organization) -> None:
+        self._write(
+            [
+                (
+                    "insert or replace into organizations (org_id, name, created_at) "
+                    "values (?, ?, ?)",
+                    (
+                        organization.org_id,
+                        organization.name,
+                        organization.created_at.isoformat(),
+                    ),
+                )
+            ]
+        )
+
+    def get_organization(self, org_id: str) -> Organization | None:
+        rows = self._rows("select * from organizations where org_id = ?", (org_id,))
+        if not rows:
+            return None
+        return Organization(
+            org_id=rows[0]["org_id"],
+            name=rows[0]["name"],
+            created_at=rows[0]["created_at"],
+        )
+
+    def add_member(self, member: OrganizationMember) -> None:
+        self._write(
+            [
+                (
+                    "insert or replace into organization_members "
+                    "(org_id, user_id, role, created_at) values (?, ?, ?, ?)",
+                    (
+                        member.org_id,
+                        member.user_id,
+                        member.role.value,
+                        member.created_at.isoformat(),
+                    ),
+                )
+            ]
+        )
+
+    def get_membership(self, user_id: str) -> OrganizationMember | None:
+        rows = self._rows(
+            "select * from organization_members where user_id = ? "
+            "order by created_at, org_id limit 1",
+            (user_id,),
+        )
+        return self._member(rows[0]) if rows else None
+
+    def list_members(self, org_id: str) -> list[OrganizationMember]:
+        return [
+            self._member(row)
+            for row in self._rows(
+                "select * from organization_members where org_id = ? order by created_at",
+                (org_id,),
+            )
+        ]
+
+    @staticmethod
+    def _member(row: sqlite3.Row) -> OrganizationMember:
+        return OrganizationMember(
+            org_id=row["org_id"],
+            user_id=row["user_id"],
+            role=OrgRole(row["role"]),
+            created_at=row["created_at"],
+        )
+
+    # -- local identities (IdentityStore) ----------------------------------- #
+
+    def create_user(self, email: str, password: str) -> str:
+        user_id = str(uuid4())
+        try:
+            self._write(
+                [
+                    (
+                        "insert into users (user_id, email, password_hash, created_at) "
+                        "values (?, ?, ?, ?)",
+                        (user_id, email.strip(), hash_password(password), _now()),
+                    )
+                ]
+            )
+        except sqlite3.IntegrityError as error:
+            raise ValueError(f"an account already exists for {email!r}") from error
+        return user_id
+
+    def verify_password(self, email: str, password: str) -> str | None:
+        rows = self._rows("select * from users where email = ?", (email.strip(),))
+        if not rows:
+            return None
+        return rows[0]["user_id"] if verify_password_hash(password, rows[0]["password_hash"]) else None
+
+    def get_user_email(self, user_id: str) -> str | None:
+        rows = self._rows("select email from users where user_id = ?", (user_id,))
+        return rows[0]["email"] if rows else None
+
+    # -- cases -------------------------------------------------------------- #
+
+    def create_case(self, org_id: str, case: CaseRecord) -> None:
+        self._write(
+            [
+                (
+                    "insert or replace into cases (case_id, org_id, client_name, period_start, "
+                    "period_end, status, status_detail, created_by, created_at) "
+                    "values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        case.case_id,
+                        org_id,
+                        case.client_name,
+                        case.period_start.isoformat() if case.period_start else None,
+                        case.period_end.isoformat() if case.period_end else None,
+                        case.status.value,
+                        case.status_detail,
+                        case.created_by,
+                        case.created_at.isoformat(),
+                    ),
+                )
+            ]
+        )
+
+    def get_case(self, org_id: str, case_id: str) -> CaseRecord | None:
+        rows = self._rows(
+            "select * from cases where case_id = ? and org_id = ?", (case_id, org_id)
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        return CaseRecord(
+            case_id=row["case_id"],
+            client_name=row["client_name"],
+            period_start=row["period_start"],
+            period_end=row["period_end"],
+            status=CaseStatus(row["status"]),
+            status_detail=row["status_detail"],
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+        )
+
+    def set_case_status(
+        self, org_id: str, case_id: str, status: CaseStatus, detail: str | None = None
+    ) -> None:
+        self._write(
+            [
+                (
+                    "update cases set status = ?, status_detail = ? "
+                    "where case_id = ? and org_id = ?",
+                    (status.value, detail, case_id, org_id),
+                )
+            ]
+        )
+
+    def latest_case_id(self, org_id: str, created_by: str | None = None) -> str | None:
+        if created_by:
+            rows = self._rows(
+                "select case_id from cases where org_id = ? and created_by = ? "
+                "order by created_at desc limit 1",
+                (org_id, created_by),
+            )
+            if rows:
+                return rows[0]["case_id"]
+        rows = self._rows(
+            "select case_id from cases where org_id = ? order by created_at desc limit 1",
+            (org_id,),
+        )
+        return rows[0]["case_id"] if rows else None
+
+    # -- documents and extractions ------------------------------------------ #
+
+    def add_documents(
+        self, org_id: str, case_id: str, documents: list[StoredDocument], uploaded_by: str
+    ) -> None:
+        now = _now()
+        self._write(
+            [
+                (
+                    "insert or replace into documents (document_id, org_id, case_id, "
+                    "document_type, filename, storage_path, size_bytes, uploaded_by, created_at) "
+                    "values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        document.document_id,
+                        org_id,
+                        case_id,
+                        document.document_type.value,
+                        document.filename,
+                        document.storage_path,
+                        document.size_bytes,
+                        uploaded_by,
+                        now,
+                    ),
+                )
+                for document in documents
+            ]
+        )
+
+    def list_documents(self, org_id: str, case_id: str) -> list[StoredDocument]:
+        return [
+            StoredDocument(
+                document_id=row["document_id"],
+                document_type=row["document_type"],
+                filename=row["filename"],
+                size_bytes=row["size_bytes"],
+                storage_path=row["storage_path"],
+            )
+            for row in self._rows(
+                "select * from documents where org_id = ? and case_id = ? order by created_at",
+                (org_id, case_id),
+            )
+        ]
+
+    def save_extraction(self, org_id: str, case_id: str, result: ExtractionResult) -> None:
+        self._write(
+            [
+                (
+                    "insert or replace into extractions (document_id, org_id, case_id, model, "
+                    "needs_human_review, payload, created_at) values (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        result.document_id,
+                        org_id,
+                        case_id,
+                        result.model,
+                        int(result.needs_human_review),
+                        result.model_dump_json(),
+                        result.extracted_at.isoformat(),
+                    ),
+                )
+            ]
+        )
+
+    def list_extractions(self, org_id: str, case_id: str) -> list[ExtractionResult]:
+        return [
+            ExtractionResult.model_validate_json(row["payload"])
+            for row in self._rows(
+                "select payload from extractions where org_id = ? and case_id = ? "
+                "order by created_at",
+                (org_id, case_id),
+            )
+        ]
+
+    # -- review items ------------------------------------------------------- #
+
+    def save_review_items(self, org_id: str, case_id: str, items: list[ReviewItem]) -> None:
+        statements: list[tuple[str, tuple]] = [
+            ("delete from flags where org_id = ? and case_id = ?", (org_id, case_id)),
+            ("delete from review_items where org_id = ? and case_id = ?", (org_id, case_id)),
+        ]
+        for position, item in enumerate(items):
+            statements.append(
+                (
+                    "insert into review_items (review_item_id, org_id, case_id, position, "
+                    "match_status, match_strength, extraction_confidence, flag_count, "
+                    "decision, decided_by, decided_at, rejection_reason, payload) "
+                    "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        item.review_item_id,
+                        org_id,
+                        case_id,
+                        position,
+                        item.match.status.value,
+                        item.match.match_strength.value,
+                        item.extraction_confidence.value,
+                        len(item.flags),
+                        item.decision.value,
+                        item.decided_by,
+                        _iso(item.decided_at),
+                        item.rejection_reason,
+                        item.model_dump_json(),
+                    ),
+                )
+            )
+            statements.extend(
+                (
+                    "insert or replace into flags (flag_id, org_id, case_id, review_item_id, "
+                    "rule_id, severity, explanation, source_row_id, payload) "
+                    "values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        flag.flag_id,
+                        org_id,
+                        case_id,
+                        item.review_item_id,
+                        flag.rule_id,
+                        flag.severity.value,
+                        flag.explanation,
+                        flag.source_row_id,
+                        flag.model_dump_json(),
+                    ),
+                )
+                for flag in item.flags
+            )
+        self._write(statements)
+
+    def list_review_items(self, org_id: str, case_id: str) -> list[ReviewItem]:
+        return [
+            ReviewItem.model_validate_json(row["payload"])
+            for row in self._rows(
+                "select payload from review_items where org_id = ? and case_id = ? "
+                "order by position",
+                (org_id, case_id),
+            )
+        ]
+
+    def get_review_item(self, org_id: str, review_item_id: str) -> ReviewItem | None:
+        rows = self._rows(
+            "select payload from review_items where review_item_id = ? and org_id = ?",
+            (review_item_id, org_id),
+        )
+        return ReviewItem.model_validate_json(rows[0]["payload"]) if rows else None
+
+    def update_review_item(self, org_id: str, item: ReviewItem) -> None:
+        self._write(
+            [
+                (
+                    "update review_items set decision = ?, decided_by = ?, decided_at = ?, "
+                    "rejection_reason = ?, payload = ? where review_item_id = ? and org_id = ?",
+                    (
+                        item.decision.value,
+                        item.decided_by,
+                        _iso(item.decided_at),
+                        item.rejection_reason,
+                        item.model_dump_json(),
+                        item.review_item_id,
+                        org_id,
+                    ),
+                )
+            ]
+        )
+
+    # -- benford ------------------------------------------------------------ #
+
+    def save_benford(self, org_id: str, case_id: str, result: BenfordResult) -> None:
+        self._write(
+            [
+                (
+                    "insert or replace into benford_results (case_id, org_id, payload) "
+                    "values (?, ?, ?)",
+                    (case_id, org_id, result.model_dump_json()),
+                )
+            ]
+        )
+
+    def get_benford(self, org_id: str, case_id: str) -> BenfordResult | None:
+        rows = self._rows(
+            "select payload from benford_results where case_id = ? and org_id = ?",
+            (case_id, org_id),
+        )
+        return BenfordResult.model_validate_json(rows[0]["payload"]) if rows else None
+
+    # -- api keys ----------------------------------------------------------- #
+
+    def create_api_key(self, key: ApiKeyRecord) -> None:
+        self._write(
+            [
+                (
+                    "insert into api_keys (key_id, org_id, created_by, name, key_prefix, "
+                    "key_hash, scopes, last_used_at, revoked_at, created_at) "
+                    "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        key.key_id,
+                        key.org_id,
+                        key.created_by,
+                        key.name,
+                        key.key_prefix,
+                        key.key_hash,
+                        json.dumps([scope.value for scope in key.scopes]),
+                        _iso(key.last_used_at),
+                        _iso(key.revoked_at),
+                        key.created_at.isoformat(),
+                    ),
+                )
+            ]
+        )
+
+    def list_api_keys(self, org_id: str) -> list[ApiKeyRecord]:
+        return [
+            self._api_key(row)
+            for row in self._rows(
+                "select * from api_keys where org_id = ? order by created_at desc",
+                (org_id,),
+            )
+        ]
+
+    def get_api_key(self, org_id: str, key_id: str) -> ApiKeyRecord | None:
+        rows = self._rows(
+            "select * from api_keys where key_id = ? and org_id = ?", (key_id, org_id)
+        )
+        return self._api_key(rows[0]) if rows else None
+
+    def find_api_key_by_hash(self, key_hash: str) -> ApiKeyRecord | None:
+        """Not org-scoped, because this is what decides the org. See the protocol."""
+        rows = self._rows("select * from api_keys where key_hash = ?", (key_hash,))
+        return self._api_key(rows[0]) if rows else None
+
+    def revoke_api_key(self, org_id: str, key_id: str, revoked_at: datetime) -> bool:
+        existing = self.get_api_key(org_id, key_id)
+        if existing is None:
+            return False
+        if existing.revoked_at is not None:
+            # Already revoked. Keep the original timestamp: when it stopped
+            # working is a fact, and the second call did not change it.
+            return True
+        self._write(
+            [
+                (
+                    "update api_keys set revoked_at = ? where key_id = ? and org_id = ?",
+                    (revoked_at.isoformat(), key_id, org_id),
+                )
+            ]
+        )
+        return True
+
+    def touch_api_key(self, key_id: str, used_at: datetime) -> None:
+        self._write(
+            [
+                (
+                    "update api_keys set last_used_at = ? where key_id = ?",
+                    (used_at.isoformat(), key_id),
+                )
+            ]
+        )
+
+    @staticmethod
+    def _api_key(row: sqlite3.Row) -> ApiKeyRecord:
+        return ApiKeyRecord(
+            key_id=row["key_id"],
+            org_id=row["org_id"],
+            created_by=row["created_by"],
+            name=row["name"],
+            key_prefix=row["key_prefix"],
+            key_hash=row["key_hash"],
+            scopes=json.loads(row["scopes"]),
+            last_used_at=row["last_used_at"],
+            revoked_at=row["revoked_at"],
+            created_at=row["created_at"],
+        )
+
+    # -- audit trail -------------------------------------------------------- #
+
+    def append_audit(self, org_id: str, record: AuditRecord) -> None:
+        self._write(
+            [
+                (
+                    "insert into audit_trail (audit_id, org_id, case_id, actor_type, actor_id, "
+                    "action, item_id, detail, occurred_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        record.audit_id,
+                        org_id,
+                        record.case_id,
+                        record.actor_type.value,
+                        record.actor_id,
+                        record.action.value,
+                        record.item_id,
+                        record.detail,
+                        record.occurred_at.isoformat(),
+                    ),
+                )
+            ]
+        )
+
+    def list_audit(
+        self, org_id: str, case_id: str, item_id: str | None = None
+    ) -> list[AuditRecord]:
+        sql = "select * from audit_trail where org_id = ? and case_id = ?"
+        params: tuple = (org_id, case_id)
+        if item_id:
+            sql += " and item_id = ?"
+            params = (org_id, case_id, item_id)
+        return [
+            AuditRecord(
+                audit_id=row["audit_id"],
+                case_id=row["case_id"],
+                actor_type=row["actor_type"],
+                actor_id=row["actor_id"],
+                action=row["action"],
+                item_id=row["item_id"],
+                detail=row["detail"],
+                occurred_at=row["occurred_at"],
+            )
+            for row in self._rows(sql + " order by occurred_at, audit_id", params)
+        ]
+
+
+class LocalDocumentStore:
+    """`DocumentStore` backed by a directory on disk."""
+
+    def __init__(self, root: Path | str) -> None:
+        self._root = Path(root)
+        self._root.mkdir(parents=True, exist_ok=True)
+
+    def _resolve(self, path: str) -> Path:
+        target = (self._root / path).resolve()
+        if not str(target).startswith(str(self._root.resolve())):
+            raise ValueError(f"path escapes the document store: {path!r}")
+        return target
+
+    def put(self, path: str, content: bytes, content_type: str) -> str:
+        target = self._resolve(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        return path
+
+    def get(self, path: str) -> bytes:
+        return self._resolve(path).read_bytes()
+
+    def signed_url(self, path: str, expires_in: int = 3600) -> str | None:
+        # A local directory is not reachable from the browser. The frontend
+        # fetches these through the backend instead.
+        return None

@@ -39,3 +39,9 @@ coverage/
 # Uploaded/sample client documents — never commit client data
 uploads/
 *.local.*
+
+# Local SQLite store and uploaded document bytes (used when SUPABASE_URL is unset)
+.local/
+*.db
+*.db-wal
+*.db-shm

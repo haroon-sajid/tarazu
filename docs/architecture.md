@@ -9,11 +9,14 @@ single FastAPI backend whose business capability lives in strictly bounded
 modules, with Supabase providing Postgres, auth, and file storage.
 
 ```
-frontend (Next.js)
-   |  HTTPS + Supabase JWT
-   v
+frontend (Next.js)          integrations (n8n, Zapier, the firm's own code)
+   |  Supabase JWT             |  X-API-Key: trz_live_...
+   |  (identifies the user;    |  (identifies the key; scoped read / write)
+   |   never the organization) |
+   v                           v
 backend (single FastAPI app)
-|-- core/       config, JWT auth, Supabase client, append-only audit-trail writer
+|-- api/        routers; get_principal authenticates and resolves the firm
+|-- core/       config, JWT + API-key auth, the two stores, audit-trail writer
 |-- shared/     schemas crossing module boundaries (confidence and provenance required)
 `-- modules/    each exposes one public interface: service.py
     |-- extraction/  Qwen VL: documents to structured data with confidence   [AI]
@@ -40,6 +43,8 @@ Supabase: Postgres (data and immutable audit trail), Auth (JWT), Storage (docume
 - Module boundaries mirror a microservice split, so any module can later be extracted into its own service without rewrites.
 - AI is confined to `extraction/` and `assistant/`. All math and matching is deterministic.
 - Every action, by AI or human, is appended to an immutable audit trail in Supabase.
+- A tenant is one accounting firm. Every tenant-owned row carries its `org_id`, the organization is resolved server-side from the caller's membership, and another firm's row is `404` rather than `403` — see [ADR 0003](decisions/0003-tenancy-is-an-org-id-column-and-two-enforcement-layers.md).
+- A request is authenticated by a person's token or by an organization's API key. Both resolve to one `Principal`, so no route branches on which it was; only the audit trail records the difference, as `api-key:<prefix>`. Keys never manage keys, and a raw key is never stored or logged.
 - See [CLAUDE.md](../CLAUDE.md) for the seven non-negotiable reliability rules and the module rules.
 
 ## Open Topics
@@ -47,6 +52,6 @@ Supabase: Postgres (data and immutable audit trail), Auth (JWT), Storage (docume
 To be documented as decisions are made:
 
 - Async processing and background jobs for long extractions
-- The Supabase row-level security model
+- Inviting a colleague into your organization, and belonging to more than one
 - Module-boundary enforcement tooling (for example, an import linter)
 - Deployment topology (see `infra/`)

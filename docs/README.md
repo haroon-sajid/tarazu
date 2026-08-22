@@ -17,8 +17,9 @@ architecture, API contracts, and architecture decision records (ADRs).
 development.
 
 **Outputs:** `architecture.md` (system design), `api-contracts.md` (the single
-source of truth for the public HTTP API and internal module interfaces), and
-`decisions/` (one ADR per decision).
+source of truth for the public HTTP API and internal module interfaces),
+`decisions/` (one ADR per decision), and `hackathon-plan.md` (the step-by-step
+hackathon build plan; superseded once the event ends).
 
 **Does not belong here:** Code, generated API docs, user-facing help content,
 and per-service implementation notes; those live in each service's README.

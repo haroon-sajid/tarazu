@@ -1,0 +1,82 @@
+{
+  "document_id": "DOC-INV-0431",
+  "document_type": "invoice",
+  "filename": "sialkot-metal-works-inv-0431-photo.jpg",
+  "page_count": 1,
+  "extracted_at": "2026-06-19T08:52:14Z",
+  "model": "qwen-vl-max",
+  "fields": [
+    {
+      "field": "invoice_number",
+      "value": "SMW/2026/0431",
+      "extraction_confidence": "high",
+      "source": {
+        "document_id": "DOC-INV-0431",
+        "page": 1,
+        "bbox": [0.118, 0.164, 0.412, 0.198],
+        "text_snippet": "Invoice # SMW/2026/0431"
+      },
+      "unreadable": false
+    },
+    {
+      "field": "party_name",
+      "value": "Sialkot Metal Works",
+      "extraction_confidence": "high",
+      "source": {
+        "document_id": "DOC-INV-0431",
+        "page": 1,
+        "bbox": [0.101, 0.072, 0.487, 0.121],
+        "text_snippet": "SIALKOT METAL WORKS"
+      },
+      "unreadable": false
+    },
+    {
+      "field": "invoice_date",
+      "value": "2026-06-15",
+      "extraction_confidence": "medium",
+      "source": {
+        "document_id": "DOC-INV-0431",
+        "page": 1,
+        "bbox": [0.631, 0.164, 0.869, 0.196],
+        "text_snippet": "Date: 15-06-2026"
+      },
+      "unreadable": false
+    },
+    {
+      "field": "amount",
+      "value": 312880.0,
+      "extraction_confidence": "low",
+      "source": {
+        "document_id": "DOC-INV-0431",
+        "page": 1,
+        "bbox": [0.548, 0.681, 0.833, 0.724],
+        "text_snippet": "Rs. 312,880/-"
+      },
+      "unreadable": false
+    },
+    {
+      "field": "purchase_order_number",
+      "value": null,
+      "extraction_confidence": "low",
+      "source": {
+        "document_id": "DOC-INV-0431",
+        "page": 1,
+        "bbox": [0.102, 0.223, 0.371, 0.254]
+      },
+      "unreadable": true
+    }
+  ],
+  "second_opinion": {
+    "ran": true,
+    "model": "qwen-vl-max",
+    "agrees": false,
+    "disagreements": [
+      {
+        "field": "amount",
+        "first_reading": 312880.0,
+        "second_reading": 312860.0
+      }
+    ]
+  },
+  "needs_human_review": true
+}

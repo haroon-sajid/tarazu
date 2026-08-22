@@ -1,0 +1,774 @@
+{
+  "case_id": "CASE-2026-06-STX",
+  "total": 10,
+  "items": [
+    {
+      "review_item_id": "RI-0001",
+      "case_id": "CASE-2026-06-STX",
+      "ledger_entry": {
+        "ledger_row_id": "LED-0003",
+        "date": "2026-06-02",
+        "amount": 284000.00,
+        "party_name": "Gulberg Traders (Pvt) Ltd",
+        "description": "Yarn purchase - June lot 1",
+        "account_code": "5010",
+        "currency": "PKR",
+        "source": { "document_id": "DOC-LED-001", "row_number": 5 }
+      },
+      "bank_transaction": {
+        "bank_row_id": "BNK-0012",
+        "date": "2026-06-02",
+        "amount": 284000.00,
+        "description": "IBFT GULBERG TRADERS PVT LTD",
+        "balance": 4821330.00,
+        "currency": "PKR",
+        "source": {
+          "document_id": "DOC-BNK-001",
+          "page": 1,
+          "bbox": [0.611, 0.223, 0.862, 0.246],
+          "text_snippet": "284,000.00"
+        }
+      },
+      "invoice": null,
+      "match": {
+        "ledger_row_id": "LED-0003",
+        "bank_row_id": "BNK-0012",
+        "invoice_id": null,
+        "status": "matched",
+        "match_strength": "high",
+        "reason": "Amount and date match the bank statement exactly, and the party name is a 96% match.",
+        "rule_id": "exact-amount-exact-date"
+      },
+      "flags": [],
+      "extraction_confidence": "high",
+      "evidence": [
+        {
+          "field": "amount",
+          "value": 284000.0,
+          "extraction_confidence": "high",
+          "source": {
+            "document_id": "DOC-BNK-001",
+            "page": 1,
+            "bbox": [0.611, 0.223, 0.862, 0.246],
+            "text_snippet": "284,000.00"
+          },
+          "unreadable": false
+        },
+        {
+          "field": "amount",
+          "value": 284000.0,
+          "extraction_confidence": "high",
+          "source": { "document_id": "DOC-LED-001", "row_number": 5 },
+          "unreadable": false
+        }
+      ],
+      "decision": "approved",
+      "decided_by": "user-demo-auditor",
+      "decided_at": "2026-06-19T09:41:07Z",
+      "rejection_reason": null
+    },
+    {
+      "review_item_id": "RI-0002",
+      "case_id": "CASE-2026-06-STX",
+      "ledger_entry": {
+        "ledger_row_id": "LED-0007",
+        "date": "2026-06-05",
+        "amount": 96400.00,
+        "party_name": "Karachi Packaging Co.",
+        "description": "Carton supply against INV-2026-0087",
+        "account_code": "5020",
+        "currency": "PKR",
+        "source": { "document_id": "DOC-LED-001", "row_number": 9 }
+      },
+      "bank_transaction": {
+        "bank_row_id": "BNK-0031",
+        "date": "2026-06-05",
+        "amount": 96400.00,
+        "description": "CHQ 004412 KARACHI PACKAGING CO",
+        "balance": 4611530.00,
+        "currency": "PKR",
+        "source": {
+          "document_id": "DOC-BNK-001",
+          "page": 1,
+          "bbox": [0.609, 0.418, 0.858, 0.441],
+          "text_snippet": "96,400.00"
+        }
+      },
+      "invoice": {
+        "invoice_id": "INV-0087",
+        "invoice_number": "INV-2026-0087",
+        "date": "2026-06-03",
+        "amount": 96400.00,
+        "party_name": "Karachi Packaging Co.",
+        "currency": "PKR",
+        "source": {
+          "document_id": "DOC-INV-0087",
+          "page": 1,
+          "bbox": [0.572, 0.704, 0.845, 0.739],
+          "text_snippet": "Total: Rs. 96,400/-"
+        }
+      },
+      "match": {
+        "ledger_row_id": "LED-0007",
+        "bank_row_id": "BNK-0031",
+        "invoice_id": "INV-0087",
+        "status": "matched",
+        "match_strength": "high",
+        "reason": "Ledger, invoice INV-2026-0087, and the bank payment all agree on 96,400.00.",
+        "rule_id": "exact-amount-exact-date"
+      },
+      "flags": [
+        {
+          "flag_id": "FLG-0004",
+          "rule_id": "duplicate-invoice",
+          "severity": "high",
+          "explanation": "Invoice INV-2026-0087 is paid twice: once on 2026-06-05 and again on 2026-06-16, 11 days apart.",
+          "source_row_id": "LED-0007",
+          "related_row_ids": ["LED-0023"],
+          "source": {
+            "document_id": "DOC-INV-0087",
+            "page": 1,
+            "bbox": [0.104, 0.182, 0.398, 0.211],
+            "text_snippet": "Invoice No. INV-2026-0087"
+          }
+        }
+      ],
+      "extraction_confidence": "high",
+      "evidence": [
+        {
+          "field": "amount",
+          "value": 96400.0,
+          "extraction_confidence": "high",
+          "source": {
+            "document_id": "DOC-INV-0087",
+            "page": 1,
+            "bbox": [0.572, 0.704, 0.845, 0.739],
+            "text_snippet": "Total: Rs. 96,400/-"
+          },
+          "unreadable": false
+        },
+        {
+          "field": "invoice_number",
+          "value": "INV-2026-0087",
+          "extraction_confidence": "high",
+          "source": {
+            "document_id": "DOC-INV-0087",
+            "page": 1,
+            "bbox": [0.104, 0.182, 0.398, 0.211],
+            "text_snippet": "Invoice No. INV-2026-0087"
+          },
+          "unreadable": false
+        }
+      ],
+      "decision": "pending",
+      "decided_by": null,
+      "decided_at": null,
+      "rejection_reason": null
+    },
+    {
+      "review_item_id": "RI-0003",
+      "case_id": "CASE-2026-06-STX",
+      "ledger_entry": {
+        "ledger_row_id": "LED-0009",
+        "date": "2026-06-08",
+        "amount": 63750.00,
+        "party_name": "Ravi Logistics Pvt Ltd",
+        "description": "Freight - Lahore to Karachi",
+        "account_code": "5310",
+        "currency": "PKR",
+        "source": { "document_id": "DOC-LED-001", "row_number": 11 }
+      },
+      "bank_transaction": {
+        "bank_row_id": "BNK-0038",
+        "date": "2026-06-10",
+        "amount": 63750.00,
+        "description": "ONLINE TFR RAVI LOGISTICS",
+        "balance": 4482910.00,
+        "currency": "PKR",
+        "source": {
+          "document_id": "DOC-BNK-001",
+          "page": 2,
+          "bbox": [0.607, 0.157, 0.859, 0.180],
+          "text_snippet": "63,750.00"
+        }
+      },
+      "invoice": null,
+      "match": {
+        "ledger_row_id": "LED-0009",
+        "bank_row_id": "BNK-0038",
+        "invoice_id": null,
+        "status": "matched",
+        "match_strength": "medium",
+        "reason": "Amount matches exactly; the bank cleared it 2 days after the ledger date.",
+        "rule_id": "exact-amount-date-within-3-days"
+      },
+      "flags": [],
+      "extraction_confidence": "medium",
+      "evidence": [
+        {
+          "field": "amount",
+          "value": 63750.0,
+          "extraction_confidence": "medium",
+          "source": {
+            "document_id": "DOC-BNK-001",
+            "page": 2,
+            "bbox": [0.607, 0.157, 0.859, 0.180],
+            "text_snippet": "63,750.00"
+          },
+          "unreadable": false
+        },
+        {
+          "field": "amount",
+          "value": 63750.0,
+          "extraction_confidence": "high",
+          "source": { "document_id": "DOC-LED-001", "row_number": 11 },
+          "unreadable": false
+        }
+      ],
+      "decision": "pending",
+      "decided_by": null,
+      "decided_at": null,
+      "rejection_reason": null
+    },
+    {
+      "review_item_id": "RI-0004",
+      "case_id": "CASE-2026-06-STX",
+      "ledger_entry": {
+        "ledger_row_id": "LED-0012",
+        "date": "2026-06-10",
+        "amount": 45900.00,
+        "party_name": "Al-Habib Stationers",
+        "description": "Office supplies - Q2",
+        "account_code": "6110",
+        "currency": "PKR",
+        "source": { "document_id": "DOC-LED-001", "row_number": 14 }
+      },
+      "bank_transaction": {
+        "bank_row_id": "BNK-0044",
+        "date": "2026-06-10",
+        "amount": 49500.00,
+        "description": "CHQ 004418 AL HABIB STATIONERS",
+        "balance": 4433410.00,
+        "currency": "PKR",
+        "source": {
+          "document_id": "DOC-BNK-001",
+          "page": 2,
+          "bbox": [0.605, 0.289, 0.857, 0.312],
+          "text_snippet": "49,500.00"
+        }
+      },
+      "invoice": null,
+      "match": {
+        "ledger_row_id": "LED-0012",
+        "bank_row_id": "BNK-0044",
+        "invoice_id": null,
+        "status": "partial",
+        "match_strength": "low",
+        "reason": "Party and date match, but the ledger records 45,900.00 while the bank shows 49,500.00 - a likely digit transposition.",
+        "rule_id": "same-party-same-date-amount-mismatch"
+      },
+      "flags": [],
+      "extraction_confidence": "high",
+      "evidence": [
+        {
+          "field": "amount",
+          "value": 49500.0,
+          "extraction_confidence": "high",
+          "source": {
+            "document_id": "DOC-BNK-001",
+            "page": 2,
+            "bbox": [0.605, 0.289, 0.857, 0.312],
+            "text_snippet": "49,500.00"
+          },
+          "unreadable": false
+        },
+        {
+          "field": "amount",
+          "value": 45900.0,
+          "extraction_confidence": "high",
+          "source": { "document_id": "DOC-LED-001", "row_number": 14 },
+          "unreadable": false
+        }
+      ],
+      "decision": "rejected",
+      "decided_by": "user-demo-auditor",
+      "decided_at": "2026-06-19T10:02:55Z",
+      "rejection_reason": "Ledger amount is wrong. The bank shows 49,500.00. Returned to the client for correction."
+    },
+    {
+      "review_item_id": "RI-0005",
+      "case_id": "CASE-2026-06-STX",
+      "ledger_entry": {
+        "ledger_row_id": "LED-0014",
+        "date": "2026-06-11",
+        "amount": 49500.00,
+        "party_name": "Hussain Brothers & Sons",
+        "description": "Dyeing services - part 1",
+        "account_code": "5040",
+        "currency": "PKR",
+        "source": { "document_id": "DOC-LED-001", "row_number": 16 }
+      },
+      "bank_transaction": {
+        "bank_row_id": "BNK-0051",
+        "date": "2026-06-11",
+        "amount": 49500.00,
+        "description": "IBFT HUSSAIN BROTHERS AND SONS",
+        "balance": 4383910.00,
+        "currency": "PKR",
+        "source": {
+          "document_id": "DOC-BNK-001",
+          "page": 2,
+          "bbox": [0.606, 0.371, 0.858, 0.394],
+          "text_snippet": "49,500.00"
+        }
+      },
+      "invoice": null,
+      "match": {
+        "ledger_row_id": "LED-0014",
+        "bank_row_id": "BNK-0051",
+        "invoice_id": null,
+        "status": "matched",
+        "match_strength": "high",
+        "reason": "Amount and date match the bank statement exactly, and the party name is a 100% match.",
+        "rule_id": "exact-amount-exact-date"
+      },
+      "flags": [
+        {
+          "flag_id": "FLG-0009",
+          "rule_id": "structuring",
+          "severity": "high",
+          "explanation": "Two payments to Hussain Brothers & Sons on 2026-06-11, each below the 50,000 approval limit, total 99,000. Splitting a payment to stay under an approval limit is a structuring pattern.",
+          "source_row_id": "LED-0014",
+          "related_row_ids": ["LED-0015"],
+          "source": { "document_id": "DOC-LED-001", "row_number": 16 }
+        },
+        {
+          "flag_id": "FLG-0010",
+          "rule_id": "near-limit",
+          "severity": "high",
+          "explanation": "49,500.00 sits 1.0% below the 50,000 approval limit.",
+          "source_row_id": "LED-0014",
+          "related_row_ids": [],
+          "source": { "document_id": "DOC-LED-001", "row_number": 16 }
+        }
+      ],
+      "extraction_confidence": "high",
+      "evidence": [
+        {
+          "field": "amount",
+          "value": 49500.0,
+          "extraction_confidence": "high",
+          "source": {
+            "document_id": "DOC-BNK-001",
+            "page": 2,
+            "bbox": [0.606, 0.371, 0.858, 0.394],
+            "text_snippet": "49,500.00"
+          },
+          "unreadable": false
+        },
+        {
+          "field": "amount",
+          "value": 49500.0,
+          "extraction_confidence": "high",
+          "source": { "document_id": "DOC-LED-001", "row_number": 16 },
+          "unreadable": false
+        }
+      ],
+      "decision": "pending",
+      "decided_by": null,
+      "decided_at": null,
+      "rejection_reason": null
+    },
+    {
+      "review_item_id": "RI-0006",
+      "case_id": "CASE-2026-06-STX",
+      "ledger_entry": {
+        "ledger_row_id": "LED-0015",
+        "date": "2026-06-11",
+        "amount": 49500.00,
+        "party_name": "Hussain Brothers & Sons",
+        "description": "Dyeing services - part 2",
+        "account_code": "5040",
+        "currency": "PKR",
+        "source": { "document_id": "DOC-LED-001", "row_number": 17 }
+      },
+      "bank_transaction": {
+        "bank_row_id": "BNK-0052",
+        "date": "2026-06-11",
+        "amount": 49500.00,
+        "description": "IBFT HUSSAIN BROTHERS AND SONS",
+        "balance": 4334410.00,
+        "currency": "PKR",
+        "source": {
+          "document_id": "DOC-BNK-001",
+          "page": 2,
+          "bbox": [0.606, 0.398, 0.858, 0.421],
+          "text_snippet": "49,500.00"
+        }
+      },
+      "invoice": null,
+      "match": {
+        "ledger_row_id": "LED-0015",
+        "bank_row_id": "BNK-0052",
+        "invoice_id": null,
+        "status": "matched",
+        "match_strength": "high",
+        "reason": "Amount and date match the bank statement exactly, and the party name is a 100% match.",
+        "rule_id": "exact-amount-exact-date"
+      },
+      "flags": [
+        {
+          "flag_id": "FLG-0011",
+          "rule_id": "structuring",
+          "severity": "high",
+          "explanation": "Two payments to Hussain Brothers & Sons on 2026-06-11, each below the 50,000 approval limit, total 99,000. Splitting a payment to stay under an approval limit is a structuring pattern.",
+          "source_row_id": "LED-0015",
+          "related_row_ids": ["LED-0014"],
+          "source": { "document_id": "DOC-LED-001", "row_number": 17 }
+        },
+        {
+          "flag_id": "FLG-0012",
+          "rule_id": "near-limit",
+          "severity": "high",
+          "explanation": "49,500.00 sits 1.0% below the 50,000 approval limit.",
+          "source_row_id": "LED-0015",
+          "related_row_ids": [],
+          "source": { "document_id": "DOC-LED-001", "row_number": 17 }
+        }
+      ],
+      "extraction_confidence": "high",
+      "evidence": [
+        {
+          "field": "amount",
+          "value": 49500.0,
+          "extraction_confidence": "high",
+          "source": {
+            "document_id": "DOC-BNK-001",
+            "page": 2,
+            "bbox": [0.606, 0.398, 0.858, 0.421],
+            "text_snippet": "49,500.00"
+          },
+          "unreadable": false
+        },
+        {
+          "field": "amount",
+          "value": 49500.0,
+          "extraction_confidence": "high",
+          "source": { "document_id": "DOC-LED-001", "row_number": 17 },
+          "unreadable": false
+        }
+      ],
+      "decision": "pending",
+      "decided_by": null,
+      "decided_at": null,
+      "rejection_reason": null
+    },
+    {
+      "review_item_id": "RI-0007",
+      "case_id": "CASE-2026-06-STX",
+      "ledger_entry": {
+        "ledger_row_id": "LED-0019",
+        "date": "2026-06-14",
+        "amount": 1500000.00,
+        "party_name": "Indus Power Solutions",
+        "description": "Generator overhaul - advance",
+        "account_code": "1720",
+        "currency": "PKR",
+        "source": { "document_id": "DOC-LED-001", "row_number": 21 }
+      },
+      "bank_transaction": {
+        "bank_row_id": "BNK-0063",
+        "date": "2026-06-14",
+        "amount": 1500000.00,
+        "description": "RTGS INDUS POWER SOLUTIONS",
+        "balance": 2834410.00,
+        "currency": "PKR",
+        "source": {
+          "document_id": "DOC-BNK-001",
+          "page": 2,
+          "bbox": [0.591, 0.612, 0.861, 0.635],
+          "text_snippet": "1,500,000.00"
+        }
+      },
+      "invoice": null,
+      "match": {
+        "ledger_row_id": "LED-0019",
+        "bank_row_id": "BNK-0063",
+        "invoice_id": null,
+        "status": "matched",
+        "match_strength": "high",
+        "reason": "Amount and date match the bank statement exactly, and the party name is a 100% match.",
+        "rule_id": "exact-amount-exact-date"
+      },
+      "flags": [
+        {
+          "flag_id": "FLG-0017",
+          "rule_id": "weekend-entry",
+          "severity": "medium",
+          "explanation": "Posted on Sunday 2026-06-14. Weekend postings are unusual for this client's payment cycle.",
+          "source_row_id": "LED-0019",
+          "related_row_ids": [],
+          "source": { "document_id": "DOC-LED-001", "row_number": 21 }
+        },
+        {
+          "flag_id": "FLG-0018",
+          "rule_id": "round-number",
+          "severity": "low",
+          "explanation": "1,500,000.00 is an exactly round figure. Informational only - round amounts are common for advances.",
+          "source_row_id": "LED-0019",
+          "related_row_ids": [],
+          "source": { "document_id": "DOC-LED-001", "row_number": 21 }
+        }
+      ],
+      "extraction_confidence": "high",
+      "evidence": [
+        {
+          "field": "amount",
+          "value": 1500000.0,
+          "extraction_confidence": "high",
+          "source": {
+            "document_id": "DOC-BNK-001",
+            "page": 2,
+            "bbox": [0.591, 0.612, 0.861, 0.635],
+            "text_snippet": "1,500,000.00"
+          },
+          "unreadable": false
+        },
+        {
+          "field": "amount",
+          "value": 1500000.0,
+          "extraction_confidence": "high",
+          "source": { "document_id": "DOC-LED-001", "row_number": 21 },
+          "unreadable": false
+        }
+      ],
+      "decision": "pending",
+      "decided_by": null,
+      "decided_at": null,
+      "rejection_reason": null
+    },
+    {
+      "review_item_id": "RI-0008",
+      "case_id": "CASE-2026-06-STX",
+      "ledger_entry": {
+        "ledger_row_id": "LED-0023",
+        "date": "2026-06-16",
+        "amount": 96400.00,
+        "party_name": "Karachi Packaging Co.",
+        "description": "Carton supply against INV-2026-0087",
+        "account_code": "5020",
+        "currency": "PKR",
+        "source": { "document_id": "DOC-LED-001", "row_number": 25 }
+      },
+      "bank_transaction": {
+        "bank_row_id": "BNK-0071",
+        "date": "2026-06-16",
+        "amount": 96400.00,
+        "description": "CHQ 004431 KARACHI PACKAGING CO",
+        "balance": 2681210.00,
+        "currency": "PKR",
+        "source": {
+          "document_id": "DOC-BNK-001",
+          "page": 3,
+          "bbox": [0.609, 0.204, 0.858, 0.227],
+          "text_snippet": "96,400.00"
+        }
+      },
+      "invoice": {
+        "invoice_id": "INV-0087",
+        "invoice_number": "INV-2026-0087",
+        "date": "2026-06-03",
+        "amount": 96400.00,
+        "party_name": "Karachi Packaging Co.",
+        "currency": "PKR",
+        "source": {
+          "document_id": "DOC-INV-0087",
+          "page": 1,
+          "bbox": [0.572, 0.704, 0.845, 0.739],
+          "text_snippet": "Total: Rs. 96,400/-"
+        }
+      },
+      "match": {
+        "ledger_row_id": "LED-0023",
+        "bank_row_id": "BNK-0071",
+        "invoice_id": "INV-0087",
+        "status": "matched",
+        "match_strength": "high",
+        "reason": "Ledger, invoice INV-2026-0087, and the bank payment all agree on 96,400.00.",
+        "rule_id": "exact-amount-exact-date"
+      },
+      "flags": [
+        {
+          "flag_id": "FLG-0021",
+          "rule_id": "duplicate-invoice",
+          "severity": "high",
+          "explanation": "Invoice INV-2026-0087 is paid twice: once on 2026-06-05 and again on 2026-06-16, 11 days apart.",
+          "source_row_id": "LED-0023",
+          "related_row_ids": ["LED-0007"],
+          "source": {
+            "document_id": "DOC-INV-0087",
+            "page": 1,
+            "bbox": [0.104, 0.182, 0.398, 0.211],
+            "text_snippet": "Invoice No. INV-2026-0087"
+          }
+        }
+      ],
+      "extraction_confidence": "high",
+      "evidence": [
+        {
+          "field": "amount",
+          "value": 96400.0,
+          "extraction_confidence": "high",
+          "source": {
+            "document_id": "DOC-BNK-001",
+            "page": 3,
+            "bbox": [0.609, 0.204, 0.858, 0.227],
+            "text_snippet": "96,400.00"
+          },
+          "unreadable": false
+        },
+        {
+          "field": "invoice_number",
+          "value": "INV-2026-0087",
+          "extraction_confidence": "high",
+          "source": {
+            "document_id": "DOC-INV-0087",
+            "page": 1,
+            "bbox": [0.104, 0.182, 0.398, 0.211],
+            "text_snippet": "Invoice No. INV-2026-0087"
+          },
+          "unreadable": false
+        }
+      ],
+      "decision": "pending",
+      "decided_by": null,
+      "decided_at": null,
+      "rejection_reason": null
+    },
+    {
+      "review_item_id": "RI-0009",
+      "case_id": "CASE-2026-06-STX",
+      "ledger_entry": {
+        "ledger_row_id": "LED-0027",
+        "date": "2026-06-17",
+        "amount": 312880.00,
+        "party_name": "Sialkot Metal Works",
+        "description": "Loom spare parts",
+        "account_code": "5050",
+        "currency": "PKR",
+        "source": { "document_id": "DOC-LED-001", "row_number": 29 }
+      },
+      "bank_transaction": {
+        "bank_row_id": "BNK-0079",
+        "date": "2026-06-19",
+        "amount": 312880.00,
+        "description": "IBFT SIALKOT METAL WORKS",
+        "balance": 2368330.00,
+        "currency": "PKR",
+        "source": {
+          "document_id": "DOC-BNK-001",
+          "page": 3,
+          "bbox": [0.604, 0.377, 0.859, 0.400],
+          "text_snippet": "312,880.00"
+        }
+      },
+      "invoice": {
+        "invoice_id": "INV-0431",
+        "invoice_number": "SMW/2026/0431",
+        "date": "2026-06-15",
+        "amount": 312880.00,
+        "party_name": "Sialkot Metal Works",
+        "currency": "PKR",
+        "source": {
+          "document_id": "DOC-INV-0431",
+          "page": 1,
+          "bbox": [0.548, 0.681, 0.833, 0.724],
+          "text_snippet": "Rs. 312,880/-"
+        }
+      },
+      "match": {
+        "ledger_row_id": "LED-0027",
+        "bank_row_id": "BNK-0079",
+        "invoice_id": "INV-0431",
+        "status": "matched",
+        "match_strength": "medium",
+        "reason": "Amount matches exactly; the bank cleared it 2 days after the ledger date.",
+        "rule_id": "exact-amount-date-within-3-days"
+      },
+      "flags": [],
+      "extraction_confidence": "low",
+      "evidence": [
+        {
+          "field": "amount",
+          "value": 312880.0,
+          "extraction_confidence": "low",
+          "source": {
+            "document_id": "DOC-INV-0431",
+            "page": 1,
+            "bbox": [0.548, 0.681, 0.833, 0.724],
+            "text_snippet": "Rs. 312,880/-"
+          },
+          "unreadable": false
+        },
+        {
+          "field": "amount",
+          "value": 312880.0,
+          "extraction_confidence": "high",
+          "source": { "document_id": "DOC-LED-001", "row_number": 29 },
+          "unreadable": false
+        }
+      ],
+      "decision": "pending",
+      "decided_by": null,
+      "decided_at": null,
+      "rejection_reason": null
+    },
+    {
+      "review_item_id": "RI-0010",
+      "case_id": "CASE-2026-06-STX",
+      "ledger_entry": {
+        "ledger_row_id": "LED-0031",
+        "date": "2026-06-18",
+        "amount": 187500.00,
+        "party_name": "Shalimar Trading Co",
+        "description": "Consultancy - brand audit",
+        "account_code": "6420",
+        "currency": "PKR",
+        "source": { "document_id": "DOC-LED-001", "row_number": 33 }
+      },
+      "bank_transaction": null,
+      "invoice": null,
+      "match": {
+        "ledger_row_id": "LED-0031",
+        "bank_row_id": null,
+        "invoice_id": null,
+        "status": "unmatched",
+        "match_strength": "low",
+        "reason": "No bank payment and no invoice found for this ledger entry anywhere in the uploaded documents.",
+        "rule_id": "no-candidate-found"
+      },
+      "flags": [],
+      "extraction_confidence": "high",
+      "evidence": [
+        {
+          "field": "amount",
+          "value": 187500.0,
+          "extraction_confidence": "high",
+          "source": { "document_id": "DOC-LED-001", "row_number": 33 },
+          "unreadable": false
+        },
+        {
+          "field": "party_name",
+          "value": "Shalimar Trading Co",
+          "extraction_confidence": "high",
+          "source": { "document_id": "DOC-LED-001", "row_number": 33 },
+          "unreadable": false
+        }
+      ],
+      "decision": "pending",
+      "decided_by": null,
+      "decided_at": null,
+      "rejection_reason": null
+    }
+  ]
+}

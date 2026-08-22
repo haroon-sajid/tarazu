@@ -11,4 +11,10 @@ Consequences, and Status.
 **Does not belong here:** General documentation (`docs/`), API contracts
 (`docs/api-contracts.md`), meeting notes, or code.
 
-No ADRs have been recorded yet.
+## Recorded
+
+| # | Decision |
+|---|---|
+| [0001](0001-http-routers-live-in-app-api.md) | HTTP routers live in `app/api/`, not inside the modules |
+| [0002](0002-two-backing-stores-behind-one-repository.md) | Two backing stores behind one repository interface |
+| [0003](0003-tenancy-is-an-org-id-column-and-two-enforcement-layers.md) | Tenancy is an `org_id` column, enforced twice |
