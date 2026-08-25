@@ -1,23 +1,33 @@
 "use client";
 
 /**
- * Settings: API keys and workspace facts.
+ * Settings: full-width, sectioned like a professional admin console — a left
+ * sub-nav over anchored sections: Organization, API keys, Webhooks,
+ * Integrations, Compliance, Connection.
  *
- * The key rules come from the contract, and the UI keeps them visible:
- * the raw key appears exactly once (in the create response), a key is revoked
- * never deleted, and `read` is the default scope — a key that can approve
- * has to say so.
+ * Honesty rule: sections backed by real endpoints (API keys) are fully live;
+ * capabilities the backend does not expose yet (webhooks, member invites,
+ * renaming the organization) are shown as planned, never faked. The key rules
+ * come from the contract: the raw key appears exactly once, a key is revoked
+ * never deleted, and `read` is the default scope.
  */
 
 import * as React from "react";
+import Link from "next/link";
 import {
+  Ban,
+  Building2,
   Check,
   Copy,
   KeyRound,
   Loader2,
+  Lock,
+  Plug,
   Plus,
+  Scale,
   ShieldAlert,
-  Ban,
+  ShieldCheck,
+  Webhook,
 } from "lucide-react";
 import {
   ApiError,
@@ -26,6 +36,7 @@ import {
   listApiKeys,
   revokeApiKey,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type { ApiKeyScope, ApiKeySummary, CreatedApiKeyResponse } from "@/lib/types";
 import { formatTimestamp } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -35,6 +46,43 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { cn } from "@/lib/utils";
+
+// ---------------------------------------------------------------------------
+// Sub-navigation
+// ---------------------------------------------------------------------------
+
+const NAV_SECTIONS: { group: string; items: { id: string; label: string }[] }[] = [
+  {
+    group: "Account",
+    items: [
+      { id: "organization", label: "Organization" },
+      { id: "profile", label: "Profile" },
+    ],
+  },
+  {
+    group: "Developers",
+    items: [
+      { id: "api-keys", label: "API keys" },
+      { id: "webhooks", label: "Webhooks" },
+      { id: "integrations", label: "Integrations" },
+    ],
+  },
+  {
+    group: "Trust",
+    items: [
+      { id: "compliance", label: "Compliance" },
+      { id: "connection", label: "Connection" },
+    ],
+  },
+];
+
+function PlannedBadge() {
+  return (
+    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400 ring-1 ring-slate-200">
+      Planned
+    </span>
+  );
+}
 
 function ScopePill({ scope }: { scope: ApiKeyScope }) {
   return (
@@ -51,7 +99,38 @@ function ScopePill({ scope }: { scope: ApiKeyScope }) {
   );
 }
 
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = React.useState(false);
+  return (
+    <button
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1800);
+        } catch {
+          // Clipboard can be blocked; the value stays selectable on screen.
+        }
+      }}
+      className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
+      aria-label={`Copy ${label}`}
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
+      ) : (
+        <Copy className="h-3.5 w-3.5" aria-hidden />
+      )}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The page
+// ---------------------------------------------------------------------------
+
 export default function SettingsPage() {
+  const { session } = useAuth();
   const [keys, setKeys] = React.useState<ApiKeySummary[] | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
@@ -146,156 +225,387 @@ export default function SettingsPage() {
     }
   };
 
-  return (
-    <div className="max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-ink-900">Settings</h1>
-        <p className="mt-1 text-sm text-ink-600">
-          API keys let your own tooling — n8n, Zapier, a script — reach Tarazu
-          without a person signing in. A key reaches exactly what its creator
-          could reach, and nothing in another organization.
-        </p>
-      </div>
+  const organizationName =
+    session?.organizationName ?? (FIXTURE_MODE ? "Demo Audit Firm" : "Your firm");
+  const orgId = session?.orgId ?? (FIXTURE_MODE ? "ORG-FIXTURE-0001" : null);
+  const role = session?.role ?? (FIXTURE_MODE ? "owner" : null);
 
-      {/* API keys */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <KeyRound className="h-4 w-4 text-brand-700" aria-hidden />
-            API keys
-          </CardTitle>
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus className="h-3.5 w-3.5" aria-hidden />
-            Create key
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {loadError ? (
-            <ErrorState message={loadError} onRetry={load} />
-          ) : keys === null ? (
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <Skeleton key={index} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : keys.length === 0 ? (
-            <EmptyState
-              title="No API keys yet"
-              message="Create a key to connect n8n, Zapier, or your own scripts. Read-only is the default scope."
-            />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-left">
-                <thead>
-                  <tr className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-                    <th className="py-2 pr-4">Name</th>
-                    <th className="py-2 pr-4">Key</th>
-                    <th className="py-2 pr-4">Scopes</th>
-                    <th className="py-2 pr-4">Created</th>
-                    <th className="py-2 pr-4">Last used</th>
-                    <th className="py-2 pr-4">Status</th>
-                    <th className="py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {keys.map((key) => (
-                    <tr
-                      key={key.key_id}
-                      className={cn(
-                        "border-b border-slate-100 text-sm last:border-0",
-                        key.revoked && "opacity-60",
-                      )}
+  return (
+    <div className="flex gap-8">
+      {/* Settings sub-navigation */}
+      <aside className="sticky top-0 w-44 shrink-0 self-start">
+        <h1 className="mb-4 text-xl font-bold text-ink-900">Settings</h1>
+        <nav className="space-y-4">
+          {NAV_SECTIONS.map(({ group, items }) => (
+            <div key={group}>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                {group}
+              </p>
+              <ul className="space-y-0.5">
+                {items.map(({ id, label }) => (
+                  <li key={id}>
+                    <a
+                      href={`#${id}`}
+                      className="block rounded px-2 py-1 text-sm text-ink-600 hover:bg-slate-100 hover:text-ink-900"
                     >
-                      <td className="py-2.5 pr-4 font-medium text-ink-900">
-                        {key.name}
-                      </td>
-                      <td className="py-2.5 pr-4 font-mono text-xs text-ink-600">
-                        {key.key_prefix}…
-                      </td>
-                      <td className="py-2.5 pr-4">
-                        <span className="flex gap-1">
-                          {key.scopes.map((scope) => (
-                            <ScopePill key={scope} scope={scope} />
-                          ))}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap py-2.5 pr-4 text-xs text-ink-600">
-                        {formatTimestamp(key.created_at)}
-                      </td>
-                      <td className="whitespace-nowrap py-2.5 pr-4 text-xs text-ink-600">
-                        {key.last_used_at ? formatTimestamp(key.last_used_at) : "Never"}
-                      </td>
-                      <td className="py-2.5 pr-4">
-                        {key.revoked ? (
-                          <span
-                            className="text-xs font-medium text-rose-600"
-                            title={
-                              key.revoked_at
-                                ? `Revoked ${formatTimestamp(key.revoked_at)}`
-                                : undefined
-                            }
-                          >
-                            Revoked
-                          </span>
-                        ) : (
-                          <span className="text-xs font-medium text-emerald-600">
-                            Active
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2.5 text-right">
-                        {!key.revoked && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setRevokeError(null);
-                              setRevoking(key);
-                            }}
-                          >
-                            <Ban className="h-3.5 w-3.5" aria-hidden />
-                            Revoke
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                      {label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
+      </aside>
+
+      {/* Sections */}
+      <div className="min-w-0 flex-1 space-y-6 pb-10">
+        {/* ----------------------------------------------------------- */}
+        <section id="organization" className="scroll-mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-brand-700" aria-hidden />
+                Organization
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <table className="w-full text-left">
+                <tbody>
+                  <tr className="border-b border-slate-100">
+                    <td className="w-56 py-3 pr-4">
+                      <p className="text-sm font-medium text-ink-900">Name</p>
+                      <p className="text-xs text-ink-400">Your accounting firm — the tenant every case belongs to</p>
+                    </td>
+                    <td className="py-3 pr-4 text-sm text-ink-900">{organizationName}</td>
+                    <td className="py-3 text-right">
+                      <PlannedBadge />
+                    </td>
+                  </tr>
+                  <tr className="border-b border-slate-100">
+                    <td className="py-3 pr-4">
+                      <p className="text-sm font-medium text-ink-900">Organization id</p>
+                      <p className="text-xs text-ink-400">Resolved from your membership on every request</p>
+                    </td>
+                    <td className="py-3 pr-4 font-mono text-xs text-ink-600">{orgId ?? "—"}</td>
+                    <td className="py-3 text-right">
+                      {orgId && <CopyButton value={orgId} label="organization id" />}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-4">
+                      <p className="text-sm font-medium text-ink-900">Members</p>
+                      <p className="text-xs text-ink-400">Who can see and decide this firm&apos;s cases</p>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <p className="text-sm text-ink-900">{session?.email ?? "You"}</p>
+                      {role && (
+                        <p className="mt-0.5 inline-flex items-center gap-1 text-xs capitalize text-emerald-700">
+                          <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> {role}
+                        </p>
+                      )}
+                    </td>
+                    <td className="py-3 text-right">
+                      <span title="Member invitations are a later route, authorised by your own membership">
+                        <Button size="sm" variant="outline" disabled>
+                          <Plus className="h-3.5 w-3.5" aria-hidden />
+                          Invite
+                        </Button>
+                      </span>
+                    </td>
+                  </tr>
                 </tbody>
               </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </section>
 
-      {/* Connection */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Connection</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <dl className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-ink-400">Data source</dt>
-              <dd className="font-medium text-ink-900">
-                {FIXTURE_MODE ? "Fixture data (offline demo)" : "Live backend"}
-              </dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-ink-400">Backend URL</dt>
-              <dd className="font-mono text-xs text-ink-900">
-                {process.env.NEXT_PUBLIC_TARAZU_API_URL || "— not set —"}
-              </dd>
-            </div>
-          </dl>
-          {FIXTURE_MODE && (
-            <p className="mt-3 text-xs text-ink-400">
-              Set <span className="font-mono">NEXT_PUBLIC_TARAZU_API_URL</span> in{" "}
-              <span className="font-mono">.env.local</span> and restart the dev
-              server to switch every screen to the live API.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+        {/* ----------------------------------------------------------- */}
+        <section id="profile" className="scroll-mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile</CardTitle>
+            </CardHeader>
+            <CardContent className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-ink-900">{session?.email ?? "—"}</p>
+                <p className="mt-0.5 font-mono text-xs text-ink-400">{session?.userId ?? ""}</p>
+              </div>
+              <Link href="/profile">
+                <Button size="sm" variant="outline">
+                  Open profile
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* ----------------------------------------------------------- */}
+        <section id="api-keys" className="scroll-mt-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <KeyRound className="h-4 w-4 text-brand-700" aria-hidden />
+                API keys
+              </CardTitle>
+              <Button size="sm" onClick={() => setCreating(true)}>
+                <Plus className="h-3.5 w-3.5" aria-hidden />
+                Create key
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <p className="mb-4 text-sm text-ink-600">
+                Keys let your own tooling — n8n, Zapier, a script — reach Tarazu
+                without a person signing in. A key reaches exactly what its
+                creator could reach, and nothing in another organization.
+              </p>
+              {loadError ? (
+                <ErrorState message={loadError} onRetry={load} />
+              ) : keys === null ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <Skeleton key={index} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : keys.length === 0 ? (
+                <EmptyState
+                  title="No API keys yet"
+                  message="Create a key to connect n8n, Zapier, or your own scripts. Read-only is the default scope."
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-left">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                        <th className="py-2 pr-4">Name</th>
+                        <th className="py-2 pr-4">Key</th>
+                        <th className="py-2 pr-4">Scopes</th>
+                        <th className="py-2 pr-4">Created</th>
+                        <th className="py-2 pr-4">Last used</th>
+                        <th className="py-2 pr-4">Status</th>
+                        <th className="py-2 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {keys.map((key) => (
+                        <tr
+                          key={key.key_id}
+                          className={cn(
+                            "border-b border-slate-100 text-sm last:border-0",
+                            key.revoked && "opacity-60",
+                          )}
+                        >
+                          <td className="py-2.5 pr-4 font-medium text-ink-900">{key.name}</td>
+                          <td className="py-2.5 pr-4 font-mono text-xs text-ink-600">
+                            {key.key_prefix}…
+                          </td>
+                          <td className="py-2.5 pr-4">
+                            <span className="flex gap-1">
+                              {key.scopes.map((scope) => (
+                                <ScopePill key={scope} scope={scope} />
+                              ))}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap py-2.5 pr-4 text-xs text-ink-600">
+                            {formatTimestamp(key.created_at)}
+                          </td>
+                          <td className="whitespace-nowrap py-2.5 pr-4 text-xs text-ink-600">
+                            {key.last_used_at ? formatTimestamp(key.last_used_at) : "Never"}
+                          </td>
+                          <td className="py-2.5 pr-4">
+                            {key.revoked ? (
+                              <span
+                                className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700 ring-1 ring-rose-200"
+                                title={
+                                  key.revoked_at
+                                    ? `Revoked ${formatTimestamp(key.revoked_at)}`
+                                    : undefined
+                                }
+                              >
+                                Revoked
+                              </span>
+                            ) : (
+                              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                                Active
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 text-right">
+                            {!key.revoked && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setRevokeError(null);
+                                  setRevoking(key);
+                                }}
+                              >
+                                <Ban className="h-3.5 w-3.5" aria-hidden />
+                                Revoke
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* ----------------------------------------------------------- */}
+        <section id="webhooks" className="scroll-mt-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Webhook className="h-4 w-4 text-brand-700" aria-hidden />
+                Webhooks
+                <PlannedBadge />
+              </CardTitle>
+              <span title="Webhook delivery is planned; poll the read API with a key meanwhile">
+                <Button size="sm" variant="outline" disabled>
+                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                  Add webhook
+                </Button>
+              </span>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-ink-600">
+                Push notifications for case events — extraction finished, flags
+                raised, an item decided — are on the roadmap. Until then, the
+                reliable pattern is polling{" "}
+                <span className="font-mono text-xs">GET /v1/review-items?decision=pending&amp;flagged=true</span>{" "}
+                with a <span className="font-mono text-xs">read</span> key on a
+                schedule; see Integrations below.
+              </p>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* ----------------------------------------------------------- */}
+        <section id="integrations" className="scroll-mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Plug className="h-4 w-4 text-brand-700" aria-hidden />
+                Integrations
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="mb-3 text-sm text-ink-600">
+                No custom nodes needed — any tool that can send an HTTP header
+                works. Send your key as{" "}
+                <span className="font-mono text-xs">X-API-Key</span> on any{" "}
+                <span className="font-mono text-xs">/v1/…</span> endpoint.
+              </p>
+              <ol className="list-decimal space-y-1.5 pl-5 text-sm text-ink-600">
+                <li>
+                  <span className="font-medium text-ink-900">n8n / Zapier / Make:</span>{" "}
+                  create a Header-Auth credential — header name{" "}
+                  <span className="font-mono text-xs">X-API-Key</span>, value your key.
+                </li>
+                <li>
+                  Schedule a trigger (for example every morning at 08:00) that calls{" "}
+                  <span className="font-mono text-xs">GET /v1/review-items?decision=pending&amp;flagged=true</span>.
+                </li>
+                <li>
+                  Alert your team when <span className="font-mono text-xs">total &gt; 0</span> —
+                  Slack, email, or a task in your tracker.
+                </li>
+              </ol>
+              <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200">
+                Never put the key in a URL or query parameter — query strings end
+                up in access logs. The credential store exists so the key does not.
+              </p>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* ----------------------------------------------------------- */}
+        <section id="compliance" className="scroll-mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Scale className="h-4 w-4 text-brand-700" aria-hidden />
+                Compliance
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="divide-y divide-slate-100">
+                <li className="flex items-start gap-3 py-3">
+                  <Lock className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" aria-hidden />
+                  <div>
+                    <p className="text-sm font-medium text-ink-900">Immutable audit trail</p>
+                    <p className="text-xs text-ink-600">
+                      Every action — AI or human — is appended to a log that
+                      accepts no updates and no deletes, enforced at the
+                      database. There is no setting to turn this off.
+                    </p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3 py-3">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" aria-hidden />
+                  <div>
+                    <p className="text-sm font-medium text-ink-900">
+                      Client data never trains models
+                    </p>
+                    <p className="text-xs text-ink-600">
+                      Documents go to the vision model for the inference call and
+                      nothing else — no telemetry, fine-tuning, or feedback loop.
+                    </p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3 py-3">
+                  <Scale className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" aria-hidden />
+                  <div>
+                    <p className="text-sm font-medium text-ink-900">
+                      The AI suggests, the human decides
+                    </p>
+                    <p className="text-xs text-ink-600">
+                      There is no auto-approval path. Every item carries an
+                      explicit human approve or reject, recorded with who and when.
+                    </p>
+                  </div>
+                </li>
+              </ul>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* ----------------------------------------------------------- */}
+        <section id="connection" className="scroll-mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Connection</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-ink-400">Data source</dt>
+                  <dd className="font-medium text-ink-900">
+                    {FIXTURE_MODE ? "Fixture data (offline demo)" : "Live backend"}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-ink-400">Backend URL</dt>
+                  <dd className="font-mono text-xs text-ink-900">
+                    {process.env.NEXT_PUBLIC_TARAZU_API_URL || "— not set —"}
+                  </dd>
+                </div>
+              </dl>
+              {FIXTURE_MODE && (
+                <p className="mt-3 text-xs text-ink-400">
+                  Set <span className="font-mono">NEXT_PUBLIC_TARAZU_API_URL</span> in{" "}
+                  <span className="font-mono">.env.local</span> and restart the dev
+                  server to switch every screen to the live API.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+      </div>
 
       {/* Create key dialog */}
       <Dialog
