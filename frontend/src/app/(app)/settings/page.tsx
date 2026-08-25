@@ -275,7 +275,7 @@ export default function SettingsPage() {
                   <tr className="border-b border-slate-100">
                     <td className="w-56 py-3 pr-4">
                       <p className="text-sm font-medium text-ink-900">Name</p>
-                      <p className="text-xs text-ink-400">Your accounting firm — the tenant every case belongs to</p>
+                      <p className="text-xs text-ink-400">The display name of your firm</p>
                     </td>
                     <td className="py-3 pr-4 text-sm text-ink-900">{organizationName}</td>
                     <td className="py-3 text-right">
@@ -285,7 +285,7 @@ export default function SettingsPage() {
                   <tr className="border-b border-slate-100">
                     <td className="py-3 pr-4">
                       <p className="text-sm font-medium text-ink-900">Organization id</p>
-                      <p className="text-xs text-ink-400">Resolved from your membership on every request</p>
+                      <p className="text-xs text-ink-400">Unique identifier for this workspace</p>
                     </td>
                     <td className="py-3 pr-4 font-mono text-xs text-ink-600">{orgId ?? "—"}</td>
                     <td className="py-3 text-right">
@@ -295,7 +295,7 @@ export default function SettingsPage() {
                   <tr>
                     <td className="py-3 pr-4">
                       <p className="text-sm font-medium text-ink-900">Members</p>
-                      <p className="text-xs text-ink-400">Who can see and decide this firm&apos;s cases</p>
+                      <p className="text-xs text-ink-400">People with access to this workspace</p>
                     </td>
                     <td className="py-3 pr-4">
                       <p className="text-sm text-ink-900">{session?.email ?? "You"}</p>
@@ -306,7 +306,7 @@ export default function SettingsPage() {
                       )}
                     </td>
                     <td className="py-3 text-right">
-                      <span title="Member invitations are a later route, authorised by your own membership">
+                      <span title="Member invitations are under development">
                         <Button size="sm" variant="outline" disabled>
                           <Plus className="h-3.5 w-3.5" aria-hidden />
                           Invite
@@ -355,9 +355,9 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               <p className="mb-4 text-sm text-ink-600">
-                Keys let your own tooling — n8n, Zapier, a script — reach Tarazu
-                without a person signing in. A key reaches exactly what its
-                creator could reach, and nothing in another organization.
+                API keys authenticate requests from external tools and automation
+                workflows. Each key is scoped to this organization and can be
+                revoked at any time.
               </p>
               {loadError ? (
                 <ErrorState message={loadError} onRetry={load} />
@@ -370,7 +370,7 @@ export default function SettingsPage() {
               ) : keys.length === 0 ? (
                 <EmptyState
                   title="No API keys yet"
-                  message="Create a key to connect n8n, Zapier, or your own scripts. Read-only is the default scope."
+                  message="Create a key to authenticate external tools and automation workflows. Read-only is the default scope."
                 />
               ) : (
                 <div className="overflow-x-auto">
@@ -464,7 +464,7 @@ export default function SettingsPage() {
                 Webhooks
                 <PlannedBadge />
               </CardTitle>
-              <span title="Webhook delivery is planned; poll the read API with a key meanwhile">
+              <span title="Webhook delivery is under development">
                 <Button size="sm" variant="outline" disabled>
                   <Plus className="h-3.5 w-3.5" aria-hidden />
                   Add webhook
@@ -473,12 +473,11 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-ink-600">
-                Push notifications for case events — extraction finished, flags
-                raised, an item decided — are on the roadmap. Until then, the
-                reliable pattern is polling{" "}
-                <span className="font-mono text-xs">GET /v1/review-items?decision=pending&amp;flagged=true</span>{" "}
-                with a <span className="font-mono text-xs">read</span> key on a
-                schedule; see Integrations below.
+                Webhooks will deliver event notifications for case activity, such
+                as completed extractions, raised flags, and recorded decisions.
+                This feature is under development. Until it ships, scheduled
+                polling of the review items endpoint provides the same
+                information.
               </p>
             </CardContent>
           </Card>
@@ -495,29 +494,30 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               <p className="mb-3 text-sm text-ink-600">
-                No custom nodes needed — any tool that can send an HTTP header
-                works. Send your key as{" "}
-                <span className="font-mono text-xs">X-API-Key</span> on any{" "}
-                <span className="font-mono text-xs">/v1/…</span> endpoint.
+                Tarazu integrates with any automation platform or internal tool
+                that supports custom request headers. Authenticate by sending an
+                API key in the <span className="font-mono text-xs">X-API-Key</span>{" "}
+                header.
               </p>
               <ol className="list-decimal space-y-1.5 pl-5 text-sm text-ink-600">
                 <li>
-                  <span className="font-medium text-ink-900">n8n / Zapier / Make:</span>{" "}
-                  create a Header-Auth credential — header name{" "}
-                  <span className="font-mono text-xs">X-API-Key</span>, value your key.
+                  Create an API key above and store it in your platform&apos;s
+                  credential manager as a header credential named{" "}
+                  <span className="font-mono text-xs">X-API-Key</span>.
                 </li>
                 <li>
-                  Schedule a trigger (for example every morning at 08:00) that calls{" "}
-                  <span className="font-mono text-xs">GET /v1/review-items?decision=pending&amp;flagged=true</span>.
+                  Schedule requests to the endpoints you need, for example{" "}
+                  <span className="font-mono text-xs">GET /v1/review-items?decision=pending&amp;flagged=true</span>{" "}
+                  to retrieve items awaiting review.
                 </li>
                 <li>
-                  Alert your team when <span className="font-mono text-xs">total &gt; 0</span> —
-                  Slack, email, or a task in your tracker.
+                  Route the results into your team&apos;s notification or task
+                  workflow.
                 </li>
               </ol>
               <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200">
-                Never put the key in a URL or query parameter — query strings end
-                up in access logs. The credential store exists so the key does not.
+                Send keys only in the request header. Keys placed in URLs or query
+                parameters can be exposed through access logs.
               </p>
             </CardContent>
           </Card>
@@ -539,9 +539,9 @@ export default function SettingsPage() {
                   <div>
                     <p className="text-sm font-medium text-ink-900">Immutable audit trail</p>
                     <p className="text-xs text-ink-600">
-                      Every action — AI or human — is appended to a log that
-                      accepts no updates and no deletes, enforced at the
-                      database. There is no setting to turn this off.
+                      Every action is recorded in an append-only log. Records
+                      cannot be updated or deleted, and this is enforced at the
+                      database level.
                     </p>
                   </div>
                 </li>
@@ -549,11 +549,12 @@ export default function SettingsPage() {
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" aria-hidden />
                   <div>
                     <p className="text-sm font-medium text-ink-900">
-                      Client data never trains models
+                      Client data is never used for model training
                     </p>
                     <p className="text-xs text-ink-600">
-                      Documents go to the vision model for the inference call and
-                      nothing else — no telemetry, fine-tuning, or feedback loop.
+                      Documents are sent to the extraction model only to be read.
+                      No client data is used for training, telemetry, or feedback
+                      loops.
                     </p>
                   </div>
                 </li>
@@ -561,11 +562,12 @@ export default function SettingsPage() {
                   <Scale className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" aria-hidden />
                   <div>
                     <p className="text-sm font-medium text-ink-900">
-                      The AI suggests, the human decides
+                      Every decision is made by a person
                     </p>
                     <p className="text-xs text-ink-600">
-                      There is no auto-approval path. Every item carries an
-                      explicit human approve or reject, recorded with who and when.
+                      The system has no automatic approval path. Each review item
+                      is approved or rejected by a named user, with the time of
+                      the decision recorded.
                     </p>
                   </div>
                 </li>
@@ -620,8 +622,8 @@ export default function SettingsPage() {
             maxLength={100}
             value={newName}
             onChange={(event) => setNewName(event.target.value)}
-            placeholder="n8n integration"
-            hint="So it can be recognised months later and revoked with confidence."
+            placeholder="Automation workflow"
+            hint="A label that identifies where this key will be used."
           />
           <div>
             <p className="mb-1.5 text-xs font-medium text-ink-600">Scopes</p>
@@ -636,7 +638,7 @@ export default function SettingsPage() {
                 <span>
                   <span className="font-medium text-ink-900">read</span>
                   <span className="block text-xs text-ink-400">
-                    The review queue, the dashboard, an item&apos;s audit trail.
+                    Read access to review items, the dashboard, and audit history.
                   </span>
                 </span>
               </label>
@@ -650,7 +652,8 @@ export default function SettingsPage() {
                 <span>
                   <span className="font-medium text-ink-900">write</span>
                   <span className="block text-xs text-ink-400">
-                    Upload, approve, reject. Never key management.
+                    Upload documents and record decisions. Keys can never manage
+                    other keys.
                   </span>
                 </span>
               </label>
@@ -658,9 +661,9 @@ export default function SettingsPage() {
             {newScopes.includes("write") && (
               <p className="mt-2 flex items-start gap-1.5 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200">
                 <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                A write key can record decisions. Every such action lands in the
-                audit trail as api-key:&lt;prefix&gt; — grant write only when
-                automation is the intent.
+                A key with write scope can record decisions. Each of those
+                actions is attributed to this key in the audit trail. Grant
+                write scope only when automation is intended.
               </p>
             )}
           </div>
@@ -716,9 +719,9 @@ export default function SettingsPage() {
               </Button>
             </div>
             <p className="text-xs text-ink-400">
-              Send it as <span className="font-mono">X-API-Key</span> on any{" "}
-              <span className="font-mono">/v1/…</span> endpoint. Losing it means
-              creating a new one — Tarazu stores only a hash.
+              Send this key in the <span className="font-mono">X-API-Key</span>{" "}
+              request header. Tarazu stores only a hash, so a lost key must be
+              replaced with a new one.
             </p>
             <div className="flex justify-end">
               <Button size="sm" onClick={() => setCreated(null)}>
@@ -736,11 +739,10 @@ export default function SettingsPage() {
         title={`Revoke “${revoking?.name ?? ""}”?`}
       >
         <p className="text-sm text-ink-600">
-          The key stops working immediately. There is no un-revoke — a key that
-          was turned off may have been turned off because it leaked. The row
-          stays, so the audit trail&apos;s{" "}
+          Revoking is permanent. The key stops working immediately and cannot be
+          restored. Its record is kept so that audit trail entries from{" "}
           <span className="font-mono text-xs">{revoking?.key_prefix}…</span>{" "}
-          entries remain traceable.
+          remain traceable.
         </p>
         {revokeError && (
           <p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">
