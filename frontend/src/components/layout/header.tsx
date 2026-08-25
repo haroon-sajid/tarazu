@@ -1,24 +1,53 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { CircleUserRound } from "lucide-react";
-import { FIXTURE_MODE } from "@/lib/api";
+import { FIXTURE_MODE, getDashboard } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 /**
  * The page header: which case is open, who is signed in, and — honestly —
  * whether the data on screen is fixture data or the live backend.
+ *
+ * The case chip is the organization's current case as the backend reports it
+ * (`GET /v1/dashboard` names the most recent case). With no case yet, no chip:
+ * nothing is invented client-side.
  */
-export function Header({ caseLabel }: { caseLabel?: string }) {
+export function Header() {
   const { session } = useAuth();
+  const pathname = usePathname();
+  const [caseLabel, setCaseLabel] = React.useState<string | null>(null);
+
+  // Refetched on navigation so a freshly uploaded case appears without a
+  // full reload. The layout keeps this component mounted between routes.
+  React.useEffect(() => {
+    let cancelled = false;
+    getDashboard()
+      .then((summary) => {
+        if (!cancelled) setCaseLabel(summary.client_name);
+      })
+      .catch(() => {
+        // No case yet, or the backend is unreachable: show no chip.
+        if (!cancelled) setCaseLabel(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
       <div className="flex items-center gap-3">
-        <span className="text-xs font-medium text-ink-400">Case:</span>
-        <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-ink-900">
-          {caseLabel ?? "Sethi Textiles (Pvt) Ltd — June 2026"}
-        </span>
+        {caseLabel && (
+          <>
+            <span className="text-xs font-medium text-ink-400">Case:</span>
+            <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-ink-900">
+              {caseLabel}
+            </span>
+          </>
+        )}
         {FIXTURE_MODE && (
           <span
             className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-sky-700 ring-1 ring-sky-200"

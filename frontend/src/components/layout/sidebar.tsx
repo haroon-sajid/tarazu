@@ -15,9 +15,9 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 
 const navItems = [
+  { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/upload", label: "Upload", icon: Upload },
   { href: "/review", label: "Review", icon: TableProperties },
-  { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/report", label: "Reports", icon: FileText },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
