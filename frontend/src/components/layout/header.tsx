@@ -1,13 +1,17 @@
 "use client";
 
-import { FIXTURE_MODE } from "@/lib/api";
+import Link from "next/link";
 import { CircleUserRound } from "lucide-react";
+import { FIXTURE_MODE } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 /**
  * The page header: which case is open, who is signed in, and — honestly —
  * whether the data on screen is fixture data or the live backend.
  */
 export function Header({ caseLabel }: { caseLabel?: string }) {
+  const { session } = useAuth();
+
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
       <div className="flex items-center gap-3">
@@ -24,13 +28,19 @@ export function Header({ caseLabel }: { caseLabel?: string }) {
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2.5">
+      <Link
+        href="/profile"
+        className="flex items-center gap-2.5 rounded-md px-2 py-1 transition-colors hover:bg-slate-50"
+        title="Your profile"
+      >
         <div className="text-right">
-          <p className="text-xs font-semibold text-ink-900">Demo Auditor</p>
-          <p className="text-[10px] text-ink-400">user-demo-auditor</p>
+          <p className="text-xs font-semibold text-ink-900">
+            {session?.organizationName ?? "Your firm"}
+          </p>
+          <p className="text-[10px] text-ink-400">{session?.email ?? ""}</p>
         </div>
         <CircleUserRound className="h-7 w-7 text-ink-400" aria-hidden />
-      </div>
+      </Link>
     </header>
   );
 }

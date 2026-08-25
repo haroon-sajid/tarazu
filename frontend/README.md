@@ -18,14 +18,19 @@ npm run dev        # http://localhost:3000
 With no configuration the app runs in **fixture mode**: every screen is served
 from `src/lib/fixtures/` (copies of `sample-data/fixtures/`, which the backend
 validates against the real Pydantic schemas). Approve/reject mutate an
-in-memory store, so the whole flow demos offline.
+in-memory store, so the whole flow demos offline — the login screen pre-fills
+demo credentials that sign in the seeded auditor.
 
 To switch to the live backend, set one line in `.env.local`
-(see `.env.example`):
+(see `.env.example`) and restart the dev server:
 
 ```
 NEXT_PUBLIC_TARAZU_API_URL=http://localhost:8000
 ```
+
+In live mode, sign up a firm (or sign in) on `/signup` / `/login`; the session
+token is held in localStorage and sent on every request. A 401 mid-session
+(token expired or revoked) signs you out and returns you to the login screen.
 
 ## Where things live
 
@@ -34,7 +39,10 @@ NEXT_PUBLIC_TARAZU_API_URL=http://localhost:8000
 | `src/lib/api.ts` | The one typed API client. Every screen calls this and nothing else; components never fetch. |
 | `src/lib/types.ts` | TypeScript mirrors of `backend/app/shared/schemas.py` / `docs/api-contracts.md`. |
 | `src/lib/fixtures/` | Copies of `sample-data/fixtures/`. If the contract changes, recopy them. |
-| `src/app/{upload,review,dashboard,report}` | The four routes. |
+| `src/lib/auth.tsx`, `src/lib/auth-storage.ts` | Session context and persistence. All HTTP still goes through `api.ts`. |
+| `src/app/(auth)/{login,signup}` | Signed-out screens. Signup creates the firm and its owner in one step. |
+| `src/app/(app)/{upload,review,dashboard,report,settings,profile}` | The signed-in app. The group layout redirects anonymous visitors to `/login`. |
+| `src/app/(app)/settings` | API keys: create (raw key shown exactly once), list, revoke — mirroring `/v1/api-keys`. |
 | `src/components/review/evidence-viewer.tsx` | The slide-over: comparison, provenance highlight, flags, audit history. |
 
 **Match Strength and Extraction Confidence are two different columns** with two

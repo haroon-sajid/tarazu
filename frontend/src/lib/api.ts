@@ -21,13 +21,20 @@
 
 import dashboardFixture from "./fixtures/dashboard.json";
 import reviewItemsFixture from "./fixtures/review-items.json";
+import { clearSession, getStoredSession } from "./auth-storage";
 import type {
+  ApiKeyListResponse,
+  ApiKeyScope,
+  ApiKeySummary,
   AuditRecord,
+  CreatedApiKeyResponse,
   DashboardSummary,
   DecisionResponse,
+  LoginResponse,
   ReviewItem,
   ReviewItemFilters,
   ReviewItemsResponse,
+  SignupResponse,
   UploadFiles,
   UploadResponse,
 } from "./types";
@@ -54,10 +61,16 @@ export class ApiError extends Error {
 // Live mode plumbing
 // --------------------------------------------------------------------------
 
+/** The signed-in auditor's token first; the env demo token as a fallback. */
+function authToken(): string {
+  return getStoredSession()?.accessToken ?? DEMO_TOKEN;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = authToken();
   const headers: Record<string, string> = {
     ...(init?.body ? { "Content-Type": "application/json" } : {}),
-    ...(DEMO_TOKEN ? { Authorization: `Bearer ${DEMO_TOKEN}` } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
   let response: Response;
   try {
@@ -72,6 +85,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       if (typeof body?.detail === "string") detail = body.detail;
     } catch {
       // keep statusText
+    }
+    // A 401 on a non-auth route while signed in means the token expired or
+    // was revoked: the session is dead, so end it rather than error every
+    // screen one by one.
+    if (
+      response.status === 401 &&
+      !path.startsWith("/v1/auth/") &&
+      getStoredSession() !== null &&
+      typeof window !== "undefined"
+    ) {
+      clearSession();
+      window.location.assign("/login");
     }
     throw new ApiError(response.status, detail);
   }
@@ -254,8 +279,9 @@ export async function uploadDocuments(files: UploadFiles): Promise<UploadRespons
     form.append("ledger", files.ledger);
     for (const invoice of files.invoices) form.append("invoices", invoice);
     if (files.clientName) form.append("client_name", files.clientName);
-    const headers: Record<string, string> = DEMO_TOKEN
-      ? { Authorization: `Bearer ${DEMO_TOKEN}` }
+    const token = authToken();
+    const headers: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
       : {};
     let response: Response;
     try {
@@ -333,4 +359,149 @@ export async function generateReport(kind: "pdf" | "excel"): Promise<never> {
     501,
     "Report generation needs the live backend — POST /v1/reports is not implemented yet.",
   );
+}
+
+// --------------------------------------------------------------------------
+// Auth
+// --------------------------------------------------------------------------
+
+/**
+ * POST /v1/auth/login. In fixture mode any credentials sign in the seeded
+ * demo auditor so the whole flow demos offline.
+ */
+export async function login(email: string, password: string): Promise<LoginResponse> {
+  if (!FIXTURE_MODE) {
+    return request<LoginResponse>("/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  if (!email.trim() || !password) {
+    throw new ApiError(401, "Invalid email or password.");
+  }
+  return {
+    access_token: "fixture-token",
+    token_type: "bearer",
+    expires_in: 3600,
+    user_id: DEMO_USER_ID,
+    email: email.trim(),
+  };
+}
+
+/** POST /v1/auth/signup. Creates the user, their firm, and their membership. */
+export async function signup(
+  email: string,
+  password: string,
+  organizationName: string,
+): Promise<SignupResponse> {
+  if (!FIXTURE_MODE) {
+    return request<SignupResponse>("/v1/auth/signup", {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        password,
+        organization_name: organizationName,
+      }),
+    });
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  if (password.length < 8) {
+    throw new ApiError(422, "Password must be at least 8 characters.");
+  }
+  return {
+    user_id: DEMO_USER_ID,
+    email: email.trim(),
+    org_id: "ORG-FIXTURE-0001",
+    organization_name: organizationName.trim() || "Demo Audit Firm",
+    role: "owner",
+  };
+}
+
+// --------------------------------------------------------------------------
+// API keys — how an organization's own tooling reaches Tarazu
+// --------------------------------------------------------------------------
+
+/** Fixture keys, seeded with one so the settings screen has something real. */
+const fixtureApiKeys: ApiKeySummary[] = [
+  {
+    key_id: "AK-fixture0001",
+    name: "n8n integration",
+    key_prefix: "trz_live_a1b2c3d4",
+    scopes: ["read"],
+    created_by: DEMO_USER_ID,
+    created_at: "2026-08-20T09:15:00Z",
+    last_used_at: "2026-08-24T07:02:11Z",
+    revoked_at: null,
+    revoked: false,
+  },
+];
+
+let fixtureKeySequence = 1;
+
+const randomHex = (length: number) =>
+  Array.from({ length }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("");
+
+/** GET /v1/api-keys — the organization's keys, revoked ones included. */
+export async function listApiKeys(): Promise<ApiKeyListResponse> {
+  if (!FIXTURE_MODE) return request<ApiKeyListResponse>("/v1/api-keys");
+  await sleep(FIXTURE_LATENCY_MS);
+  return { total: fixtureApiKeys.length, keys: clone(fixtureApiKeys) };
+}
+
+/** POST /v1/api-keys — the only response that ever carries the raw key. */
+export async function createApiKey(
+  name: string,
+  scopes: ApiKeyScope[],
+): Promise<CreatedApiKeyResponse> {
+  if (!name.trim()) throw new ApiError(422, "The key needs a name.");
+  if (scopes.length === 0) throw new ApiError(422, "Pick at least one scope.");
+  if (!FIXTURE_MODE) {
+    return request<CreatedApiKeyResponse>("/v1/api-keys", {
+      method: "POST",
+      body: JSON.stringify({ name: name.trim(), scopes }),
+    });
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  fixtureKeySequence += 1;
+  const raw = `trz_live_${randomHex(32)}`;
+  const key: ApiKeySummary = {
+    key_id: `AK-fixture${String(fixtureKeySequence).padStart(4, "0")}`,
+    name: name.trim(),
+    key_prefix: raw.slice(0, 17),
+    scopes,
+    created_by: DEMO_USER_ID,
+    created_at: new Date().toISOString(),
+    last_used_at: null,
+    revoked_at: null,
+    revoked: false,
+  };
+  fixtureApiKeys.unshift(key);
+  return {
+    api_key: raw,
+    key: clone(key),
+    message:
+      "Save this key now — it is shown once and cannot be retrieved again. " +
+      "Store it in your integration's secret store, never in source control.",
+  };
+}
+
+/**
+ * DELETE /v1/api-keys/{key_id} — revoke. The row stays, so the audit trail's
+ * `api-key:<prefix>` entries remain resolvable. There is no un-revoke.
+ */
+export async function revokeApiKey(keyId: string): Promise<ApiKeySummary> {
+  if (!FIXTURE_MODE) {
+    return request<ApiKeySummary>(`/v1/api-keys/${encodeURIComponent(keyId)}`, {
+      method: "DELETE",
+    });
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  const key = fixtureApiKeys.find((candidate) => candidate.key_id === keyId);
+  if (!key) throw new ApiError(404, `No API key ${keyId}`);
+  if (!key.revoked) {
+    key.revoked = true;
+    key.revoked_at = new Date().toISOString();
+  }
+  return clone(key);
 }

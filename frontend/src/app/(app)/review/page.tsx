@@ -74,13 +74,18 @@ function ReviewScreen() {
     setItems(null);
     getReviewItems()
       .then((response) => setItems(response.items))
-      .catch((caught) =>
+      .catch((caught) => {
+        // "No cases yet" is a state, not a failure: show the upload CTA.
+        if (caught instanceof ApiError && caught.status === 404) {
+          setItems([]);
+          return;
+        }
         setLoadError(
           caught instanceof ApiError
             ? caught.message
             : "Could not load the review queue.",
-        ),
-      );
+        );
+      });
   }, []);
 
   React.useEffect(load, [load]);

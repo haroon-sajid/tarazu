@@ -59,6 +59,11 @@ logger = logging.getLogger(__name__)
 #: The audience claim both issuers use, matching Supabase's.
 TOKEN_AUDIENCE = "authenticated"
 
+#: How far the issuer's clock may drift from ours before a token is refused.
+#: Applies to `iat`/`exp`/`nbf` equally; 30s tolerance on a ~1h token changes
+#: nothing an auditor would care about, and stops "not yet valid (iat)" 401s.
+CLOCK_SKEW_LEEWAY_SECONDS = 30
+
 #: Symmetric. Verified with a shared secret this process holds.
 SYMMETRIC_ALGORITHMS = frozenset({"HS256", "HS384", "HS512"})
 
@@ -188,6 +193,9 @@ def verify_token(token: str, settings: Settings) -> AuthenticatedUser:
             algorithms=algorithms,
             audience=TOKEN_AUDIENCE,
             options={"require": ["sub", "exp"]},
+            # GoTrue's clock can run a few seconds ahead of this machine's, and
+            # a freshly minted token then fails `iat` with zero tolerance.
+            leeway=CLOCK_SKEW_LEEWAY_SECONDS,
         )
     except jwt.ExpiredSignatureError:
         raise HTTPException(

@@ -13,27 +13,34 @@ import type { DashboardSummary } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ErrorState } from "@/components/ui/states";
+import { EmptyState, ErrorState } from "@/components/ui/states";
 import { formatDate } from "@/lib/format";
 
 export default function ReportPage() {
   const [summary, setSummary] = React.useState<DashboardSummary | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [noCases, setNoCases] = React.useState(false);
   const [busy, setBusy] = React.useState<"pdf" | "excel" | null>(null);
   const [reportError, setReportError] = React.useState<string | null>(null);
 
   const load = React.useCallback(() => {
     setLoadError(null);
     setSummary(null);
+    setNoCases(false);
     getDashboard()
       .then(setSummary)
-      .catch((caught) =>
+      .catch((caught) => {
+        // "No cases yet" is a state, not a failure: show the upload CTA.
+        if (caught instanceof ApiError && caught.status === 404) {
+          setNoCases(true);
+          return;
+        }
         setLoadError(
           caught instanceof ApiError
             ? caught.message
             : "Could not load the case summary.",
-        ),
-      );
+        );
+      });
   }, []);
 
   React.useEffect(load, [load]);
@@ -64,7 +71,12 @@ export default function ReportPage() {
         </p>
       </div>
 
-      {loadError ? (
+      {noCases ? (
+        <EmptyState
+          title="Nothing to report yet"
+          message="A report needs a case. Upload a bank statement, invoices, and a ledger first."
+        />
+      ) : loadError ? (
         <ErrorState message={loadError} onRetry={load} />
       ) : summary === null ? (
         <div className="space-y-4">

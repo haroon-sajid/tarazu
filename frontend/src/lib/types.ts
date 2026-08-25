@@ -281,3 +281,70 @@ export interface UploadFiles {
   invoices: File[];
   clientName?: string;
 }
+
+// --------------------------------------------------------------------------
+// Auth
+// --------------------------------------------------------------------------
+
+export type OrgRole = "owner" | "member";
+
+/** POST /v1/auth/login response. */
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  user_id: string;
+  email: string | null;
+}
+
+/** POST /v1/auth/signup response. No token comes back — sign in next. */
+export interface SignupResponse {
+  user_id: string;
+  email: string;
+  org_id: string;
+  organization_name: string;
+  role: OrgRole;
+}
+
+/** What the frontend holds about the signed-in auditor. */
+export interface Session {
+  accessToken: string;
+  /** Unix ms after which the token is stale and the user must sign in again. */
+  expiresAt: number;
+  userId: string;
+  email: string;
+  orgId: string | null;
+  organizationName: string | null;
+  role: OrgRole | null;
+}
+
+// --------------------------------------------------------------------------
+// API keys
+// --------------------------------------------------------------------------
+
+export type ApiKeyScope = "read" | "write";
+
+/** One key, as anybody is ever allowed to read it back. No hash, no raw key. */
+export interface ApiKeySummary {
+  key_id: string;
+  name: string;
+  key_prefix: string;
+  scopes: ApiKeyScope[];
+  created_by: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  revoked: boolean;
+}
+
+/** POST /v1/api-keys — the only response that ever carries the raw key. */
+export interface CreatedApiKeyResponse {
+  api_key: string;
+  key: ApiKeySummary;
+  message: string;
+}
+
+export interface ApiKeyListResponse {
+  total: number;
+  keys: ApiKeySummary[];
+}

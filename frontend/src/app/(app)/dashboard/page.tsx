@@ -89,23 +89,47 @@ function ReadinessRow({
 export default function DashboardPage() {
   const [summary, setSummary] = React.useState<DashboardSummary | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [noCases, setNoCases] = React.useState(false);
 
   const load = React.useCallback(() => {
     setError(null);
     setSummary(null);
+    setNoCases(false);
     getDashboard()
       .then(setSummary)
-      .catch((caught) =>
+      .catch((caught) => {
+        // "No cases yet" is a state, not a failure: show the upload CTA.
+        if (caught instanceof ApiError && caught.status === 404) {
+          setNoCases(true);
+          return;
+        }
         setError(
           caught instanceof ApiError ? caught.message : "Could not load the dashboard.",
-        ),
-      );
+        );
+      });
   }, []);
 
   React.useEffect(load, [load]);
 
   if (error) {
     return <ErrorState message={error} onRetry={load} />;
+  }
+
+  if (noCases) {
+    return (
+      <EmptyState
+        title="No data yet"
+        message="Upload a bank statement, invoices, and a ledger to begin."
+        action={
+          <Link
+            href="/upload"
+            className="text-sm font-medium text-brand-700 hover:underline"
+          >
+            Go to upload →
+          </Link>
+        }
+      />
+    );
   }
 
   if (summary === null) {
