@@ -1,133 +1,148 @@
-# Tarazu — AI Audit Assistant
+# Tarazu
 
-Tarazu (ترازو, "the scales") is a production-grade SaaS platform for audit firms.
-An auditor uploads a bank statement (PDF), invoices (PDF or images), and a ledger
-(Excel or CSV). An AI vision model reads the documents, deterministic Python code
-performs all matching and math, a rules engine flags potential fraud risks, and a
-human auditor approves or rejects every item before the system generates the
-final report with a complete audit trail.
+**AI Audit Assistant for accounting firms.**
 
-The core principle: the AI suggests, the human decides. All math is deterministic code.
+Tarazu (ترازو, "the scales") reconciles a client's books in minutes instead of days.
+An auditor uploads a bank statement, invoices, and a ledger. Vision AI reads the
+documents, deterministic code matches every entry and flags the risks, and the
+auditor approves or rejects each item with the evidence on screen. Every action
+lands in an audit trail that nothing can edit or delete.
+
+The product stands on one rule: **the AI suggests, the human decides.** No model
+ever produces a number, a match, or a verdict.
+
+**Live app:** [tarazu-one.vercel.app](https://tarazu-one.vercel.app)
+
+## What it does
+
+- **Reads documents with provenance.** Vision extraction of statements, invoices,
+  and photos. Every value carries a confidence level and its exact page and
+  position, so any number can be traced back to its source.
+- **Reconciles deterministically.** Three-tier matching (exact, date window,
+  tolerance) in pure Python and pandas. Each match ships a plain-language reason
+  an auditor can quote in a report.
+- **Flags fraud risks.** Round numbers, duplicates, weekend entries, near-limit
+  amounts, structuring, and sequence gaps, each with severity and explanation,
+  plus a Benford first-digit analysis.
+- **Keeps humans in charge.** Every item requires an explicit approve or reject.
+  There is no auto-approval path anywhere in the codebase.
+- **Records everything.** A case-wide, append-only audit trail of every upload,
+  extraction, flag, and decision, filterable by actor and action.
+- **Answers questions.** An assistant that explains flags and matches in English
+  or Urdu, by typing or voice, citing the documents behind every claim and
+  refusing what it cannot ground.
+- **Works as a team.** Multi-tenant workspaces, member invitations with
+  single-use join codes and roles, and scoped API keys for n8n, Zapier, or your
+  own scripts.
+
+## How a case flows
+
+1. **Upload** the ledger (Excel or CSV), the bank statement (PDF), and the
+   invoices (PDFs or phone photos). That opens a case.
+2. **Tarazu reads and reconciles** in one pass: extraction with confidence and
+   provenance, deterministic matching, red-flag rules, Benford analysis.
+3. **The auditor decides.** Approve or reject each item with the evidence side
+   by side, then export the report. Every step is on the record.
+
+## Product principles
+
+These are enforced in code and tests, not just stated:
+
+- All math and matching is deterministic code. No LLM touches a number.
+- Every extracted value is traceable to its document, page, and position.
+- Every AI output carries a confidence level.
+- The audit trail is append-only at the database level.
+- A tenant is one firm. Another firm's data does not exist from where you stand.
+- Client data is never used to train models.
+- The assistant answers only from uploaded documents.
 
 ## Stack
 
-- **Frontend:** Next.js with TypeScript
-- **Backend:** a single FastAPI application (Python), built as a modular monolith with strict module boundaries
-- **Data, auth, and storage:** Supabase (Postgres, authentication, file storage)
-- **AI:** Qwen vision models (Qwen VL) via the Alibaba Model Studio API
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 15, TypeScript, Tailwind CSS |
+| Backend | FastAPI (Python), modular monolith with strict module boundaries |
+| Data, auth, storage | Supabase (Postgres, GoTrue, storage), with a SQLite fallback for local work |
+| AI | Qwen vision models via the Alibaba Model Studio API |
 
-## Repository Layout
+## Repository layout
 
 | Path | Contents |
 |---|---|
-| [CLAUDE.md](CLAUDE.md) | Rules and boundaries for AI coding agents. Read this first. |
-| [docs/](docs/) | Architecture, API contracts, and decision records |
-| [frontend/](frontend/) | Next.js app: upload, review screen, evidence viewer, dashboard, and reports UI |
-| [backend/](backend/) | The FastAPI app: `core/`, `shared/`, and the bounded modules (extraction, matching, rules, assistant, reports) |
-| [sample-data/](sample-data/fixtures/) | Synthetic fixtures the API serves while the pipeline is built |
-| [infra/](infra/) | Deployment configuration and infrastructure placeholders |
-| [scripts/](scripts/) | Development setup and sample data generation |
+| [frontend/](frontend/) | The web app: landing, upload, review, documents, assistant, dashboard, audit trail, settings |
+| [backend/](backend/) | The API: `core/`, `shared/`, and the bounded modules (extraction, matching, rules, assistant, reports) |
+| [docs/](docs/) | [API contracts](docs/api-contracts.md), architecture, decision records |
+| [infra/supabase/](infra/supabase/) | Postgres schema and migrations, numbered and idempotent |
+| [scripts/](scripts/) | Seeding and demo tooling |
+| [sample-data/](sample-data/fixtures/) | The synthetic demo case |
 
-Module boundaries inside `backend/app/modules/` are strict. Each module exposes a
-single `service.py` interface, so any module can later be extracted into a
-standalone service without rewrites. See [CLAUDE.md](CLAUDE.md) for the full set
-of rules.
+Each backend module exposes a single `service.py` interface and modules never
+import each other's internals, so any module can later be extracted into a
+standalone service without rewrites.
 
-## Running the backend
+## Running locally
+
+Requirements: Python 3.12+, Node 20+.
+
+**Backend** (SQLite, no external accounts needed):
 
 ```bash
-python -m venv .venv && .venv/Scripts/activate   # macOS/Linux: source .venv/bin/activate
+python -m venv backend/.venv
+backend/.venv/Scripts/activate        # macOS/Linux: source backend/.venv/bin/activate
 pip install -r backend/requirements.txt
-cp .env.example .env
+cp .env.example .env                  # DEMO_MODE=true replays cached extractions
+python scripts/seed_demo_case.py      # creates the demo case and a local login
+cd backend && uvicorn app.main:app --reload
 ```
 
-**Locally, with no Supabase and no Qwen credentials.** The app falls back to a
-SQLite store and cached extractions, so the whole flow runs offline:
+The seed script prints the sign-in credentials. Interactive API docs are at
+`http://localhost:8000/docs`.
+
+**Frontend:**
 
 ```bash
-export AUTH_ALLOW_DEV_USER=true    # development only — this turns auth off
-export DEMO_MODE=true              # replay cached extractions instead of calling Qwen
-
-python scripts/seed_demo_case.py                 # load the sample case
-uvicorn app.main:app --reload --app-dir backend
+cd frontend
+npm install
+npm run dev
 ```
+
+Set `NEXT_PUBLIC_TARAZU_API_URL=http://localhost:8000` in `frontend/.env.local`
+to use the local backend. Leave it empty and the app runs on built-in fixtures
+with no backend at all.
+
+**Tests:**
 
 ```bash
-curl http://localhost:8000/health
-curl http://localhost:8000/v1/review-items
-curl http://localhost:8000/v1/dashboard
-curl -X POST http://localhost:8000/v1/review-items/RI-0002/approve \
-     -H 'Content-Type: application/json' -d '{"note":"Vouched."}'
+cd backend && pytest
 ```
 
-That last call writes a row to the audit trail. It cannot be edited or deleted
-afterwards, by the app or by anyone reaching past it.
+## Deployment
 
-**With real accounts, still offline.** A tenant is one accounting firm. Sign up
-and the backend creates your organization and makes you its owner; every row you
-then create carries its `org_id`, and no other firm can read one of them.
+The production setup is three free-tier services:
 
-```bash
-curl -X POST http://localhost:8000/v1/auth/signup -H 'Content-Type: application/json' \
-     -d '{"email":"partner@lahore-audit.pk","password":"at-least-8-chars",
-          "organization_name":"Lahore Audit Associates"}'
-curl -X POST http://localhost:8000/v1/auth/login -H 'Content-Type: application/json' \
-     -d '{"email":"partner@lahore-audit.pk","password":"at-least-8-chars"}'
-# then: -H "Authorization: Bearer <access_token>" on every other call
-```
+- **Supabase** holds Postgres, auth, and storage. Run the files in
+  [infra/supabase/](infra/supabase/) in numeric order, then seed with
+  `scripts/seed_demo_user.py` and `scripts/seed_demo_case.py`.
+- **Render** runs the backend: root directory `backend`, build
+  `pip install -r requirements.txt`, start
+  `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, environment variables from
+  `.env.example` (the Supabase block plus `BACKEND_ALLOWED_ORIGINS` set to the
+  frontend URL).
+- **Vercel** runs the frontend: root directory `frontend`, one environment
+  variable, `NEXT_PUBLIC_TARAZU_API_URL`, pointing at the backend.
 
-To see the isolation rather than take its word for it — two firms, one store,
-every cross-tenant route attempted:
+## API
 
-```bash
-python scripts/demo_tenant_isolation.py
-```
+Every route is versioned under `/v1`, scoped to one organization, and documented
+with request and response shapes in [docs/api-contracts.md](docs/api-contracts.md).
+Machine access uses scoped API keys (`X-API-Key`); the audit trail records every
+key action as `api-key:<prefix>` so automated decisions stay attributable.
 
-**Connecting your own tools.** Generate an API key and n8n, Zapier, or a cron
-script can read the queue and post decisions without a person signing in. The
-key is shown once, is stored only as a SHA-256 digest, and reaches nothing
-outside your organization:
+## Roadmap
 
-```bash
-curl -s -X POST http://localhost:8000/v1/api-keys \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"name":"n8n integration","scopes":["read"]}'
-# -> {"api_key":"trz_live_...", ...}   save it now; it is not shown again
-
-curl -s -H 'X-API-Key: trz_live_...' \
-  'http://localhost:8000/v1/review-items?decision=pending&flagged=true'
-```
-
-Scopes, revocation, and the n8n setup are in
-[docs/api-contracts.md](docs/api-contracts.md#api-access).
-
-**Against Supabase.** Follow [infra/README.md](infra/README.md): run
-`schema.sql` and then `0002-organizations.sql`, create the private bucket, seed
-the demo user, fill in `.env`. Setting `SUPABASE_URL` switches the store over;
-nothing else changes.
-
-`pytest` from the repo root. Interactive API docs: <http://localhost:8000/docs>.
-
-## Status
-
-The backend runs end to end. Documents are stored, extracted, persisted, and
-reviewed; every mutating call appends to an immutable audit trail; the dashboard
-counts real data.
-
-**Done:** data contracts, the five public endpoints plus signup, login, and a
-per-item audit trail, Qwen VL extraction with provenance and a verification
-pass, the pandas ledger reader, Supabase persistence and auth (with a local
-SQLite fallback), the audit-trail hardening, multi-tenancy — organizations,
-membership-scoped RLS, and an `org_id` filter on every repository read and
-write ([ADR 0003](docs/decisions/0003-tenancy-is-an-org-id-column-and-two-enforcement-layers.md)) —
-and scoped API keys for integrations, which the trail records as
-`api-key:<prefix>`.
-
-**Not done:** `matching/` and `rules/` are agreed signatures only — until they
-land, `POST /v1/upload` stores and extracts a case, then parks it at
-`awaiting_matching` and says so rather than inventing results. Reports and the
-frontend are also outstanding.
-
-See [docs/api-contracts.md](docs/api-contracts.md) for the contracts,
-[docs/architecture.md](docs/architecture.md) for the design, and
-[docs/hackathon-plan.md](docs/hackathon-plan.md) for the build sequence.
+- Deterministic matching and rules engines (the pipeline currently parks live
+  uploads at `awaiting_matching`; the demo case carries full review data)
+- Report generation (PDF and Excel) with an immutable report history
+- The assistant backend (responses are composed client-side today)
+- Original document serving in the evidence viewer
+- Notifications and webhooks
