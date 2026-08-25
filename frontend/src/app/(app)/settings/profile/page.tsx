@@ -221,8 +221,10 @@ export default function ProfileSettingsPage() {
             </div>
           </div>
 
-          {/* Two balanced columns so the panel uses its full width. */}
+          {/* Two balanced columns so the panel uses its full width; the save
+              row closes the shorter left column so neither side trails off. */}
           <div className="grid gap-x-12 gap-y-8 lg:grid-cols-2">
+          <div className="space-y-8">
           {/* Identity */}
           <section className="space-y-4">
             <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
@@ -234,38 +236,14 @@ export default function ProfileSettingsPage() {
               maxLength={100}
               onChange={(event) => setFullName(event.target.value)}
               placeholder="Haroon Sajid"
-              hint="Shown in the sidebar, the member list, and your profile page."
+              hint="Shown in the sidebar and the member list."
             />
             <Input
               label="Email"
               value={session?.email ?? ""}
               disabled
-              hint="Your sign-in identity. Changing it is an account action, not a profile edit."
+              hint="Your sign-in identity."
             />
-          </section>
-
-          {/* Professional */}
-          <section className="space-y-4">
-            <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-              Professional
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Job title"
-                value={jobTitle}
-                maxLength={100}
-                onChange={(event) => setJobTitle(event.target.value)}
-                placeholder="Audit Partner"
-              />
-              <Input
-                label="License / membership no."
-                value={licenseNumber}
-                maxLength={60}
-                onChange={(event) => setLicenseNumber(event.target.value)}
-                placeholder="ICAP-12345"
-                hint="Practicing license or institute membership (ICAP, ACCA, ...)."
-              />
-            </div>
           </section>
 
           {/* Personal */}
@@ -307,6 +285,48 @@ export default function ProfileSettingsPage() {
             </div>
           </section>
 
+          {saveError && (
+            <p className="rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">
+              {saveError}
+            </p>
+          )}
+          <div className="flex items-center gap-3">
+            <Button onClick={submit} disabled={busy}>
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : saved ? (
+                <Check className="h-4 w-4" aria-hidden />
+              ) : null}
+              {saved ? "Saved" : "Save profile"}
+            </Button>
+            <p className="text-xs text-ink-400">A save replaces the whole profile.</p>
+          </div>
+          </div>
+
+          <div className="space-y-8">
+          {/* Professional */}
+          <section className="space-y-4">
+            <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+              Professional
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Job title"
+                value={jobTitle}
+                maxLength={100}
+                onChange={(event) => setJobTitle(event.target.value)}
+                placeholder="Audit Partner"
+              />
+              <Input
+                label="License / membership no."
+                value={licenseNumber}
+                maxLength={60}
+                onChange={(event) => setLicenseNumber(event.target.value)}
+                placeholder="ICAP-12345"
+              />
+            </div>
+          </section>
+
           {/* Preferences */}
           <section>
             <h3 className="mb-4 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
@@ -316,7 +336,7 @@ export default function ProfileSettingsPage() {
               label="Language for explanations"
               value={language}
               onChange={(event) => setLanguage(event.target.value)}
-              hint="The assistant and plain-language summaries follow this preference."
+              hint="The assistant follows this preference."
             >
               <option value="">No preference</option>
               <option value="en">English</option>
@@ -358,30 +378,10 @@ export default function ProfileSettingsPage() {
               />
             </div>
             <p className="text-[11px] text-ink-400">
-              Email delivery is under development; these preferences are saved
-              now and activate when it ships.
+              Saved now; email delivery activates when it ships.
             </p>
           </section>
           </div>
-
-          {saveError && (
-            <p className="rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">
-              {saveError}
-            </p>
-          )}
-
-          <div className="flex items-center gap-3">
-            <Button onClick={submit} disabled={busy}>
-              {busy ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : saved ? (
-                <Check className="h-4 w-4" aria-hidden />
-              ) : null}
-              {saved ? "Saved" : "Save profile"}
-            </Button>
-            <p className="text-xs text-ink-400">
-              Saving replaces the whole profile; cleared fields stay cleared.
-            </p>
           </div>
         </div>
       )}
