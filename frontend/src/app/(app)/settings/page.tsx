@@ -147,7 +147,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="max-w-4xl space-y-6">
       <div>
         <h1 className="text-xl font-bold text-ink-900">Settings</h1>
         <p className="mt-1 text-sm text-ink-600">

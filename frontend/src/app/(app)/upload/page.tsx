@@ -46,7 +46,7 @@ export default function UploadPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="max-w-5xl">
       <div className="mb-6">
         <h1 className="text-xl font-bold text-ink-900">Upload documents</h1>
         <p className="mt-1 text-sm text-ink-600">

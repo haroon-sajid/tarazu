@@ -36,7 +36,7 @@ export default function ProfilePage() {
   const role = session.role ?? (FIXTURE_MODE ? "owner" : null);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-6">
       <div>
         <h1 className="text-xl font-bold text-ink-900">Profile</h1>
         <p className="mt-1 text-sm text-ink-600">

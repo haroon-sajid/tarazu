@@ -62,7 +62,7 @@ export default function ReportPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="max-w-3xl">
       <div className="mb-6">
         <h1 className="text-xl font-bold text-ink-900">Reports</h1>
         <p className="mt-1 text-sm text-ink-600">
