@@ -5,10 +5,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   LogOut,
-  PanelLeftClose,
-  PanelLeftOpen,
   Scale,
   Settings,
   TableProperties,
@@ -56,17 +56,31 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "flex shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200",
+        "relative flex shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200",
         collapsed ? "w-16" : "w-56",
       )}
     >
-      {/* Brand + collapse toggle */}
-      <div
+      {/* Collapse toggle: a floating button riding the sidebar's edge, always
+          visible in both states. */}
+      <button
+        onClick={toggle}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         className={cn(
-          "flex items-center py-5",
-          collapsed ? "flex-col gap-3 px-0" : "justify-between px-4",
+          "absolute -right-3 top-7 z-20 flex h-6 w-6 items-center justify-center rounded-full",
+          "border border-slate-300 bg-white text-ink-600 shadow-sm transition-colors",
+          "hover:border-brand-700 hover:bg-brand-50 hover:text-brand-800",
         )}
       >
+        {collapsed ? (
+          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+        ) : (
+          <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+        )}
+      </button>
+
+      {/* Brand */}
+      <div className={cn("flex items-center py-5", collapsed ? "justify-center px-0" : "px-4")}>
         <Link
           href="/dashboard"
           className="flex items-center gap-2.5"
@@ -86,18 +100,6 @@ export function Sidebar() {
             </span>
           )}
         </Link>
-        <button
-          onClick={toggle}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="rounded-md p-1.5 text-ink-400 transition-colors hover:bg-slate-100 hover:text-ink-600"
-        >
-          {collapsed ? (
-            <PanelLeftOpen className="h-4 w-4" aria-hidden />
-          ) : (
-            <PanelLeftClose className="h-4 w-4" aria-hidden />
-          )}
-        </button>
       </div>
 
       <nav className={cn("mt-1 flex flex-col gap-1", collapsed ? "px-2" : "px-3")}>
