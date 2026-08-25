@@ -164,7 +164,7 @@ export default function ProfileSettingsPage() {
     <div>
       <SectionHeader
         title="Profile"
-        description="How you appear across Tarazu. Your decisions are recorded against your account id either way; the profile is presentation, never identity."
+        description="How you appear across Tarazu."
       />
 
       {loadError ? (
@@ -176,7 +176,7 @@ export default function ProfileSettingsPage() {
           <Skeleton className="h-10 w-full" />
         </div>
       ) : (
-        <div className="max-w-2xl space-y-6">
+        <div className="space-y-8">
           {/* Picture */}
           <div className="flex items-center gap-5">
             {avatar ? (
@@ -221,6 +221,8 @@ export default function ProfileSettingsPage() {
             </div>
           </div>
 
+          {/* Two balanced columns so the panel uses its full width. */}
+          <div className="grid gap-x-12 gap-y-8 lg:grid-cols-2">
           {/* Identity */}
           <section className="space-y-4">
             <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
@@ -240,6 +242,30 @@ export default function ProfileSettingsPage() {
               disabled
               hint="Your sign-in identity. Changing it is an account action, not a profile edit."
             />
+          </section>
+
+          {/* Professional */}
+          <section className="space-y-4">
+            <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+              Professional
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Job title"
+                value={jobTitle}
+                maxLength={100}
+                onChange={(event) => setJobTitle(event.target.value)}
+                placeholder="Audit Partner"
+              />
+              <Input
+                label="License / membership no."
+                value={licenseNumber}
+                maxLength={60}
+                onChange={(event) => setLicenseNumber(event.target.value)}
+                placeholder="ICAP-12345"
+                hint="Practicing license or institute membership (ICAP, ACCA, ...)."
+              />
+            </div>
           </section>
 
           {/* Personal */}
@@ -277,30 +303,6 @@ export default function ProfileSettingsPage() {
                 maxLength={40}
                 onChange={(event) => setPhone(event.target.value)}
                 placeholder="+92 300 1234567"
-              />
-            </div>
-          </section>
-
-          {/* Professional */}
-          <section className="space-y-4">
-            <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-              Professional
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Job title"
-                value={jobTitle}
-                maxLength={100}
-                onChange={(event) => setJobTitle(event.target.value)}
-                placeholder="Audit Partner"
-              />
-              <Input
-                label="License / membership no."
-                value={licenseNumber}
-                maxLength={60}
-                onChange={(event) => setLicenseNumber(event.target.value)}
-                placeholder="ICAP-12345"
-                hint="Practicing license or institute membership (ICAP, ACCA, ...)."
               />
             </div>
           </section>
@@ -360,6 +362,7 @@ export default function ProfileSettingsPage() {
               now and activate when it ships.
             </p>
           </section>
+          </div>
 
           {saveError && (
             <p className="rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">
