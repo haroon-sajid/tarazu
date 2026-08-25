@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Scale } from "lucide-react";
 
 /**
@@ -9,7 +10,11 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     <div className="flex min-h-screen">
       {/* Brand panel */}
       <div className="hidden w-[44%] flex-col justify-between bg-brand-950 p-10 lg:flex">
-        <div className="flex items-center gap-3">
+        <Link
+          href="/"
+          title="Back to the Tarazu home page"
+          className="flex w-fit items-center gap-3 transition-opacity hover:opacity-80"
+        >
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 text-white">
             <Scale className="h-5 w-5" aria-hidden />
           </span>
@@ -17,7 +22,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <p className="text-lg font-bold tracking-tight text-white">Tarazu</p>
             <p className="text-xs text-brand-200/70">AI Audit Assistant</p>
           </div>
-        </div>
+        </Link>
 
         <div>
           <h1 className="max-w-md text-3xl font-bold leading-tight text-white">
