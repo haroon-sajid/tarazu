@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, PasswordInput } from "@/components/ui/input";
 
 export default function SignupPage() {
   const { session, signUp } = useAuth();
@@ -77,9 +77,8 @@ export default function SignupPage() {
           onChange={(event) => setEmail(event.target.value)}
           placeholder="partner@lahore-audit.pk"
         />
-        <Input
+        <PasswordInput
           label="Password"
-          type="password"
           autoComplete="new-password"
           required
           minLength={8}
@@ -87,9 +86,8 @@ export default function SignupPage() {
           onChange={(event) => setPassword(event.target.value)}
           hint="At least 8 characters."
         />
-        <Input
+        <PasswordInput
           label="Confirm password"
-          type="password"
           autoComplete="new-password"
           required
           value={confirm}

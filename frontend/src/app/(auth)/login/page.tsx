@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { ApiError, FIXTURE_MODE } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, PasswordInput } from "@/components/ui/input";
 
 export default function LoginPage() {
   const { session, signIn } = useAuth();
@@ -66,9 +66,8 @@ export default function LoginPage() {
           onChange={(event) => setEmail(event.target.value)}
           placeholder="partner@lahore-audit.pk"
         />
-        <Input
+        <PasswordInput
           label="Password"
-          type="password"
           autoComplete="current-password"
           required
           value={password}

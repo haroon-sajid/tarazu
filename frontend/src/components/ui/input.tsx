@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -38,3 +39,39 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   },
 );
 Input.displayName = "Input";
+
+/** A password field with a show/hide toggle. Same props as Input, minus type. */
+export const PasswordInput = React.forwardRef<
+  HTMLInputElement,
+  Omit<InputProps, "type">
+>(({ className, ...props }, ref) => {
+  const [visible, setVisible] = React.useState(false);
+  return (
+    <div className="relative">
+      <Input
+        ref={ref}
+        type={visible ? "text" : "password"}
+        className={cn("pr-10", className)}
+        {...props}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => setVisible((current) => !current)}
+        aria-label={visible ? "Hide password" : "Show password"}
+        className={cn(
+          "absolute right-2 text-ink-400 hover:text-ink-600",
+          // Sits over the input row, below any label above it.
+          props.label ? "top-[30px]" : "top-2.5",
+        )}
+      >
+        {visible ? (
+          <EyeOff className="h-4 w-4" aria-hidden />
+        ) : (
+          <Eye className="h-4 w-4" aria-hidden />
+        )}
+      </button>
+    </div>
+  );
+});
+PasswordInput.displayName = "PasswordInput";
