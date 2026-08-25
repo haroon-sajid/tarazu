@@ -20,7 +20,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import api_keys, auth, dashboard, health, review, upload
+from app.api import (
+    api_keys,
+    audit_trail,
+    auth,
+    cases,
+    dashboard,
+    health,
+    members,
+    profile,
+    review,
+    upload,
+)
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -62,10 +73,14 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(auth.router, prefix="/v1")
+app.include_router(profile.router, prefix="/v1")
+app.include_router(members.router, prefix="/v1")
 app.include_router(api_keys.router, prefix="/v1")
 app.include_router(upload.router, prefix="/v1")
 app.include_router(review.router, prefix="/v1")
 app.include_router(dashboard.router, prefix="/v1")
+app.include_router(cases.router, prefix="/v1")
+app.include_router(audit_trail.router, prefix="/v1")
 
 # Routers still to come, as their modules land:
 #   extraction -> /v1/extractions   (owned by the Lead)

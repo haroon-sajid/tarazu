@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/badge";
 import { EvidenceViewer } from "@/components/review/evidence-viewer";
 
-type Tab = "all" | MatchStatus | "flagged";
+type Tab = "all" | MatchStatus | "flagged" | "attention";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "all", label: "All" },
@@ -41,11 +41,16 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "partial", label: "Partial" },
   { key: "unmatched", label: "Unmatched" },
   { key: "flagged", label: "Flagged" },
+  { key: "attention", label: "Attention" },
 ];
 
 function tabFilter(items: ReviewItem[], tab: Tab): ReviewItem[] {
   if (tab === "all") return items;
   if (tab === "flagged") return items.filter((item) => item.flags.length > 0);
+  // Attention: the AI's own reading is uncertain — check the source closely
+  // before deciding, whatever the match result says.
+  if (tab === "attention")
+    return items.filter((item) => item.extraction_confidence !== "high");
   return items.filter((item) => item.match.status === tab);
 }
 
@@ -257,7 +262,7 @@ function ReviewScreen() {
                 <th className="px-4 py-2.5">Party</th>
                 <th className="px-4 py-2.5">Status</th>
                 <th className="px-4 py-2.5">
-                  <Tooltip content="How well the rows line up — computed by the deterministic matcher, never by AI.">
+                  <Tooltip content="How well the rows line up, computed by the deterministic matcher, never by AI.">
                     <span className="cursor-help underline decoration-dotted">Match strength</span>
                   </Tooltip>
                 </th>
@@ -374,7 +379,7 @@ function ReviewScreen() {
       <Dialog
         open={rejecting !== null}
         onClose={() => setRejecting(null)}
-        title={`Reject ${rejecting?.review_item_id ?? ""} — ${rejecting?.ledger_entry.party_name ?? ""}`}
+        title={`Reject ${rejecting?.review_item_id ?? ""}: ${rejecting?.ledger_entry.party_name ?? ""}`}
       >
         <p className="mb-2 text-xs text-ink-600">
           The reason is recorded verbatim in the immutable audit trail.

@@ -46,7 +46,7 @@ export default function LoginPage() {
     <div>
       <h1 className="text-xl font-bold text-ink-900">Sign in</h1>
       <p className="mt-1 text-sm text-ink-600">
-        Decisions are recorded against your identity — sign in to review.
+        Decisions are recorded against your identity. Sign in to review.
       </p>
 
       {FIXTURE_MODE && (

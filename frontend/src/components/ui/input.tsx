@@ -40,6 +40,46 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
 );
 Input.displayName = "Input";
 
+export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+  label?: string;
+  hint?: string;
+}
+
+/** A native select styled identically to Input, label and hint included. */
+export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
+  ({ className, label, hint, id, children, ...props }, ref) => {
+    const generatedId = React.useId();
+    const selectId = id ?? generatedId;
+    return (
+      <div>
+        {label && (
+          <label
+            htmlFor={selectId}
+            className="mb-1 block text-xs font-medium text-ink-600"
+          >
+            {label}
+          </label>
+        )}
+        <select
+          ref={ref}
+          id={selectId}
+          className={cn(
+            "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink-900",
+            "focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600",
+            "disabled:cursor-not-allowed disabled:bg-slate-50",
+            className,
+          )}
+          {...props}
+        >
+          {children}
+        </select>
+        {hint && <p className="mt-1 text-[11px] text-ink-400">{hint}</p>}
+      </div>
+    );
+  },
+);
+Select.displayName = "Select";
+
 /** A password field with a show/hide toggle. Same props as Input, minus type. */
 export const PasswordInput = React.forwardRef<
   HTMLInputElement,

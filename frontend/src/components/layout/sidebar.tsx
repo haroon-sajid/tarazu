@@ -2,25 +2,32 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Briefcase,
   ChevronLeft,
   ChevronRight,
+  Files,
   FileText,
-  LogOut,
+  MessageSquare,
   Scale,
   Settings,
+  ShieldCheck,
   TableProperties,
   Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/lib/auth";
+import { ProfileMenu } from "@/components/layout/profile-menu";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
+  { href: "/cases", label: "Cases", icon: Briefcase },
   { href: "/upload", label: "Upload", icon: Upload },
+  { href: "/documents", label: "Documents", icon: Files },
   { href: "/review", label: "Review", icon: TableProperties },
+  { href: "/assistant", label: "Assistant", icon: MessageSquare },
+  { href: "/audit-trail", label: "Audit trail", icon: ShieldCheck },
   { href: "/report", label: "Reports", icon: FileText },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -29,8 +36,6 @@ const COLLAPSED_KEY = "tarazu.sidebar";
 
 export function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { signOut } = useAuth();
   const [collapsed, setCollapsed] = React.useState(false);
 
   // Restore the saved state after mount so server and first client render agree.
@@ -125,26 +130,8 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className={cn("mt-auto pb-4", collapsed ? "px-2" : "px-3")}>
-        <button
-          onClick={() => {
-            signOut();
-            router.replace("/login");
-          }}
-          title={collapsed ? "Sign out" : undefined}
-          className={cn(
-            "flex w-full items-center gap-2.5 rounded-md py-2 text-sm font-medium text-ink-600 transition-colors hover:bg-slate-100 hover:text-rose-600",
-            collapsed ? "justify-center px-0" : "px-3",
-          )}
-        >
-          <LogOut className="h-4 w-4 shrink-0" aria-hidden />
-          {!collapsed && "Sign out"}
-        </button>
-        {!collapsed && (
-          <p className="mt-3 px-3 text-[10px] leading-relaxed text-ink-400">
-            The AI suggests, the human decides. Every number traces to its source.
-          </p>
-        )}
+      <div className={cn("mt-auto border-t border-slate-100 pb-3 pt-2", collapsed ? "px-2" : "px-3")}>
+        <ProfileMenu collapsed={collapsed} />
       </div>
     </aside>
   );

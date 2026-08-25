@@ -185,7 +185,7 @@ def test_migrating_a_pre_tenancy_database_does_not_touch_the_trail(tmp_path) -> 
         begin select raise(abort, 'audit_trail is append-only: DELETE is not permitted'); end;
 
         insert into cases values
-          ('CASE-OLD', 'Sethi Textiles (Pvt) Ltd', null, null, 'ready_for_review',
+          ('CASE-OLD', 'Haroon Textiles', null, null, 'ready_for_review',
            null, '00000000-0000-4000-8000-000000000001', '2026-01-01T00:00:00+00:00');
         insert into audit_trail values
           ('AUD-OLD', 'CASE-OLD', 'human', '00000000-0000-4000-8000-000000000001',

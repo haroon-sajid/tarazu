@@ -170,7 +170,7 @@ class Firm:
 
 
 def run(client) -> int:
-    a = Firm(client, "Firm A", f"partner-{uuid4().hex[:6]}@sethi-audit.pk", "Sethi Audit Associates")
+    a = Firm(client, "Firm A", f"partner-{uuid4().hex[:6]}@sethi-audit.pk", "Haroon Audit Associates")
     b = Firm(client, "Firm B", f"partner-{uuid4().hex[:6]}@karachi-audit.pk", "Karachi Audit LLP")
 
     heading("1. Two firms sign themselves up")
@@ -180,7 +180,7 @@ def run(client) -> int:
     check("the two organizations are different", a.org_id != b.org_id, f"{a.org_id[:8]} vs {b.org_id[:8]}")
 
     heading("2. Each opens a case in the same database")
-    a.upload("Sethi Textiles (Pvt) Ltd", "Gulberg Traders (Pvt) Ltd", 284_000)
+    a.upload("Haroon Textiles", "Gulberg Traders (Pvt) Ltd", 284_000)
     b.upload("Karachi Metals Ltd", "Korangi Steel Works", 913_000)
     check("the two cases are different", a.case_id != b.case_id, f"{a.case_id} vs {b.case_id}")
 
@@ -245,7 +245,7 @@ def run(client) -> int:
         )
         leaks = [
             token
-            for token in ("Sethi", "Gulberg", a.org_id, a.user_id)
+            for token in ("Haroon", "Gulberg", a.org_id, a.user_id)
             if token and token in real.text
         ]
         check(f"B on A's {description} leaks none of A's data", not leaks, ", ".join(leaks) or "clean")
@@ -272,7 +272,7 @@ def run(client) -> int:
     )
 
     heading("7. Dashboards count only their own firm's work")
-    for firm, expected in ((a, "Sethi Textiles (Pvt) Ltd"), (b, "Karachi Metals Ltd")):
+    for firm, expected in ((a, "Haroon Textiles"), (b, "Karachi Metals Ltd")):
         body = firm.get("/v1/dashboard").json()
         check(f"{firm.label}'s dashboard is its own client", body["client_name"] == expected)
         check(

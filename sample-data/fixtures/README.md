@@ -18,7 +18,7 @@ the point.
 
 ## The sample case
 
-`CASE-2026-06-STX` — a June 2026 audit of **Sethi Textiles (Pvt) Ltd**, a
+`CASE-2026-06-STX` — a June 2026 audit of **Haroon Textiles**, a
 fictional Karachi textile firm. Ten review items, all amounts in PKR, all
 company names invented. **No real client data belongs in this folder, ever.**
 

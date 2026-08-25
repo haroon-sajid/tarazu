@@ -184,7 +184,7 @@ def test_a_key_reads_the_dashboard_too(
     response = anonymous_client.get("/v1/dashboard", headers=with_key(anonymous_client, raw))
 
     assert response.status_code == 200
-    assert response.json()["client_name"] == "Sethi Textiles (Pvt) Ltd"
+    assert response.json()["client_name"] == "Haroon Textiles"
 
 
 def test_using_a_key_records_when_it_was_last_used(
@@ -440,7 +440,7 @@ def test_an_upload_by_key_is_recorded_as_the_key(
             ("ledger", ("ledger.xlsx", io.BytesIO(a_ledger()))),
             ("invoices", ("invoice.pdf", io.BytesIO(a_pdf("INVOICE")))),
         ],
-        data={"client_name": "Sethi Textiles (Pvt) Ltd"},
+        data={"client_name": "Haroon Textiles"},
         headers=with_key(anonymous_client, raw),
     )
     assert response.status_code == 201
@@ -482,7 +482,7 @@ def test_a_key_cannot_reach_another_organizations_case(
 
     for response in (named, dashboard, approve, trail):
         assert response.status_code == 404, response.text
-        assert "Sethi" not in response.text
+        assert "Haroon" not in response.text
     assert repository.get_review_item(DEMO_ORG_ID, item_id).decision is ReviewDecision.PENDING
 
 
@@ -576,6 +576,167 @@ def test_revoking_a_key_that_never_existed_is_not_found(client: TestClient) -> N
 
 
 # --------------------------------------------------------------------------- #
+# Renaming — the one editable thing about a key
+# --------------------------------------------------------------------------- #
+
+
+def test_renaming_a_key_changes_the_label_and_nothing_else(
+    client: TestClient, repository: SqliteCaseRepository
+) -> None:
+    _, summary = issue(client, name="n8n automation", scopes=("read", "write"))
+
+    response = client.patch(
+        f"/v1/api-keys/{summary['key_id']}", json={"name": "nightly reconciliation"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "nightly reconciliation"
+    assert body["key_id"] == summary["key_id"]
+    assert body["key_prefix"] == summary["key_prefix"]
+    assert body["scopes"] == ["read", "write"]
+    assert client.get("/v1/api-keys").json()["keys"][0]["name"] == "nightly reconciliation"
+
+
+def test_renaming_cannot_touch_scopes(client: TestClient) -> None:
+    """Unknown keys are rejected, so a rename cannot smuggle in an escalation."""
+    _, summary = issue(client, scopes=("read",))
+
+    response = client.patch(
+        f"/v1/api-keys/{summary['key_id']}",
+        json={"name": "bigger", "scopes": ["read", "write"]},
+    )
+
+    assert response.status_code == 422
+    assert client.get("/v1/api-keys").json()["keys"][0]["scopes"] == ["read"]
+
+
+def test_renaming_to_an_empty_name_is_refused(client: TestClient) -> None:
+    _, summary = issue(client, name="keep me")
+    assert client.patch(
+        f"/v1/api-keys/{summary['key_id']}", json={"name": ""}
+    ).status_code == 422
+    assert client.get("/v1/api-keys").json()["keys"][0]["name"] == "keep me"
+
+
+def test_renaming_another_organizations_key_is_not_found(
+    client: TestClient, other_client: TestClient, repository: SqliteCaseRepository
+) -> None:
+    _, mine = issue(client, name="firm a key")
+
+    response = other_client.patch(
+        f"/v1/api-keys/{mine['key_id']}", json={"name": "hijacked"}
+    )
+
+    assert response.status_code == 404
+    assert repository.get_api_key(DEMO_ORG_ID, mine["key_id"]).name == "firm a key"
+
+
+def test_renaming_a_key_that_never_existed_is_not_found(client: TestClient) -> None:
+    assert client.patch("/v1/api-keys/AK-nope", json={"name": "x"}).status_code == 404
+
+
+def test_a_key_cannot_rename_a_key(
+    client: TestClient, anonymous_client: TestClient, repository: SqliteCaseRepository
+) -> None:
+    raw, summary = issue(client, name="honest label", scopes=("read", "write"))
+
+    response = anonymous_client.patch(
+        f"/v1/api-keys/{summary['key_id']}",
+        json={"name": "innocuous"},
+        headers=with_key(anonymous_client, raw),
+    )
+
+    assert response.status_code == 403
+    assert repository.get_api_key(DEMO_ORG_ID, summary["key_id"]).name == "honest label"
+
+
+# --------------------------------------------------------------------------- #
+# Deleting — permanent, and effective immediately
+# --------------------------------------------------------------------------- #
+
+
+def test_deleting_a_revoked_key_removes_the_row(
+    client: TestClient, repository: SqliteCaseRepository
+) -> None:
+    _, summary = issue(client, name="retired integration")
+    assert client.delete(f"/v1/api-keys/{summary['key_id']}").status_code == 200
+
+    response = client.delete(f"/v1/api-keys/{summary['key_id']}/record")
+
+    assert response.status_code == 200
+    assert response.json() == {"key_id": summary["key_id"], "deleted": True}
+    assert repository.get_api_key(DEMO_ORG_ID, summary["key_id"]) is None
+    assert client.get("/v1/api-keys").json()["keys"] == []
+
+
+def test_deleting_an_active_key_stops_it_immediately(
+    client: TestClient, anonymous_client: TestClient, seeded_case: str
+) -> None:
+    """No revoke step needed: the hash goes with the row, so the key is dead."""
+    raw, summary = issue(client, name="still in use")
+    assert anonymous_client.get(
+        "/v1/review-items", headers=with_key(anonymous_client, raw)
+    ).status_code == 200
+
+    response = client.delete(f"/v1/api-keys/{summary['key_id']}/record")
+
+    assert response.status_code == 200
+    assert anonymous_client.get(
+        "/v1/review-items", headers=with_key(anonymous_client, raw)
+    ).status_code == 401
+    assert client.get("/v1/api-keys").json()["keys"] == []
+
+
+def test_a_deleted_keys_raw_key_stays_dead(
+    client: TestClient, anonymous_client: TestClient, seeded_case: str
+) -> None:
+    """Deleting the row must not resurrect the credential as an unknown-key 401."""
+    raw, summary = issue(client)
+    client.delete(f"/v1/api-keys/{summary['key_id']}")
+    client.delete(f"/v1/api-keys/{summary['key_id']}/record")
+
+    response = anonymous_client.get("/v1/review-items", headers=with_key(anonymous_client, raw))
+    assert response.status_code == 401
+
+
+def test_deleting_leaves_the_audit_trail_untouched(
+    client: TestClient,
+    anonymous_client: TestClient,
+    repository: SqliteCaseRepository,
+    seeded_case: str,
+) -> None:
+    """The trail keeps its `api-key:<prefix>` rows; they just stop resolving."""
+    raw, summary = issue(client, scopes=("read", "write"))
+    item_id = pending_item_id(repository, seeded_case)
+    anonymous_client.post(
+        f"/v1/review-items/{item_id}/approve", json={}, headers=with_key(anonymous_client, raw)
+    )
+
+    client.delete(f"/v1/api-keys/{summary['key_id']}")
+    client.delete(f"/v1/api-keys/{summary['key_id']}/record")
+
+    trail = repository.list_audit(DEMO_ORG_ID, seeded_case)
+    assert trail[-1].actor_id == f"api-key:{summary['key_prefix']}"
+
+
+def test_deleting_a_key_that_never_existed_is_not_found(client: TestClient) -> None:
+    assert client.delete("/v1/api-keys/AK-nope/record").status_code == 404
+
+
+def test_deleting_another_organizations_key_is_not_found(
+    client: TestClient, other_client: TestClient, repository: SqliteCaseRepository
+) -> None:
+    _, mine = issue(client, name="firm a key")
+    client.delete(f"/v1/api-keys/{mine['key_id']}")
+
+    response = other_client.delete(f"/v1/api-keys/{mine['key_id']}/record")
+
+    assert response.status_code == 404
+    assert repository.get_api_key(DEMO_ORG_ID, mine["key_id"]) is not None
+
+
+# --------------------------------------------------------------------------- #
 # Keys cannot manage keys
 # --------------------------------------------------------------------------- #
 
@@ -611,6 +772,22 @@ def test_a_key_cannot_revoke_a_key(
 
     assert response.status_code == 403
     assert repository.get_api_key(DEMO_ORG_ID, summary["key_id"]).revoked_at is None
+
+
+def test_a_key_cannot_delete_a_key(
+    client: TestClient, anonymous_client: TestClient, repository: SqliteCaseRepository
+) -> None:
+    """Nor erase the record of another one that was already turned off."""
+    raw, _ = issue(client, name="live credential", scopes=("read", "write"))
+    _, target = issue(client, name="retired integration")
+    client.delete(f"/v1/api-keys/{target['key_id']}")
+
+    response = anonymous_client.delete(
+        f"/v1/api-keys/{target['key_id']}/record", headers=with_key(anonymous_client, raw)
+    )
+
+    assert response.status_code == 403
+    assert repository.get_api_key(DEMO_ORG_ID, target["key_id"]) is not None
 
 
 def test_key_management_needs_an_identity_at_all(anonymous_client: TestClient) -> None:

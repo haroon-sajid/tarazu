@@ -1,6 +1,6 @@
 """Seed the sample case into whichever store is configured.
 
-Loads `sample-data/fixtures/review-items.json` — the hand-built Sethi Textiles
+Loads `sample-data/fixtures/review-items.json` — the hand-built Haroon Textiles
 case with its five planted errors — into the repository, so the review screen,
 approve, reject, and the dashboard all work on real persisted data before
 `matching/` and `rules/` exist.
@@ -9,8 +9,11 @@ Run it from the repo root::
 
     python scripts/seed_demo_case.py
 
-With no Supabase configured it seeds the local SQLite store. With `SUPABASE_URL`
-and the service-role key set, it seeds Supabase — run `infra/supabase/schema.sql`
+With no Supabase configured it seeds the local SQLite store — **including a
+real login**: the demo auditor from `DEMO_USER_EMAIL` / `DEMO_USER_PASSWORD`
+is created as a local user with a password, so `POST /v1/auth/login` (and the
+frontend's sign-in screen) works immediately. With `SUPABASE_URL` and the
+service-role key set, it seeds Supabase — run `infra/supabase/schema.sql`
 and then `infra/supabase/0002-organizations.sql` first, and seed the demo user
 with `scripts/seed_demo_user.py`, because `cases.created_by` references
 `auth.users`.
@@ -49,7 +52,7 @@ from app.shared.schemas import (  # noqa: E402
 )
 
 FIXTURES = REPO_ROOT / "sample-data" / "fixtures"
-CLIENT_NAME = "Sethi Textiles (Pvt) Ltd"
+CLIENT_NAME = "Haroon Textiles"
 
 
 def build_repository() -> tuple[CaseRepository, str]:
@@ -61,6 +64,32 @@ def build_repository() -> tuple[CaseRepository, str]:
     )
 
 
+def seed_local_login(repository: CaseRepository, settings) -> str | None:
+    """Create the demo auditor as a real local user. Returns its id.
+
+    SQLite only — with Supabase, identities live in GoTrue and are seeded by
+    `scripts/seed_demo_user.py` instead. Idempotent: an existing user with the
+    demo password is reused; an existing user with a *different* password is
+    left alone (someone changed it on purpose) and this returns None.
+    """
+    if not isinstance(repository, SqliteCaseRepository):
+        return None
+    password = settings.demo_user_password
+    if not password:
+        print("DEMO_USER_PASSWORD is unset — no local login seeded.")
+        return None
+    email = settings.demo_user_email
+    try:
+        user_id = repository.create_user(email, password)
+        print(f"Created local demo login {email}")
+        return user_id
+    except ValueError:
+        user_id = repository.verify_password(email, password)
+        if user_id is None:
+            print(f"! {email} exists with a different password; left unchanged.")
+        return user_id
+
+
 def main() -> int:
     settings = get_settings()
     repository, where = build_repository()
@@ -70,7 +99,9 @@ def main() -> int:
     )
     dashboard = json.loads((FIXTURES / "dashboard.json").read_text("utf-8"))
     benford = BenfordResult.model_validate(dashboard["benford"])
-    user_id = settings.dev_user_id
+    # Attribute everything to the seeded login where there is one, so the UI
+    # greets the signed-in demo auditor with their own case ("Created by: You").
+    user_id = seed_local_login(repository, settings) or settings.dev_user_id
     org_id = settings.default_org_id
     now = datetime.now(timezone.utc)
 
@@ -123,6 +154,11 @@ def main() -> int:
           f"{benford.sample_size} amounts")
     print(f"  org_id     = {org_id} ({settings.default_org_name})")
     print(f"  created_by = {user_id}")
+    if not settings.uses_supabase and settings.demo_user_password:
+        print()
+        print("Sign in (frontend or POST /v1/auth/login):")
+        print(f"  email    = {settings.demo_user_email}")
+        print("  password = DEMO_USER_PASSWORD from .env")
     print()
     print("Try it:")
     print("  curl http://localhost:8000/v1/review-items")

@@ -170,7 +170,7 @@ export default function DashboardPage() {
   );
   const period =
     summary.period_start && summary.period_end
-      ? `${formatDate(summary.period_start)} – ${formatDate(summary.period_end)}`
+      ? `${formatDate(summary.period_start)} to ${formatDate(summary.period_end)}`
       : undefined;
 
   return (
@@ -219,7 +219,7 @@ export default function DashboardPage() {
         {/* Benford */}
         <Card className="col-span-2">
           <CardHeader>
-            <CardTitle>Benford&apos;s Law — first-digit distribution</CardTitle>
+            <CardTitle>Benford&apos;s Law: first-digit distribution</CardTitle>
           </CardHeader>
           <CardContent>
             {summary.benford ? (
@@ -280,7 +280,7 @@ export default function DashboardPage() {
         <CardContent>
           {summary.next_best_actions.length === 0 ? (
             <p className="text-sm text-ink-400">
-              Nothing outstanding — every flag sits on a decided item.
+              Nothing outstanding: every flag sits on a decided item.
             </p>
           ) : (
             <ul className="divide-y divide-slate-100">

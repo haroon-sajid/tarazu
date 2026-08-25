@@ -91,7 +91,7 @@ async def upload_documents(
     bank_statement: UploadFile = File(..., description="Bank statement PDF"),
     ledger: UploadFile = File(..., description="Ledger, Excel or CSV"),
     invoices: list[UploadFile] = File(..., description="One or more invoice PDFs or images"),
-    client_name: str = Form("Sethi Textiles (Pvt) Ltd", description="The audited client"),
+    client_name: str = Form("Haroon Textiles", description="The audited client"),
     principal: Principal = Depends(require_write),
     repository: CaseRepository = Depends(get_repository),
     storage: DocumentStore = Depends(get_storage),

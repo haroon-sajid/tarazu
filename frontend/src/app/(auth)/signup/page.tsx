@@ -8,11 +8,16 @@ import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input, PasswordInput } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+
+type Mode = "create" | "join";
 
 export default function SignupPage() {
   const { session, signUp } = useAuth();
   const router = useRouter();
+  const [mode, setMode] = React.useState<Mode>("create");
   const [organizationName, setOrganizationName] = React.useState("");
+  const [inviteCode, setInviteCode] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirm, setConfirm] = React.useState("");
@@ -37,7 +42,12 @@ export default function SignupPage() {
     setBusy(true);
     setError(null);
     try {
-      await signUp(email, password, organizationName);
+      await signUp(
+        email,
+        password,
+        organizationName,
+        mode === "join" ? inviteCode : undefined,
+      );
       router.replace("/dashboard");
     } catch (caught) {
       setError(
@@ -53,21 +63,60 @@ export default function SignupPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-ink-900">Create your organization</h1>
+      <h1 className="text-xl font-bold text-ink-900">
+        {mode === "create" ? "Create your organization" : "Join your firm"}
+      </h1>
       <p className="mt-1 text-sm text-ink-600">
-        One signup creates your firm and makes you its owner. Your cases,
-        documents, and audit trail belong to your organization alone.
+        {mode === "create"
+          ? "One signup creates your firm and makes you its owner. Your cases, documents, and audit trail belong to your organization alone."
+          : "Got an invite code from your firm's owner? It joins you to their workspace: same cases, same audit trail, your own identity."}
       </p>
 
-      <form onSubmit={submit} className="mt-6 space-y-4">
-        <Input
-          label="Organization name"
-          required
-          maxLength={200}
-          value={organizationName}
-          onChange={(event) => setOrganizationName(event.target.value)}
-          placeholder="Lahore Audit Associates"
-        />
+      {/* Found a firm, or join one by invitation */}
+      <div className="mt-4 flex gap-1 rounded-lg bg-slate-100 p-1">
+        {(
+          [
+            { key: "create", label: "Create a firm" },
+            { key: "join", label: "I have an invite code" },
+          ] as { key: Mode; label: string }[]
+        ).map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setMode(key)}
+            className={cn(
+              "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              mode === key
+                ? "bg-white text-ink-900 shadow-sm"
+                : "text-ink-600 hover:text-ink-900",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <form onSubmit={submit} className="mt-5 space-y-4">
+        {mode === "create" ? (
+          <Input
+            label="Organization name"
+            required
+            maxLength={200}
+            value={organizationName}
+            onChange={(event) => setOrganizationName(event.target.value)}
+            placeholder="Lahore Audit Associates"
+          />
+        ) : (
+          <Input
+            label="Invite code"
+            required
+            maxLength={40}
+            value={inviteCode}
+            onChange={(event) => setInviteCode(event.target.value.toUpperCase())}
+            placeholder="TZ-1A2B3C4D"
+            hint="Single-use, from your workspace owner (Settings → Members)."
+          />
+        )}
         <Input
           label="Work email"
           type="email"
@@ -102,7 +151,7 @@ export default function SignupPage() {
 
         <Button type="submit" size="lg" className="w-full" disabled={busy}>
           {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-          Create organization
+          {mode === "create" ? "Create organization" : "Join workspace"}
         </Button>
       </form>
 

@@ -62,7 +62,7 @@ export default function ReportPage() {
   };
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <div className="mb-6">
         <h1 className="text-xl font-bold text-ink-900">Reports</h1>
         <p className="mt-1 text-sm text-ink-600">
@@ -84,7 +84,7 @@ export default function ReportPage() {
           <Skeleton className="h-28" />
         </div>
       ) : (
-        <>
+        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-5">
           <Card>
             <CardHeader>
               <CardTitle>What goes into the report</CardTitle>
@@ -103,8 +103,8 @@ export default function ReportPage() {
                   <dt className="text-ink-400">Period</dt>
                   <dd className="font-medium text-ink-900">
                     {summary.period_start && summary.period_end
-                      ? `${formatDate(summary.period_start)} – ${formatDate(summary.period_end)}`
-                      : "—"}
+                      ? `${formatDate(summary.period_start)} to ${formatDate(summary.period_end)}`
+                      : "-"}
                   </dd>
                 </div>
                 <div className="flex justify-between">
@@ -131,19 +131,19 @@ export default function ReportPage() {
                 <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200">
                   {summary.decisions.pending} item
                   {summary.decisions.pending > 1 ? "s are" : " is"} still pending.
-                  The report will mark them as undecided — every verdict in it is
+                  The report will mark them as undecided; every verdict in it is
                   a human&apos;s.
                 </p>
               )}
             </CardContent>
           </Card>
 
-          <Card className="mt-4">
+          <Card>
             <CardHeader>
               <CardTitle>Download</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-3">
                 <Button
                   size="lg"
                   disabled={busy !== null}
@@ -177,7 +177,7 @@ export default function ReportPage() {
               )}
             </CardContent>
           </Card>
-        </>
+        </div>
       )}
     </div>
   );

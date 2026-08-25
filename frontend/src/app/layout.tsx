@@ -13,7 +13,12 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen">
+      {/* suppressHydrationWarning: browser extensions (ColorZilla's
+          cz-shortcut-listen, Grammarly, password managers) inject attributes
+          into <body> before React hydrates, tripping a false mismatch. The
+          suppression is attribute-only and applies to this element alone —
+          real hydration bugs in children still surface. */}
+      <body className="min-h-screen" suppressHydrationWarning>
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

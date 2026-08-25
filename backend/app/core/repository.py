@@ -35,7 +35,9 @@ from app.shared.schemas import (
     ExtractionResult,
     Organization,
     OrganizationMember,
+    OrgInvitation,
     ReviewItem,
+    UserProfile,
 )
 from app.shared.api import UploadedDocument
 
@@ -96,12 +98,33 @@ class CaseRepository(Protocol):
 
     def list_members(self, org_id: str) -> list[OrganizationMember]: ...
 
+    # -- invitations --------------------------------------------------------- #
+
+    def create_invitation(self, invitation: OrgInvitation) -> None: ...
+
+    def list_invitations(self, org_id: str) -> list[OrgInvitation]:
+        """The organization's invitations, newest first, accepted ones included."""
+
+    def find_invitation_by_code(self, code: str) -> OrgInvitation | None:
+        """Deliberately not org-scoped: at signup the code is what *names* the
+        organization the new user joins. Accepted invitations are returned —
+        whether a used code is refused is the signup route's decision."""
+
+    def accept_invitation(self, invite_id: str, user_id: str, at: datetime) -> None:
+        """Close the door: stamp who came through it, and when."""
+
+    def delete_invitation(self, org_id: str, invite_id: str) -> bool:
+        """Revoke (or tidy away) one invitation. False if no such row in this org."""
+
     # -- cases -------------------------------------------------------------- #
 
     def create_case(self, org_id: str, case: CaseRecord) -> None: ...
 
     def get_case(self, org_id: str, case_id: str) -> CaseRecord | None:
         """The case, or None if it does not exist *or* belongs to another org."""
+
+    def list_cases(self, org_id: str) -> list[CaseRecord]:
+        """Every case of one organization, most recently created first."""
 
     def set_case_status(
         self, org_id: str, case_id: str, status: CaseStatus, detail: str | None = None
@@ -168,12 +191,41 @@ class CaseRepository(Protocol):
     def revoke_api_key(self, org_id: str, key_id: str, revoked_at: datetime) -> bool:
         """Stamp `revoked_at`. Returns False if there is no such key in this org.
 
-        There is deliberately no `delete_api_key`. A revoked key keeps its row so
-        that "which key did this, and when was it turned off" stays answerable.
+        Revoking never deletes: the row keeps "which key did this, and when was
+        it turned off" answerable. Removing the row is a different act —
+        `delete_api_key`.
+        """
+
+    def rename_api_key(self, org_id: str, key_id: str, name: str) -> bool:
+        """Change the key's label. Returns False if no such key in this org.
+
+        Only the name — scopes are fixed for a key's lifetime, and everything
+        else on the row is a fact about its creation, not a setting.
+        """
+
+    def delete_api_key(self, org_id: str, key_id: str) -> bool:
+        """Remove the key's row for good, active or revoked. False if absent.
+
+        Deleting an active key stops it immediately: authentication finds keys
+        by hash, and the hash is gone with the row. The audit trail keeps its
+        `api-key:<prefix>` entries, but they no longer resolve to a name or a
+        creator; the caller confirmed that trade before calling this.
         """
 
     def touch_api_key(self, key_id: str, used_at: datetime) -> None:
         """Record that a key was just used. Best-effort; never fails a request."""
+
+    # -- user profiles ------------------------------------------------------- #
+
+    def get_user_profile(self, user_id: str) -> UserProfile | None:
+        """The person's editable profile, or None if they never saved one.
+
+        Keyed by user, not organization: a profile is presentation (name,
+        picture, contact details), never an authorization input.
+        """
+
+    def save_user_profile(self, profile: UserProfile) -> None:
+        """Create or fully replace the person's profile row."""
 
     # -- audit trail -------------------------------------------------------- #
 
@@ -207,5 +259,8 @@ class IdentityStore(Protocol):
 
     def verify_password(self, email: str, password: str) -> str | None:
         """The user's id if the password matches, else None."""
+
+    def set_password(self, user_id: str, new_password: str) -> None:
+        """Replace the user's password. Raises `ValueError` for an unknown user."""
 
     def get_user_email(self, user_id: str) -> str | None: ...

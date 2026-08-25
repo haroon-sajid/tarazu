@@ -13,9 +13,14 @@ Three things this file is careful about:
 2. **Keys cannot manage keys.** Every route here depends on `human_only`. A
    credential that can mint credentials makes one leak permanent and puts
    revocation in the attacker's hands.
-3. **Revoking does not delete.** `DELETE` stamps `revoked_at` and keeps the row,
-   so the audit trail's `api-key:<prefix>` entries stay resolvable to a name, a
-   creator, and a date long after the integration is gone.
+3. **Revoking and deleting are different verbs.** `DELETE /{key_id}` stamps
+   `revoked_at` and keeps the row, so the audit trail's `api-key:<prefix>`
+   entries stay resolvable to a name, a creator, and a date long after the
+   integration is gone. `DELETE /{key_id}/record` removes the row entirely,
+   active or not — deleting stops the key just as surely, since
+   authentication finds keys by hash and the hash goes with the row. The UI
+   offers edit and delete; revoke remains for integrations that want a
+   turned-off key to stay on the books.
 """
 
 from __future__ import annotations
@@ -34,6 +39,8 @@ from app.shared.api import (
     ApiKeySummary,
     CreateApiKeyRequest,
     CreatedApiKeyResponse,
+    DeletedApiKeyResponse,
+    RenameApiKeyRequest,
 )
 from app.shared.schemas import ApiKeyRecord
 
@@ -142,3 +149,86 @@ async def revoke_api_key(
         )
     logger.info("API key %s revoked by %s", record.key_prefix, principal.user_id)
     return ApiKeySummary.of(record)
+
+
+@router.patch(
+    "/api-keys/{key_id}",
+    response_model=ApiKeySummary,
+    summary="Rename an API key",
+)
+async def rename_api_key(
+    key_id: str,
+    body: RenameApiKeyRequest,
+    principal: Principal = Depends(human_only),
+    repository: CaseRepository = Depends(get_repository),
+) -> ApiKeySummary:
+    """Change the key's label. Nothing else about a key is editable.
+
+    Scopes are fixed for a key's lifetime — to change what a key may do,
+    create a new one and delete this one. The name exists so a key can be
+    recognised months later ("n8n automation", "Zapier — monthly export"),
+    and that is the one thing worth correcting in place.
+    """
+    renamed = repository.rename_api_key(principal.org_id, key_id, body.name.strip())
+    if not renamed:
+        # Another organization's key is `404`, exactly as its cases are.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No API key with id {key_id!r}.",
+        )
+    record = repository.get_api_key(principal.org_id, key_id)
+    if record is None:  # pragma: no cover - the rename above just found it
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No API key with id {key_id!r}.",
+        )
+    logger.info(
+        "API key %s renamed to %r by %s",
+        record.key_prefix,
+        record.name,
+        principal.user_id,
+    )
+    return ApiKeySummary.of(record)
+
+
+@router.delete(
+    "/api-keys/{key_id}/record",
+    response_model=DeletedApiKeyResponse,
+    summary="Delete an API key permanently",
+)
+async def delete_api_key(
+    key_id: str,
+    principal: Principal = Depends(human_only),
+    repository: CaseRepository = Depends(get_repository),
+) -> DeletedApiKeyResponse:
+    """Remove the key's row. Permanent, and effective immediately.
+
+    Works on an active key: authentication finds keys by hash, and the hash
+    goes with the row, so a deleted key stops working the moment this
+    returns. What deletion costs is history — audit trail entries naming
+    `api-key:<prefix>` stay in the trail (the trail itself is append-only and
+    untouched here) but stop resolving to a name and creator. The
+    confirmation step in the UI states that trade before this route is ever
+    called; an organization that wants the record kept revokes instead.
+    """
+    record = repository.get_api_key(principal.org_id, key_id)
+    if record is None:
+        # Another organization's key is `404`, exactly as its cases are.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No API key with id {key_id!r}.",
+        )
+
+    deleted = repository.delete_api_key(principal.org_id, key_id)
+    if not deleted:  # pragma: no cover - the check above just passed
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No API key with id {key_id!r}.",
+        )
+    logger.info(
+        "API key %s (%s) record deleted by %s",
+        record.key_prefix,
+        record.name,
+        principal.user_id,
+    )
+    return DeletedApiKeyResponse(key_id=key_id)

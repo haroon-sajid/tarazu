@@ -26,14 +26,14 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             The auditor delivers the verdict.
           </h1>
           <ul className="mt-8 space-y-3 text-sm text-brand-100/80">
-            <li>— Every number traces to its source document, page, and location.</li>
-            <li>— All matching and math is deterministic code, never AI.</li>
-            <li>— Every decision is a human&apos;s, logged to an immutable audit trail.</li>
+            <li>• Every number traces to its source document, page, and location.</li>
+            <li>• All matching and math is deterministic code, never AI.</li>
+            <li>• Every decision is a human&apos;s, logged to an immutable audit trail.</li>
           </ul>
         </div>
 
         <p className="text-xs text-brand-200/50">
-          ترازو — &ldquo;the scales&rdquo;
+          ترازو: &ldquo;the scales&rdquo;
         </p>
       </div>
 

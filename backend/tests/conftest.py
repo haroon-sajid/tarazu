@@ -145,7 +145,7 @@ def other_org(repository: SqliteCaseRepository) -> str:
 
 @pytest.fixture()
 def seeded_case(repository: SqliteCaseRepository, demo_org: str) -> str:
-    """The Sethi Textiles sample case, persisted in firm A. Returns its case id."""
+    """The Haroon Textiles sample case, persisted in firm A. Returns its case id."""
     queue = load_sample_queue()
     dashboard = load_sample_dashboard()
     repository.create_case(

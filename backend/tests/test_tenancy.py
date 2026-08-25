@@ -107,7 +107,7 @@ def test_another_firms_dashboard_is_not_found(
 ) -> None:
     response = other_client.get("/v1/dashboard", params={"case_id": seeded_case})
     assert response.status_code == 404
-    assert "Sethi" not in response.text
+    assert "Haroon" not in response.text
 
 
 def test_approving_another_firms_item_is_not_found(
@@ -206,7 +206,7 @@ def test_an_upload_by_one_firm_is_invisible_to_the_other(
     implemented_modules,
 ) -> None:
     """A uploads and gets a queue. B lists, and sees nothing at all."""
-    case_id = upload(client, "Sethi Textiles (Pvt) Ltd")
+    case_id = upload(client, "Haroon Textiles")
 
     mine = client.get("/v1/review-items").json()
     assert mine["case_id"] == case_id
@@ -218,7 +218,7 @@ def test_an_upload_by_one_firm_is_invisible_to_the_other(
 
     named = other_client.get("/v1/review-items", params={"case_id": case_id})
     assert named.status_code == 404
-    assert "Sethi" not in named.text
+    assert "Haroon" not in named.text
 
 
 def test_two_firms_uploads_do_not_mix(
@@ -230,7 +230,7 @@ def test_two_firms_uploads_do_not_mix(
     implemented_modules,
 ) -> None:
     """Each firm's dashboard counts its own queue and no one else's."""
-    a_case = upload(client, "Sethi Textiles (Pvt) Ltd")
+    a_case = upload(client, "Haroon Textiles")
     b_case = upload(other_client, "Karachi Metals Ltd")
 
     assert a_case != b_case
@@ -239,7 +239,7 @@ def test_two_firms_uploads_do_not_mix(
     b_dashboard = other_client.get("/v1/dashboard").json()
 
     assert a_dashboard["case_id"] == a_case
-    assert a_dashboard["client_name"] == "Sethi Textiles (Pvt) Ltd"
+    assert a_dashboard["client_name"] == "Haroon Textiles"
     assert b_dashboard["case_id"] == b_case
     assert b_dashboard["client_name"] == "Karachi Metals Ltd"
 
@@ -261,9 +261,9 @@ def test_the_default_case_is_never_another_firms_most_recent(
     implemented_modules,
 ) -> None:
     """`latest_case_id` is per-organization, so "my most recent" cannot drift."""
-    upload(client, "Sethi Textiles (Pvt) Ltd")
+    upload(client, "Haroon Textiles")
     b_case = upload(other_client, "Karachi Metals Ltd")
-    a_case = upload(client, "Sethi Textiles (Pvt) Ltd")  # A uploads again, last
+    a_case = upload(client, "Haroon Textiles")  # A uploads again, last
 
     assert other_client.get("/v1/review-items").json()["case_id"] == b_case
     assert client.get("/v1/review-items").json()["case_id"] == a_case
@@ -278,7 +278,7 @@ def test_each_firm_decides_only_its_own_items(
     demo_mode,
     implemented_modules,
 ) -> None:
-    a_case = upload(client, "Sethi Textiles (Pvt) Ltd")
+    a_case = upload(client, "Haroon Textiles")
     upload(other_client, "Karachi Metals Ltd")
 
     a_item = client.get("/v1/review-items").json()["items"][0]["review_item_id"]
@@ -460,7 +460,7 @@ def test_the_demo_auditor_is_joined_to_the_default_org_on_first_use(
     """Even in a store where nothing has created that membership yet."""
     assert repository.get_membership("00000000-0000-4000-8000-000000000001") is None
 
-    upload(client, "Sethi Textiles (Pvt) Ltd")
+    upload(client, "Haroon Textiles")
 
     membership = repository.get_membership("00000000-0000-4000-8000-000000000001")
     assert membership is not None

@@ -126,7 +126,7 @@ def test_the_pipeline_parks_when_matching_is_not_implemented(
     repository: SqliteCaseRepository, storage: LocalDocumentStore, demo_mode
 ) -> None:
     outcome = run_pipeline(
-        ORG, "CASE-A", "Sethi Textiles (Pvt) Ltd", documents("CASE-A"), AUDITOR,
+        ORG, "CASE-A", "Haroon Textiles", documents("CASE-A"), AUDITOR,
         repository, storage,
     )
 
@@ -181,7 +181,7 @@ def test_the_full_flow_produces_a_persisted_review_queue(
     implemented_modules,
 ) -> None:
     outcome = run_pipeline(
-        ORG, "CASE-C", "Sethi Textiles (Pvt) Ltd", documents("CASE-C"), AUDITOR,
+        ORG, "CASE-C", "Haroon Textiles", documents("CASE-C"), AUDITOR,
         repository, storage,
     )
 

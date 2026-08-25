@@ -81,3 +81,56 @@ what it must never do. Respect those constraints.
 - Do not add AI/LLM calls or AI client imports to `matching/`, `rules/`, `reports/`, `core/`, or `main.py`.
 - Update `docs/api-contracts.md` and `backend/app/shared/` in the same change whenever a contract changes.
 - Read the README of any folder before modifying its contents.
+
+## Development Status (last updated 2026-08-25 — keep this section current)
+
+The project runs as a **local dummy-data demo** while the deterministic
+modules and real AI are built. Full route list: the table at the end of
+`docs/api-contracts.md`.
+
+**How to run the demo**
+
+- Backend: `uvicorn app.main:app --reload` from `backend/` (port 8000). The
+  local `.env` has Supabase commented out, so it uses SQLite at
+  `<repo>/.local/tarazu.db`. `DEMO_MODE=true` stubs Qwen extraction
+  deterministically — no API key needed.
+- Seed: `python scripts/seed_demo_case.py` (idempotent) — creates the demo
+  case (client "Haroon Textiles") **and a local login** from
+  `DEMO_USER_EMAIL`/`DEMO_USER_PASSWORD` in `.env`.
+- Frontend: `npm run dev` from `frontend/` (port 3000, Turbopack). Blanking
+  `NEXT_PUBLIC_TARAZU_API_URL` in `frontend/.env.local` switches it to
+  zero-backend fixture mode.
+
+**Live end to end** (backend + frontend + tests): auth (signup/login/change
+password), tenancy, upload pipeline (extraction stubbed by DEMO_MODE), review
+queue with approve/reject and audit trail, dashboard with Benford, API keys
+(create / rename / revoke / permanent delete — delete works on active keys),
+user profiles (`GET/PUT /v1/profile`: name, job title, phone, avatar as a
+size-capped data: URL; Settings → Profile edits it), the case list
+(`GET /v1/cases` + `/cases` page; the active case is a localStorage selection
+every screen passes as `?case_id=`), the case-wide audit trail viewer
+(`GET /v1/audit-trail` + `/audit-trail` page), and members with invitations
+(`/v1/members`, `/v1/members/invites`: the owner cuts a single-use `TZ-…`
+join code; signup accepts `invite_code` to join that org instead of founding
+one — Settings → Members and the signup screen cover both ends).
+
+**Frontend-only previews** (UI is finished; backend does not exist yet):
+
+- `/assistant` — chat grounded in real case data; responses are composed in
+  `frontend/src/lib/assistant.ts` until `modules/assistant/` ships. The
+  composer accepts document attachments (metadata-acknowledged only for now)
+  and voice input via the browser's Web Speech API (`frontend/src/lib/speech.ts`,
+  English/Urdu, Chrome/Edge).
+- `/documents` — side-by-side audit view; pages render schematically from
+  provenance until the backend serves document files.
+- Upload's staged "analyzing" panel is presentation over the synchronous
+  request.
+- Settings: webhooks / notifications / integrations / members-invites are
+  static "planned" copy.
+
+**Not implemented (the real work remaining)**: `modules/matching/` and
+`modules/rules/` raise `NotImplementedError` (live uploads park at
+`awaiting_matching`; the seeded case carries the review data), Benford for
+newly uploaded cases, `POST /v1/reports`, the `assistant` backend, document
+file serving, and real Qwen extraction (`DEMO_MODE=false` + `EXTRACTION_*`
+vars).

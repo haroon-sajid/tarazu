@@ -3,9 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleUserRound } from "lucide-react";
+import { ChevronsUpDown } from "lucide-react";
 import { FIXTURE_MODE, getDashboard } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
 
 /**
  * The page header: which case is open, who is signed in, and — honestly —
@@ -16,7 +15,6 @@ import { useAuth } from "@/lib/auth";
  * nothing is invented client-side.
  */
 export function Header() {
-  const { session } = useAuth();
   const pathname = usePathname();
   const [caseLabel, setCaseLabel] = React.useState<string | null>(null);
 
@@ -43,33 +41,25 @@ export function Header() {
         {caseLabel && (
           <>
             <span className="text-xs font-medium text-ink-400">Case:</span>
-            <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-ink-900">
+            <Link
+              href="/cases"
+              title="Switch case"
+              className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-ink-900 transition-colors hover:border-brand-600 hover:text-brand-900"
+            >
               {caseLabel}
-            </span>
+              <ChevronsUpDown className="h-3.5 w-3.5 text-ink-400" aria-hidden />
+            </Link>
           </>
         )}
         {FIXTURE_MODE && (
           <span
             className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-sky-700 ring-1 ring-sky-200"
-            title="NEXT_PUBLIC_TARAZU_API_URL is unset — data comes from sample fixtures"
+            title="NEXT_PUBLIC_TARAZU_API_URL is unset, so data comes from sample fixtures"
           >
             FIXTURE DATA
           </span>
         )}
       </div>
-      <Link
-        href="/profile"
-        className="flex items-center gap-2.5 rounded-md px-2 py-1 transition-colors hover:bg-slate-50"
-        title="Your profile"
-      >
-        <div className="text-right">
-          <p className="text-xs font-semibold text-ink-900">
-            {session?.organizationName ?? "Your firm"}
-          </p>
-          <p className="text-[10px] text-ink-400">{session?.email ?? ""}</p>
-        </div>
-        <CircleUserRound className="h-7 w-7 text-ink-400" aria-hidden />
-      </Link>
     </header>
   );
 }

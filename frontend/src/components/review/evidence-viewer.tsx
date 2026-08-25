@@ -49,7 +49,7 @@ function DocumentPane({
       <div className="flex h-full flex-col items-center justify-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-6 text-center">
         <FileText className="h-8 w-8 text-ink-400" aria-hidden />
         <p className="text-sm font-medium text-ink-900">
-          {document_id} — spreadsheet row {row_number}
+          {document_id} · spreadsheet row {row_number}
         </p>
         <p className="max-w-xs text-xs text-ink-400">
           Read directly by pandas from the ledger file. No AI touched this value,
@@ -62,7 +62,7 @@ function DocumentPane({
   return (
     <div className="flex h-full flex-col">
       <p className="mb-2 text-xs font-medium text-ink-600">
-        {document_id} — page {page ?? "?"}
+        {document_id} · page {page ?? "?"}
       </p>
       {/* A4 aspect page outline; bbox is [x0,y0,x1,y1] normalised 0..1, origin top-left. */}
       <div className="relative w-full overflow-hidden rounded-md border border-slate-300 bg-white shadow-inner" style={{ aspectRatio: "1 / 1.414" }}>
@@ -126,7 +126,7 @@ function ComparisonRow({
             highlight && value != null && "rounded bg-amber-100 font-semibold",
           )}
         >
-          {value ?? <span className="text-ink-400">—</span>}
+          {value ?? <span className="text-ink-400">-</span>}
         </td>
       ))}
     </tr>
@@ -196,7 +196,7 @@ export function EvidenceViewer({
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div>
             <h2 className="text-sm font-bold text-ink-900">
-              Evidence — {ledger.party_name}
+              Evidence: {ledger.party_name}
             </h2>
             <p className="mt-0.5 text-xs text-ink-400">
               {item.review_item_id} · {formatDate(ledger.date)} ·{" "}
@@ -287,7 +287,7 @@ export function EvidenceViewer({
               </div>
               <p className="text-xs leading-relaxed text-ink-900">{match.reason}</p>
               <p className="mt-1.5 font-mono text-[10px] text-ink-400">
-                rule: {match.rule_id} — deterministic, no AI involved
+                rule: {match.rule_id} (deterministic, no AI involved)
               </p>
             </section>
 
@@ -343,7 +343,7 @@ export function EvidenceViewer({
                       <span className="font-medium text-ink-900">
                         {record.action.replace(/_/g, " ")}
                       </span>{" "}
-                      by {record.actor_id} — {formatTimestamp(record.occurred_at)}
+                      by {record.actor_id} · {formatTimestamp(record.occurred_at)}
                       {record.detail && (
                         <span className="block text-ink-400">“{record.detail}”</span>
                       )}

@@ -255,6 +255,37 @@ export interface DashboardSummary {
 }
 
 // --------------------------------------------------------------------------
+// Cases and the case-wide audit trail
+// --------------------------------------------------------------------------
+
+/** GET /v1/cases — one engagement plus its working counts. */
+export interface CaseSummary {
+  case_id: string;
+  client_name: string;
+  period_start: string | null;
+  period_end: string | null;
+  status: CaseStatus;
+  status_detail: string | null;
+  created_by: string;
+  created_at: string;
+  total_review_items: number;
+  pending_items: number;
+  flagged_items: number;
+}
+
+export interface CaseListResponse {
+  total: number;
+  cases: CaseSummary[];
+}
+
+/** GET /v1/audit-trail — one case's full immutable trail, oldest first. */
+export interface AuditTrailResponse {
+  case_id: string;
+  total: number;
+  records: AuditRecord[];
+}
+
+// --------------------------------------------------------------------------
 // Upload
 // --------------------------------------------------------------------------
 
@@ -347,4 +378,88 @@ export interface CreatedApiKeyResponse {
 export interface ApiKeyListResponse {
   total: number;
   keys: ApiKeySummary[];
+}
+
+/** DELETE /v1/api-keys/{key_id}/record — the row is gone for good. */
+export interface DeletedApiKeyResponse {
+  key_id: string;
+  deleted: boolean;
+}
+
+// --------------------------------------------------------------------------
+// Members and invitations
+// --------------------------------------------------------------------------
+
+/** GET /v1/members — one person with access to the organization. */
+export interface MemberSummary {
+  user_id: string;
+  email: string | null;
+  role: OrgRole;
+  created_at: string;
+}
+
+export interface MembersResponse {
+  total: number;
+  members: MemberSummary[];
+}
+
+/** An invitation as the owner sees it — the join code included. */
+export interface InvitationSummary {
+  invite_id: string;
+  email: string;
+  role: OrgRole;
+  code: string;
+  created_by: string;
+  created_at: string;
+  accepted_at: string | null;
+  accepted_by: string | null;
+  accepted: boolean;
+}
+
+export interface InvitationListResponse {
+  total: number;
+  invitations: InvitationSummary[];
+}
+
+// --------------------------------------------------------------------------
+// User profile
+// --------------------------------------------------------------------------
+
+/**
+ * GET/PUT /v1/profile — the signed-in person's editable profile. Presentation
+ * only: nothing here feeds authentication, tenancy, or the audit trail.
+ * `avatar` is a size-capped data:image/... URL.
+ */
+export interface UserProfile {
+  user_id: string;
+  full_name: string | null;
+  job_title: string | null;
+  phone: string | null;
+  avatar: string | null;
+  gender: string | null;
+  date_of_birth: string | null; // YYYY-MM-DD
+  location: string | null;
+  /** Practicing license or institute membership number (ICAP, ACCA, ...). */
+  license_number: string | null;
+  /** Preferred language for explanations: "en" or "ur". */
+  language: string | null;
+  notify_case_ready: boolean;
+  notify_high_severity: boolean;
+  notify_weekly_digest: boolean;
+}
+
+/** PUT /v1/profile body — a full replacement; omitted fields are cleared. */
+export interface UpdateProfileRequest {
+  full_name?: string | null;
+  job_title?: string | null;
+  phone?: string | null;
+  avatar?: string | null;
+  gender?: string | null;
+  date_of_birth?: string | null;
+  location?: string | null;
+  license_number?: string | null;
+  language?: string | null;
+  notify_case_ready?: boolean;
+  notify_high_severity?: boolean;
+  notify_weekly_digest?: boolean;
 }

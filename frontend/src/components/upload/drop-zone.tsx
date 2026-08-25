@@ -37,7 +37,7 @@ export function DropZone({
     const bad = list.filter((file) => !acceptFile(file));
     setRejected(
       bad.length
-        ? `${bad.map((f) => f.name).join(", ")} — accepted: ${accept.join(", ")}`
+        ? `${bad.map((f) => f.name).join(", ")}. Accepted: ${accept.join(", ")}`
         : null,
     );
     if (!good.length) return;

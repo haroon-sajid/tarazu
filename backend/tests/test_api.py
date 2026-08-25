@@ -210,7 +210,7 @@ def test_dashboard_counts_the_persisted_queue(
     body = client.get("/v1/dashboard").json()
 
     assert body["total_review_items"] == len(items)
-    assert body["client_name"] == "Sethi Textiles (Pvt) Ltd"
+    assert body["client_name"] == "Haroon Textiles"
     assert (
         body["match_status"]["matched"]
         + body["match_status"]["partial"]

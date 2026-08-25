@@ -18,6 +18,7 @@ interface AuthContextValue {
     email: string,
     password: string,
     organizationName: string,
+    inviteCode?: string,
   ) => Promise<void>;
   signOut: () => void;
 }
@@ -53,8 +54,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signUp = React.useCallback(
-    async (email: string, password: string, organizationName: string) => {
-      const created = await apiSignup(email, password, organizationName);
+    async (
+      email: string,
+      password: string,
+      organizationName: string,
+      inviteCode?: string,
+    ) => {
+      const created = await apiSignup(email, password, organizationName, inviteCode);
       // Signup returns no token — sign in next, then attach the org facts.
       const response = await apiLogin(email, password);
       const next: Session = {

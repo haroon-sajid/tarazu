@@ -34,8 +34,10 @@ from app.shared.schemas import (
     ExtractionResult,
     Organization,
     OrganizationMember,
+    OrgInvitation,
     OrgRole,
     ReviewItem,
+    UserProfile,
 )
 
 __all__ = ["SupabaseCaseRepository"]
@@ -106,6 +108,77 @@ class SupabaseCaseRepository:
             )
         ]
 
+    # -- invitations --------------------------------------------------------- #
+    # Table from infra/supabase/0005-org-invitations.sql.
+
+    def create_invitation(self, invitation: OrgInvitation) -> None:
+        self._rest.insert(
+            "org_invitations",
+            [
+                {
+                    "invite_id": invitation.invite_id,
+                    "org_id": invitation.org_id,
+                    "email": invitation.email,
+                    "role": invitation.role.value,
+                    "code": invitation.code,
+                    "created_by": invitation.created_by,
+                    "created_at": invitation.created_at.isoformat(),
+                    "accepted_at": _iso(invitation.accepted_at),
+                    "accepted_by": invitation.accepted_by,
+                }
+            ],
+        )
+
+    def list_invitations(self, org_id: str) -> list[OrgInvitation]:
+        return [
+            self._invitation(row)
+            for row in self._rest.select(
+                "org_invitations",
+                {"org_id": f"eq.{org_id}", "order": "created_at.desc"},
+            )
+        ]
+
+    def find_invitation_by_code(self, code: str) -> OrgInvitation | None:
+        """Not org-scoped: the code is what names the org. See the protocol."""
+        rows = self._rest.select(
+            "org_invitations", {"code": f"eq.{code}", "limit": "1"}
+        )
+        return self._invitation(rows[0]) if rows else None
+
+    def accept_invitation(self, invite_id: str, user_id: str, at: datetime) -> None:
+        self._rest.update(
+            "org_invitations",
+            {"invite_id": f"eq.{invite_id}"},
+            {"accepted_at": at.isoformat(), "accepted_by": user_id},
+        )
+
+    def delete_invitation(self, org_id: str, invite_id: str) -> bool:
+        rows = self._rest.select(
+            "org_invitations",
+            {"invite_id": f"eq.{invite_id}", "org_id": f"eq.{org_id}", "limit": "1"},
+        )
+        if not rows:
+            return False
+        self._rest.delete(
+            "org_invitations",
+            {"invite_id": f"eq.{invite_id}", "org_id": f"eq.{org_id}"},
+        )
+        return True
+
+    @staticmethod
+    def _invitation(row: dict) -> OrgInvitation:
+        return OrgInvitation(
+            invite_id=row["invite_id"],
+            org_id=row["org_id"],
+            email=row["email"],
+            role=OrgRole(row["role"]),
+            code=row["code"],
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+            accepted_at=row.get("accepted_at"),
+            accepted_by=row.get("accepted_by"),
+        )
+
     @staticmethod
     def _member(row: dict) -> OrganizationMember:
         return OrganizationMember(
@@ -154,6 +227,23 @@ class SupabaseCaseRepository:
             # schema keeps `status` alone so the check constraint stays simple.
             status_detail=None,
         )
+
+    def list_cases(self, org_id: str) -> list[CaseRecord]:
+        return [
+            CaseRecord(
+                case_id=row["case_id"],
+                client_name=row["client_name"],
+                period_start=row.get("period_start"),
+                period_end=row.get("period_end"),
+                status=CaseStatus(row["status"]),
+                created_by=row["created_by"],
+                created_at=row["created_at"],
+                status_detail=None,
+            )
+            for row in self._rest.select(
+                "cases", {"org_id": f"eq.{org_id}", "order": "created_at.desc"}
+            )
+        ]
 
     def set_case_status(
         self, org_id: str, case_id: str, status: CaseStatus, detail: str | None = None
@@ -416,6 +506,26 @@ class SupabaseCaseRepository:
         )
         return True
 
+    def rename_api_key(self, org_id: str, key_id: str, name: str) -> bool:
+        if self.get_api_key(org_id, key_id) is None:
+            return False
+        self._rest.update(
+            "api_keys",
+            {"key_id": f"eq.{key_id}", "org_id": f"eq.{org_id}"},
+            {"name": name},
+        )
+        return True
+
+    def delete_api_key(self, org_id: str, key_id: str) -> bool:
+        if self.get_api_key(org_id, key_id) is None:
+            # Missing and another org's key are refused the same way.
+            return False
+        self._rest.delete(
+            "api_keys",
+            {"key_id": f"eq.{key_id}", "org_id": f"eq.{org_id}"},
+        )
+        return True
+
     def touch_api_key(self, key_id: str, used_at: datetime) -> None:
         self._rest.update(
             "api_keys", {"key_id": f"eq.{key_id}"}, {"last_used_at": used_at.isoformat()}
@@ -434,6 +544,66 @@ class SupabaseCaseRepository:
             last_used_at=row.get("last_used_at"),
             revoked_at=row.get("revoked_at"),
             created_at=row["created_at"],
+        )
+
+    # -- user profiles ------------------------------------------------------- #
+    # Table from infra/supabase/0004-user-profiles.sql.
+
+    def get_user_profile(self, user_id: str) -> UserProfile | None:
+        rows = self._rest.select(
+            "user_profiles", {"user_id": f"eq.{user_id}", "limit": "1"}
+        )
+        if not rows:
+            return None
+        row = rows[0]
+
+        def flag(column: str, default: bool) -> bool:
+            value = row.get(column)
+            return default if value is None else bool(value)
+
+        return UserProfile(
+            user_id=row["user_id"],
+            full_name=row.get("full_name"),
+            job_title=row.get("job_title"),
+            phone=row.get("phone"),
+            avatar=row.get("avatar"),
+            gender=row.get("gender"),
+            date_of_birth=row.get("date_of_birth"),
+            location=row.get("location"),
+            license_number=row.get("license_number"),
+            language=row.get("language"),
+            notify_case_ready=flag("notify_case_ready", True),
+            notify_high_severity=flag("notify_high_severity", True),
+            notify_weekly_digest=flag("notify_weekly_digest", False),
+            updated_at=row.get("updated_at"),
+        )
+
+    def save_user_profile(self, profile: UserProfile) -> None:
+        self._rest.insert(
+            "user_profiles",
+            [
+                {
+                    "user_id": profile.user_id,
+                    "full_name": profile.full_name,
+                    "job_title": profile.job_title,
+                    "phone": profile.phone,
+                    "avatar": profile.avatar,
+                    "gender": profile.gender,
+                    "date_of_birth": (
+                        profile.date_of_birth.isoformat()
+                        if profile.date_of_birth
+                        else None
+                    ),
+                    "location": profile.location,
+                    "license_number": profile.license_number,
+                    "language": profile.language,
+                    "notify_case_ready": profile.notify_case_ready,
+                    "notify_high_severity": profile.notify_high_severity,
+                    "notify_weekly_digest": profile.notify_weekly_digest,
+                    "updated_at": _iso(profile.updated_at),
+                }
+            ],
+            upsert=True,
         )
 
     # -- audit trail -------------------------------------------------------- #

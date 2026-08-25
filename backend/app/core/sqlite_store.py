@@ -44,8 +44,10 @@ from app.shared.schemas import (
     ExtractionResult,
     OrganizationMember,
     Organization,
+    OrgInvitation,
     OrgRole,
     ReviewItem,
+    UserProfile,
 )
 
 __all__ = [
@@ -108,6 +110,43 @@ create table if not exists users (
   email         text not null unique collate nocase,
   password_hash text not null,
   created_at    text not null
+);
+
+-- Open doors into an organization: an owner cuts a single-use code; whoever
+-- presents it at signup joins that org instead of founding a new one.
+create table if not exists org_invitations (
+  invite_id   text primary key,
+  org_id      text not null,
+  email       text not null,
+  role        text not null default 'member' check (role in ('owner', 'member')),
+  code        text not null unique,
+  created_by  text not null,
+  created_at  text not null,
+  accepted_at text,
+  accepted_by text
+);
+
+create index if not exists org_invitations_org_idx
+  on org_invitations (org_id, created_at);
+
+-- Editable presentation on top of an identity: display name, picture,
+-- contact details. Keyed by user, never an authorization input. The avatar
+-- is a size-capped data: URL, so no file storage is involved.
+create table if not exists user_profiles (
+  user_id              text primary key,
+  full_name            text,
+  job_title            text,
+  phone                text,
+  avatar               text,
+  gender               text,
+  date_of_birth        text,
+  location             text,
+  license_number       text,
+  language             text,
+  notify_case_ready    integer,
+  notify_high_severity integer,
+  notify_weekly_digest integer,
+  updated_at           text
 );
 """
 
@@ -308,6 +347,7 @@ class SqliteCaseRepository:
         # Before the rest of the schema, because that half indexes `org_id` and
         # a database written before tenancy has no such column yet.
         self._migrate_to_multi_tenant()
+        self._migrate_user_profiles()
         with self._lock:
             self._connection.executescript(SCHEMA)
             self._connection.commit()
@@ -316,6 +356,39 @@ class SqliteCaseRepository:
         self._connection.close()
 
     # -- migration ---------------------------------------------------------- #
+
+    def _migrate_user_profiles(self) -> None:
+        """Add profile columns a database created before them does not have.
+
+        `create table if not exists` never alters an existing table, so a file
+        from an earlier build keeps its old shape; this backfills the missing
+        columns additively. Idempotent — it runs on every open.
+        """
+        with self._lock:
+            existing = {
+                row[1]
+                for row in self._connection.execute(
+                    "pragma table_info(user_profiles)"
+                )
+            }
+            if not existing:
+                return  # fresh database: the schema creates the full table
+            wanted = {
+                "gender": "text",
+                "date_of_birth": "text",
+                "location": "text",
+                "license_number": "text",
+                "language": "text",
+                "notify_case_ready": "integer",
+                "notify_high_severity": "integer",
+                "notify_weekly_digest": "integer",
+            }
+            for column, column_type in wanted.items():
+                if column not in existing:
+                    self._connection.execute(
+                        f"alter table user_profiles add column {column} {column_type}"
+                    )
+            self._connection.commit()
 
     def _migrate_to_multi_tenant(self) -> None:
         """Add `org_id` to a database written before tenancy existed, and backfill.
@@ -488,6 +561,86 @@ class SqliteCaseRepository:
             created_at=row["created_at"],
         )
 
+    # -- invitations --------------------------------------------------------- #
+
+    def create_invitation(self, invitation: OrgInvitation) -> None:
+        self._write(
+            [
+                (
+                    "insert into org_invitations (invite_id, org_id, email, role, "
+                    "code, created_by, created_at, accepted_at, accepted_by) "
+                    "values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        invitation.invite_id,
+                        invitation.org_id,
+                        invitation.email,
+                        invitation.role.value,
+                        invitation.code,
+                        invitation.created_by,
+                        invitation.created_at.isoformat(),
+                        _iso(invitation.accepted_at),
+                        invitation.accepted_by,
+                    ),
+                )
+            ]
+        )
+
+    def list_invitations(self, org_id: str) -> list[OrgInvitation]:
+        return [
+            self._invitation(row)
+            for row in self._rows(
+                "select * from org_invitations where org_id = ? order by created_at desc",
+                (org_id,),
+            )
+        ]
+
+    def find_invitation_by_code(self, code: str) -> OrgInvitation | None:
+        """Not org-scoped: the code is what names the org. See the protocol."""
+        rows = self._rows("select * from org_invitations where code = ?", (code,))
+        return self._invitation(rows[0]) if rows else None
+
+    def accept_invitation(self, invite_id: str, user_id: str, at: datetime) -> None:
+        self._write(
+            [
+                (
+                    "update org_invitations set accepted_at = ?, accepted_by = ? "
+                    "where invite_id = ?",
+                    (at.isoformat(), user_id, invite_id),
+                )
+            ]
+        )
+
+    def delete_invitation(self, org_id: str, invite_id: str) -> bool:
+        rows = self._rows(
+            "select invite_id from org_invitations where invite_id = ? and org_id = ?",
+            (invite_id, org_id),
+        )
+        if not rows:
+            return False
+        self._write(
+            [
+                (
+                    "delete from org_invitations where invite_id = ? and org_id = ?",
+                    (invite_id, org_id),
+                )
+            ]
+        )
+        return True
+
+    @staticmethod
+    def _invitation(row: sqlite3.Row) -> OrgInvitation:
+        return OrgInvitation(
+            invite_id=row["invite_id"],
+            org_id=row["org_id"],
+            email=row["email"],
+            role=OrgRole(row["role"]),
+            code=row["code"],
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+            accepted_at=row["accepted_at"],
+            accepted_by=row["accepted_by"],
+        )
+
     # -- local identities (IdentityStore) ----------------------------------- #
 
     def create_user(self, email: str, password: str) -> str:
@@ -511,6 +664,19 @@ class SqliteCaseRepository:
         if not rows:
             return None
         return rows[0]["user_id"] if verify_password_hash(password, rows[0]["password_hash"]) else None
+
+    def set_password(self, user_id: str, new_password: str) -> None:
+        rows = self._rows("select user_id from users where user_id = ?", (user_id,))
+        if not rows:
+            raise ValueError(f"no user with id {user_id!r}")
+        self._write(
+            [
+                (
+                    "update users set password_hash = ? where user_id = ?",
+                    (hash_password(new_password), user_id),
+                )
+            ]
+        )
 
     def get_user_email(self, user_id: str) -> str | None:
         rows = self._rows("select email from users where user_id = ?", (user_id,))
@@ -544,9 +710,19 @@ class SqliteCaseRepository:
         rows = self._rows(
             "select * from cases where case_id = ? and org_id = ?", (case_id, org_id)
         )
-        if not rows:
-            return None
-        row = rows[0]
+        return self._case(rows[0]) if rows else None
+
+    def list_cases(self, org_id: str) -> list[CaseRecord]:
+        return [
+            self._case(row)
+            for row in self._rows(
+                "select * from cases where org_id = ? order by created_at desc",
+                (org_id,),
+            )
+        ]
+
+    @staticmethod
+    def _case(row: sqlite3.Row) -> CaseRecord:
         return CaseRecord(
             case_id=row["case_id"],
             client_name=row["client_name"],
@@ -829,6 +1005,33 @@ class SqliteCaseRepository:
         )
         return True
 
+    def rename_api_key(self, org_id: str, key_id: str, name: str) -> bool:
+        if self.get_api_key(org_id, key_id) is None:
+            return False
+        self._write(
+            [
+                (
+                    "update api_keys set name = ? where key_id = ? and org_id = ?",
+                    (name, key_id, org_id),
+                )
+            ]
+        )
+        return True
+
+    def delete_api_key(self, org_id: str, key_id: str) -> bool:
+        if self.get_api_key(org_id, key_id) is None:
+            # Missing and another org's key are refused the same way.
+            return False
+        self._write(
+            [
+                (
+                    "delete from api_keys where key_id = ? and org_id = ?",
+                    (key_id, org_id),
+                )
+            ]
+        )
+        return True
+
     def touch_api_key(self, key_id: str, used_at: datetime) -> None:
         self._write(
             [
@@ -852,6 +1055,67 @@ class SqliteCaseRepository:
             last_used_at=row["last_used_at"],
             revoked_at=row["revoked_at"],
             created_at=row["created_at"],
+        )
+
+    # -- user profiles ------------------------------------------------------- #
+
+    def get_user_profile(self, user_id: str) -> UserProfile | None:
+        rows = self._rows(
+            "select * from user_profiles where user_id = ?", (user_id,)
+        )
+        if not rows:
+            return None
+        row = rows[0]
+
+        def flag(column: str, default: bool) -> bool:
+            # Rows written before the column existed hold NULL: the default rules.
+            value = row[column]
+            return default if value is None else bool(value)
+
+        return UserProfile(
+            user_id=row["user_id"],
+            full_name=row["full_name"],
+            job_title=row["job_title"],
+            phone=row["phone"],
+            avatar=row["avatar"],
+            gender=row["gender"],
+            date_of_birth=row["date_of_birth"],
+            location=row["location"],
+            license_number=row["license_number"],
+            language=row["language"],
+            notify_case_ready=flag("notify_case_ready", True),
+            notify_high_severity=flag("notify_high_severity", True),
+            notify_weekly_digest=flag("notify_weekly_digest", False),
+            updated_at=row["updated_at"],
+        )
+
+    def save_user_profile(self, profile: UserProfile) -> None:
+        self._write(
+            [
+                (
+                    "insert or replace into user_profiles "
+                    "(user_id, full_name, job_title, phone, avatar, gender, "
+                    "date_of_birth, location, license_number, language, "
+                    "notify_case_ready, notify_high_severity, notify_weekly_digest, "
+                    "updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        profile.user_id,
+                        profile.full_name,
+                        profile.job_title,
+                        profile.phone,
+                        profile.avatar,
+                        profile.gender,
+                        profile.date_of_birth.isoformat() if profile.date_of_birth else None,
+                        profile.location,
+                        profile.license_number,
+                        profile.language,
+                        int(profile.notify_case_ready),
+                        int(profile.notify_high_severity),
+                        int(profile.notify_weekly_digest),
+                        _iso(profile.updated_at),
+                    ),
+                )
+            ]
         )
 
     # -- audit trail -------------------------------------------------------- #

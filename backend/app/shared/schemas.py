@@ -64,6 +64,7 @@ __all__ = [
     "OrgRole",
     "Organization",
     "OrganizationMember",
+    "OrgInvitation",
     "Provenance",
     "ReadinessComponent",
     "ReviewDecision",
@@ -72,6 +73,7 @@ __all__ = [
     "SeverityBreakdown",
     "Severity",
     "StatusBreakdown",
+    "UserProfile",
     "VerificationOutcome",
 ]
 
@@ -621,6 +623,26 @@ class OrganizationMember(TarazuModel):
     created_at: datetime
 
 
+class OrgInvitation(TarazuModel):
+    """An open door into one organization, cut by its owner.
+
+    The `code` is the credential: whoever presents it at signup joins
+    `org_id` with `role` instead of founding a new firm. Single use —
+    `accepted_at` closes the door — and revocable by deleting the row.
+    `email` records who it was meant for; the code is what admits.
+    """
+
+    invite_id: str = Field(min_length=1)
+    org_id: str = Field(min_length=1)
+    email: str = Field(min_length=3, max_length=200)
+    role: OrgRole = OrgRole.MEMBER
+    code: str = Field(min_length=6)
+    created_by: str = Field(min_length=1)
+    created_at: datetime
+    accepted_at: datetime | None = None
+    accepted_by: str | None = None
+
+
 # --------------------------------------------------------------------------- #
 # API keys
 #
@@ -656,9 +678,9 @@ class ApiKeyRecord(TarazuModel):
     it, and in the customer's own secret store. It is never written to the
     database and never logged.
 
-    A key is revoked, never deleted. `revoked_at` is what makes it stop working;
-    the row stays so that "which key did this, and when did we turn it off"
-    remains answerable long afterwards.
+    Revoking and deleting are different acts: `revoked_at` makes a key stop
+    working while the row stays answerable; deletion removes the row for good
+    and is confirmed as such in the UI.
     """
 
     key_id: str = Field(min_length=1)
@@ -692,6 +714,40 @@ class ApiKeyRecord(TarazuModel):
     def _unique_scopes(cls, scopes: list[ApiKeyScope]) -> list[ApiKeyScope]:
         """Deduplicate, and order them the same way every time they are stored."""
         return [scope for scope in ApiKeyScope if scope in set(scopes)]
+
+
+class UserProfile(TarazuModel):
+    """A person's editable profile, as stored. Keyed by user, not organization.
+
+    Identity (email, password) lives in the identity store; this is the
+    presentational layer on top — a display name, a picture, contact details.
+    Nothing here participates in authentication or authorization, and none of
+    it appears in the audit trail, which names users by id.
+
+    `avatar` is a `data:image/...` URL, size-capped at the API boundary, so
+    the picture works identically on both backing stores without a file
+    storage dependency.
+    """
+
+    user_id: str = Field(min_length=1)
+    full_name: str | None = None
+    job_title: str | None = None
+    phone: str | None = None
+    avatar: str | None = None
+    # -- personal (all optional, all cosmetic) ------------------------------ #
+    gender: str | None = None
+    date_of_birth: Date | None = None
+    location: str | None = None
+    # -- professional -------------------------------------------------------- #
+    #: Practicing license or institute membership number (ICAP, ACCA, ...).
+    license_number: str | None = None
+    # -- preferences --------------------------------------------------------- #
+    #: Preferred language for explanations: "en" or "ur".
+    language: str | None = None
+    notify_case_ready: bool = True
+    notify_high_severity: bool = True
+    notify_weekly_digest: bool = False
+    updated_at: datetime | None = None
 
 
 # --------------------------------------------------------------------------- #

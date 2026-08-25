@@ -27,16 +27,26 @@ import type {
   ApiKeyScope,
   ApiKeySummary,
   AuditRecord,
+  AuditTrailResponse,
+  CaseListResponse,
+  CaseSummary,
   CreatedApiKeyResponse,
   DashboardSummary,
   DecisionResponse,
+  DeletedApiKeyResponse,
+  InvitationListResponse,
+  InvitationSummary,
+  MembersResponse,
+  OrgRole,
   LoginResponse,
   ReviewItem,
   ReviewItemFilters,
   ReviewItemsResponse,
   SignupResponse,
+  UpdateProfileRequest,
   UploadFiles,
   UploadResponse,
+  UserProfile,
 } from "./types";
 
 const API_URL = (process.env.NEXT_PUBLIC_TARAZU_API_URL ?? "").replace(/\/+$/, "");
@@ -162,6 +172,47 @@ function applyFilters(items: ReviewItem[], filters?: ReviewItemFilters): ReviewI
 }
 
 // --------------------------------------------------------------------------
+// The active case — which engagement the workspace screens are about
+// --------------------------------------------------------------------------
+
+const ACTIVE_CASE_KEY = "tarazu.active-case";
+
+/**
+ * The case the user selected on the Cases screen, or null for "the most
+ * recent" (the backend's default). Per browser; the backend never trusts it
+ * beyond its own tenancy check on the id.
+ */
+export function getActiveCaseId(): string | null {
+  try {
+    return window.localStorage.getItem(ACTIVE_CASE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setActiveCaseId(caseId: string | null): void {
+  try {
+    if (caseId === null) window.localStorage.removeItem(ACTIVE_CASE_KEY);
+    else window.localStorage.setItem(ACTIVE_CASE_KEY, caseId);
+  } catch {
+    // Storage unavailable: every screen falls back to the latest case.
+  }
+}
+
+/** True when a 404 came from the *saved* selection rather than the caller's
+ * explicit case id — in which case the selection is stale and gets cleared. */
+function staleActiveCase(
+  caught: unknown,
+  explicitCaseId: string | undefined,
+  usedCaseId: string | null,
+): boolean {
+  if (explicitCaseId || !usedCaseId) return false;
+  if (!(caught instanceof ApiError) || caught.status !== 404) return false;
+  setActiveCaseId(null);
+  return true;
+}
+
+// --------------------------------------------------------------------------
 // The client — one typed function per screen need
 // --------------------------------------------------------------------------
 
@@ -171,12 +222,28 @@ export async function getReviewItems(
 ): Promise<ReviewItemsResponse> {
   if (!FIXTURE_MODE) {
     const params = new URLSearchParams();
-    if (filters?.case_id) params.set("case_id", filters.case_id);
+    const caseId = filters?.case_id ?? getActiveCaseId();
+    if (caseId) params.set("case_id", caseId);
     if (filters?.decision) params.set("decision", filters.decision);
     if (filters?.match_status) params.set("match_status", filters.match_status);
     if (filters?.flagged !== undefined) params.set("flagged", String(filters.flagged));
     const query = params.toString();
-    return request<ReviewItemsResponse>(`/v1/review-items${query ? `?${query}` : ""}`);
+    try {
+      return await request<ReviewItemsResponse>(
+        `/v1/review-items${query ? `?${query}` : ""}`,
+      );
+    } catch (caught) {
+      // A stale saved selection (case deleted, different login) must not
+      // wedge every screen: drop it and fall back to the latest case.
+      if (staleActiveCase(caught, filters?.case_id, caseId)) {
+        params.delete("case_id");
+        const retry = params.toString();
+        return request<ReviewItemsResponse>(
+          `/v1/review-items${retry ? `?${retry}` : ""}`,
+        );
+      }
+      throw caught;
+    }
   }
   await sleep(FIXTURE_LATENCY_MS);
   const items = applyFilters(fixtureStore.items, filters);
@@ -191,8 +258,16 @@ export async function getReviewItems(
 /** GET /v1/dashboard — every number counted from deterministic results. */
 export async function getDashboard(caseId?: string): Promise<DashboardSummary> {
   if (!FIXTURE_MODE) {
-    const query = caseId ? `?case_id=${encodeURIComponent(caseId)}` : "";
-    return request<DashboardSummary>(`/v1/dashboard${query}`);
+    const effective = caseId ?? getActiveCaseId();
+    const query = effective ? `?case_id=${encodeURIComponent(effective)}` : "";
+    try {
+      return await request<DashboardSummary>(`/v1/dashboard${query}`);
+    } catch (caught) {
+      if (staleActiveCase(caught, caseId, effective)) {
+        return request<DashboardSummary>("/v1/dashboard");
+      }
+      throw caught;
+    }
   }
   await sleep(FIXTURE_LATENCY_MS);
   // Recount the decision figures from the store so approvals made during the
@@ -269,6 +344,48 @@ export async function getReviewItemAudit(reviewItemId: string): Promise<AuditRec
   }
   await sleep(FIXTURE_LATENCY_MS);
   return clone(fixtureStore.audit.filter((r) => r.item_id === reviewItemId));
+}
+
+/** GET /v1/cases — the organization's engagements, newest first. */
+export async function listCases(): Promise<CaseListResponse> {
+  if (!FIXTURE_MODE) return request<CaseListResponse>("/v1/cases");
+  await sleep(FIXTURE_LATENCY_MS);
+  const summary: CaseSummary = {
+    case_id: reviewItemsFixture.case_id,
+    client_name: (dashboardFixture as { client_name: string }).client_name,
+    period_start: (dashboardFixture as { period_start: string | null }).period_start,
+    period_end: (dashboardFixture as { period_end: string | null }).period_end,
+    status: "ready_for_review",
+    status_detail: null,
+    created_by: DEMO_USER_ID,
+    created_at: "2026-06-19T09:00:00Z",
+    total_review_items: fixtureStore.items.length,
+    pending_items: fixtureStore.items.filter((i) => i.decision === "pending").length,
+    flagged_items: fixtureStore.items.filter((i) => i.flags.length > 0).length,
+  };
+  return { total: 1, cases: [summary] };
+}
+
+/** GET /v1/audit-trail — the whole case's immutable trail, oldest first. */
+export async function getAuditTrail(caseId?: string): Promise<AuditTrailResponse> {
+  if (!FIXTURE_MODE) {
+    const effective = caseId ?? getActiveCaseId();
+    const query = effective ? `?case_id=${encodeURIComponent(effective)}` : "";
+    try {
+      return await request<AuditTrailResponse>(`/v1/audit-trail${query}`);
+    } catch (caught) {
+      if (staleActiveCase(caught, caseId, effective)) {
+        return request<AuditTrailResponse>("/v1/audit-trail");
+      }
+      throw caught;
+    }
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  return {
+    case_id: reviewItemsFixture.case_id,
+    total: fixtureStore.audit.length,
+    records: clone(fixtureStore.audit),
+  };
 }
 
 /** POST /v1/upload — store, extract, match, flag, and save a case. */
@@ -357,7 +474,7 @@ export async function generateReport(kind: "pdf" | "excel"): Promise<never> {
   await sleep(600);
   throw new ApiError(
     501,
-    "Report generation needs the live backend — POST /v1/reports is not implemented yet.",
+    "Report generation needs the live backend. POST /v1/reports is not implemented yet.",
   );
 }
 
@@ -389,11 +506,15 @@ export async function login(email: string, password: string): Promise<LoginRespo
   };
 }
 
-/** POST /v1/auth/signup. Creates the user, their firm, and their membership. */
+/**
+ * POST /v1/auth/signup. Founds a firm — or, with an invite code from an
+ * owner, joins theirs with the role the invitation carries.
+ */
 export async function signup(
   email: string,
   password: string,
   organizationName: string,
+  inviteCode?: string,
 ): Promise<SignupResponse> {
   if (!FIXTURE_MODE) {
     return request<SignupResponse>("/v1/auth/signup", {
@@ -401,7 +522,9 @@ export async function signup(
       body: JSON.stringify({
         email,
         password,
-        organization_name: organizationName,
+        ...(inviteCode?.trim()
+          ? { invite_code: inviteCode.trim() }
+          : { organization_name: organizationName }),
       }),
     });
   }
@@ -416,6 +539,189 @@ export async function signup(
     organization_name: organizationName.trim() || "Demo Audit Firm",
     role: "owner",
   };
+}
+
+/**
+ * POST /v1/auth/change-password. Requires the current password; only a
+ * signed-in person can call it (never an API key). In fixture mode the change
+ * is simulated so the flow is demoable offline.
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ message: string }> {
+  if (!FIXTURE_MODE) {
+    return request<{ message: string }>("/v1/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    });
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  if (!currentPassword) {
+    throw new ApiError(400, "The current password is incorrect.");
+  }
+  if (newPassword.length < 8) {
+    throw new ApiError(422, "Password must be at least 8 characters.");
+  }
+  if (newPassword === currentPassword) {
+    throw new ApiError(400, "The new password must be different from the current one.");
+  }
+  return {
+    message:
+      "Password changed. Sessions that are already signed in stay valid " +
+      "until they expire; new sign-ins need the new password.",
+  };
+}
+
+// --------------------------------------------------------------------------
+// Members and invitations — who is inside the firm, and how people join
+// --------------------------------------------------------------------------
+
+/** Fixture invitations, so the members screen works offline too. */
+const fixtureInvitations: InvitationSummary[] = [];
+let fixtureInviteSequence = 0;
+
+/** GET /v1/members — everyone with access to this organization. */
+export async function listMembers(): Promise<MembersResponse> {
+  if (!FIXTURE_MODE) return request<MembersResponse>("/v1/members");
+  await sleep(FIXTURE_LATENCY_MS);
+  return {
+    total: 1,
+    members: [
+      {
+        user_id: DEMO_USER_ID,
+        email: "demo@tarazu.pk",
+        role: "owner",
+        created_at: "2026-06-01T09:00:00Z",
+      },
+    ],
+  };
+}
+
+/** POST /v1/members/invites — cut a single-use join code. Owner only. */
+export async function inviteMember(
+  email: string,
+  role: OrgRole,
+): Promise<InvitationSummary> {
+  if (!email.trim()) throw new ApiError(422, "The invitation needs an email.");
+  if (!FIXTURE_MODE) {
+    return request<InvitationSummary>("/v1/members/invites", {
+      method: "POST",
+      body: JSON.stringify({ email: email.trim(), role }),
+    });
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  fixtureInviteSequence += 1;
+  const invitation: InvitationSummary = {
+    invite_id: `INV-fixture${String(fixtureInviteSequence).padStart(4, "0")}`,
+    email: email.trim(),
+    role,
+    code: `TZ-${randomHex(8).toUpperCase()}`,
+    created_by: DEMO_USER_ID,
+    created_at: new Date().toISOString(),
+    accepted_at: null,
+    accepted_by: null,
+    accepted: false,
+  };
+  fixtureInvitations.unshift(invitation);
+  return clone(invitation);
+}
+
+/** GET /v1/members/invites — open and accepted invitations. Owner only. */
+export async function listInvitations(): Promise<InvitationListResponse> {
+  if (!FIXTURE_MODE) return request<InvitationListResponse>("/v1/members/invites");
+  await sleep(FIXTURE_LATENCY_MS / 3);
+  return { total: fixtureInvitations.length, invitations: clone(fixtureInvitations) };
+}
+
+/** DELETE /v1/members/invites/{id} — revoke; returns the remaining list. */
+export async function revokeInvitation(
+  inviteId: string,
+): Promise<InvitationListResponse> {
+  if (!FIXTURE_MODE) {
+    return request<InvitationListResponse>(
+      `/v1/members/invites/${encodeURIComponent(inviteId)}`,
+      { method: "DELETE" },
+    );
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  const index = fixtureInvitations.findIndex((i) => i.invite_id === inviteId);
+  if (index === -1) throw new ApiError(404, `No invitation ${inviteId}`);
+  fixtureInvitations.splice(index, 1);
+  return { total: fixtureInvitations.length, invitations: clone(fixtureInvitations) };
+}
+
+// --------------------------------------------------------------------------
+// User profile — the signed-in person's editable presentation
+// --------------------------------------------------------------------------
+
+/** Fixture profile, per browser via localStorage so edits survive reloads. */
+const PROFILE_STORAGE_KEY = "tarazu.fixture-profile";
+
+function readFixtureProfile(): UserProfile {
+  const empty: UserProfile = {
+    user_id: DEMO_USER_ID,
+    full_name: null,
+    job_title: null,
+    phone: null,
+    avatar: null,
+    gender: null,
+    date_of_birth: null,
+    location: null,
+    license_number: null,
+    language: null,
+    notify_case_ready: true,
+    notify_high_severity: true,
+    notify_weekly_digest: false,
+  };
+  try {
+    const raw = window.localStorage.getItem(PROFILE_STORAGE_KEY);
+    return raw ? { ...empty, ...(JSON.parse(raw) as UserProfile) } : empty;
+  } catch {
+    return empty;
+  }
+}
+
+/** GET /v1/profile — the caller's own profile; all-null when never saved. */
+export async function getProfile(): Promise<UserProfile> {
+  if (!FIXTURE_MODE) return request<UserProfile>("/v1/profile");
+  await sleep(FIXTURE_LATENCY_MS / 3);
+  return readFixtureProfile();
+}
+
+/** PUT /v1/profile — full replacement; omitted or blank fields are cleared. */
+export async function saveProfile(update: UpdateProfileRequest): Promise<UserProfile> {
+  if (!FIXTURE_MODE) {
+    return request<UserProfile>("/v1/profile", {
+      method: "PUT",
+      body: JSON.stringify(update),
+    });
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  const profile: UserProfile = {
+    user_id: DEMO_USER_ID,
+    full_name: update.full_name?.trim() || null,
+    job_title: update.job_title?.trim() || null,
+    phone: update.phone?.trim() || null,
+    avatar: update.avatar || null,
+    gender: update.gender?.trim() || null,
+    date_of_birth: update.date_of_birth || null,
+    location: update.location?.trim() || null,
+    license_number: update.license_number?.trim() || null,
+    language: update.language || null,
+    notify_case_ready: update.notify_case_ready ?? true,
+    notify_high_severity: update.notify_high_severity ?? true,
+    notify_weekly_digest: update.notify_weekly_digest ?? false,
+  };
+  try {
+    window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+  } catch {
+    // Storage unavailable: the profile still holds for this visit.
+  }
+  return profile;
 }
 
 // --------------------------------------------------------------------------
@@ -481,7 +787,7 @@ export async function createApiKey(
     api_key: raw,
     key: clone(key),
     message:
-      "Save this key now — it is shown once and cannot be retrieved again. " +
+      "Save this key now: it is shown once and cannot be retrieved again. " +
       "Store it in your integration's secret store, never in source control.",
   };
 }
@@ -504,4 +810,39 @@ export async function revokeApiKey(keyId: string): Promise<ApiKeySummary> {
     key.revoked_at = new Date().toISOString();
   }
   return clone(key);
+}
+
+/** PATCH /v1/api-keys/{key_id} — rename. The one editable thing about a key. */
+export async function renameApiKey(keyId: string, name: string): Promise<ApiKeySummary> {
+  if (!name.trim()) throw new ApiError(422, "The key needs a name.");
+  if (!FIXTURE_MODE) {
+    return request<ApiKeySummary>(`/v1/api-keys/${encodeURIComponent(keyId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: name.trim() }),
+    });
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  const key = fixtureApiKeys.find((candidate) => candidate.key_id === keyId);
+  if (!key) throw new ApiError(404, `No API key ${keyId}`);
+  key.name = name.trim();
+  return clone(key);
+}
+
+/**
+ * DELETE /v1/api-keys/{key_id}/record — permanently remove the key's row,
+ * active or revoked. Deleting an active key stops it immediately: the backend
+ * authenticates keys by hash, and the hash goes with the row.
+ */
+export async function deleteApiKey(keyId: string): Promise<DeletedApiKeyResponse> {
+  if (!FIXTURE_MODE) {
+    return request<DeletedApiKeyResponse>(
+      `/v1/api-keys/${encodeURIComponent(keyId)}/record`,
+      { method: "DELETE" },
+    );
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  const index = fixtureApiKeys.findIndex((candidate) => candidate.key_id === keyId);
+  if (index === -1) throw new ApiError(404, `No API key ${keyId}`);
+  fixtureApiKeys.splice(index, 1);
+  return { key_id: keyId, deleted: true };
 }

@@ -52,7 +52,7 @@ export function MatchStrengthBadge({ strength }: { strength: MatchStrength }) {
   return (
     <span
       className={cn("inline-flex items-center gap-1.5 text-xs font-medium", levelTint[strength])}
-      title="Match strength — computed by the deterministic matcher, never by AI"
+      title="Match strength: computed by the deterministic matcher, never by AI"
     >
       <span className="inline-flex items-center gap-0.5" aria-hidden>
         {[1, 2, 3].map((step) => (
@@ -80,7 +80,7 @@ export function ConfidenceBadge({ confidence }: { confidence: Confidence }) {
   return (
     <BaseBadge
       className={confidenceStyles[confidence]}
-      title="Extraction confidence — how sure the AI is that it read the value correctly"
+      title="Extraction confidence: how sure the AI is that it read the value correctly"
     >
       AI: <span className="capitalize">{confidence}</span>
     </BaseBadge>

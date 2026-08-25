@@ -238,6 +238,88 @@ for an unknown key **or one belonging to another organization**.
 
 ---
 
+### `PATCH /v1/api-keys/{key_id}`
+
+Requires a signed-in person. Renames the key — the one editable thing about
+it. Scopes are fixed for a key's lifetime: to change what a key may do, create
+a new key and delete this one.
+
+**Request**
+
+```json
+{ "name": "n8n automation (renamed)" }
+```
+
+**Response `200`** — the key's summary with the new name.
+
+**Errors** — `401` without a session, `403` if presented with an API key, `404`
+for an unknown key **or one belonging to another organization**, `422` for an
+empty name or one over 100 characters.
+
+---
+
+### `DELETE /v1/api-keys/{key_id}/record`
+
+Requires a signed-in person. Permanently removes the key's row — active or
+revoked. Deleting an active key stops it immediately: authentication finds
+keys by hash, and the hash goes with the row.
+
+What deletion costs is history: the audit trail's `api-key:<prefix>` entries
+stay in the trail (the trail itself is append-only and untouched) but stop
+resolving to a name, a creator, and a date. An organization that wants a
+turned-off key to stay on the books revokes instead of deleting.
+
+**Response `200`**
+
+```json
+{ "key_id": "AK-e6accd1c0b16", "deleted": true }
+```
+
+**Errors** — `401` without a session, `403` if presented with an API key, `404`
+for an unknown key **or one belonging to another organization**.
+
+---
+
+### `GET /v1/profile` and `PUT /v1/profile`
+
+Requires a signed-in person; an API key is `403` on both. The profile is
+presentation only — a display name, a picture, contact details. Nothing in it
+feeds authentication, tenancy, or the audit trail, which names users by id.
+There is no `{user_id}` in the path: a profile is reachable only by the
+person it belongs to.
+
+**`PUT` request** — a full replacement; an omitted or blank field is cleared:
+
+```json
+{
+  "full_name": "Haroon Sajid",
+  "job_title": "Audit Partner",
+  "phone": "+92 300 1234567",
+  "avatar": "data:image/jpeg;base64,..."
+}
+```
+
+`avatar` must be a `data:image/(png|jpeg|webp);base64,...` URL of at most
+400,000 characters (~300 KB decoded); anything else is `422`.
+
+**Response `200`** (both routes) — the stored profile; a person who never
+saved one gets all-null fields, not a `404`:
+
+```json
+{
+  "user_id": "8f3a2c19-4d5e-4b7a-9c11-2e6f8a0d4b33",
+  "full_name": "Haroon Sajid",
+  "job_title": "Audit Partner",
+  "phone": "+92 300 1234567",
+  "avatar": "data:image/jpeg;base64,..."
+}
+```
+
+Backing storage: SQLite `user_profiles` (created automatically) or Supabase
+`user_profiles` from `infra/supabase/0004-user-profiles.sql`.
+
+---
+
 ### Trying it with curl
 
 ```bash
@@ -339,9 +421,20 @@ highlights the matching text instead.
 | `GET` | `/health` | Liveness. No auth. | Live |
 | `POST` | `/v1/auth/signup` | Create an account and the organization it owns | Live |
 | `POST` | `/v1/auth/login` | Sign in | Live |
+| `POST` | `/v1/auth/change-password` | Change the signed-in user's password | Live |
 | `POST` | `/v1/api-keys` | Create an API key (returned once) | Live |
 | `GET` | `/v1/api-keys` | List this organization's API keys | Live |
+| `GET` | `/v1/cases` | List this organization's cases with working counts | Live |
+| `GET` | `/v1/audit-trail` | One case's full audit trail (`?case_id=`, defaults to latest) | Live |
+| `GET` | `/v1/profile` | The signed-in person's profile | Live |
+| `PUT` | `/v1/profile` | Replace the signed-in person's profile | Live |
+| `GET` | `/v1/members` | Everyone with access to this organization | Live |
+| `POST` | `/v1/members/invites` | Cut a single-use join code (owner only) | Live |
+| `GET` | `/v1/members/invites` | List invitations (owner only) | Live |
+| `DELETE` | `/v1/members/invites/{invite_id}` | Revoke an invitation (owner only) | Live |
+| `PATCH` | `/v1/api-keys/{key_id}` | Rename an API key | Live |
 | `DELETE` | `/v1/api-keys/{key_id}` | Revoke an API key | Live |
+| `DELETE` | `/v1/api-keys/{key_id}/record` | Delete an API key permanently | Live |
 | `POST` | `/v1/upload` | Store, extract, match, flag, and save a case | Live |
 | `GET` | `/v1/review-items` | The human review queue | Live |
 | `POST` | `/v1/review-items/{id}/approve` | Record a human approval | Live |
@@ -443,6 +536,41 @@ whole multi-tenant flow runs with no network.
 
 **Errors** — `401` for wrong credentials, deliberately byte-identical whether
 the email exists or not.
+
+---
+
+### `POST /v1/auth/change-password`
+
+Replaces the caller's own password. Requires a signed-in person's Bearer token;
+an API key is refused with `403` — a machine credential that could rotate its
+creator's password would turn one leaked key into a stolen account.
+
+The current password must be presented and verified, so an unattended signed-in
+browser is not enough to lock the owner out. Tokens already issued stay valid
+until they expire: a token says who you are, and who you are has not changed.
+
+**Request**
+
+```json
+{
+  "current_password": "the-password-today",
+  "new_password": "at-least-8-characters"
+}
+```
+
+**Response `200`**
+
+```json
+{
+  "message": "Password changed. Sessions that are already signed in stay valid until they expire; new sign-ins need the new password."
+}
+```
+
+**Errors** — `400` for a wrong current password (one message, whether the
+password was wrong or the account has no local password record), `400` when the
+new password equals the current one, `422` for a new password under 8
+characters, `401` with no token, `403` for an API key. Neither password is ever
+logged or stored in clear.
 
 ---
 
@@ -746,7 +874,7 @@ figure on this screen is produced or estimated by a model.
 ```json
 {
   "case_id": "CASE-2026-06-STX",
-  "client_name": "Sethi Textiles (Pvt) Ltd",
+  "client_name": "Haroon Textiles",
   "period_start": "2026-06-01",
   "period_end": "2026-06-30",
   "total_review_items": 10,

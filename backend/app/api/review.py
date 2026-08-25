@@ -7,7 +7,7 @@ the immutable audit trail before the response is returned.
 
 Every lookup in this file is scoped to the caller's organization, and a review
 item outside it is `404` rather than `403`. That is deliberate: a `403` would
-confirm that a firm called Sethi Textiles has an item `RI-0007`, which is itself
+confirm that a firm called Haroon Textiles has an item `RI-0007`, which is itself
 a disclosure. From outside the organization, the item does not exist.
 
 A decision may also arrive from an integration holding a `write`-scoped API key.
