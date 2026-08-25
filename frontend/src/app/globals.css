@@ -3,7 +3,7 @@
 /*
  * Tarazu — AI Audit Assistant design tokens.
  * Light, calm, auditor-grade: teal brand, white surfaces, restrained badges.
- * Desktop only by decision — no mobile styles (hackathon plan).
+ * Responsive audit workspace tokens and shared layout adjustments.
  */
 @theme {
   --color-brand-50: #f0fdfa;
@@ -64,4 +64,96 @@ body {
 /* Money and ids read better tabular. */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+/* Keep dense desktop layouts readable on tablets and phones. Individual
+ * screens can still opt into more specialized layouts when needed. */
+@media (max-width: 1023px) {
+  .grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .grid-cols-3 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .col-span-2 {
+    grid-column: span 1 / span 1 !important;
+  }
+}
+
+@media (max-width: 767px) {
+  body {
+    min-width: 0;
+  }
+
+  /* An icon rail preserves every destination while giving content the full
+   * phone width. Tooltips supplied by the links retain the labels. */
+  aside {
+    width: 4rem !important;
+  }
+
+  aside > div:first-child {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  aside nav,
+  aside > div:last-child {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  aside nav a {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  aside nav a > svg + span,
+  aside nav a:not(:has(svg)) {
+    display: none;
+  }
+
+  main {
+    padding: 1rem !important;
+  }
+
+  header {
+    min-height: 3.5rem;
+    height: auto !important;
+    padding: 0.75rem 1rem !important;
+  }
+
+  header > div {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .grid-cols-4 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .flex.items-end.justify-between {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .overflow-x-auto {
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

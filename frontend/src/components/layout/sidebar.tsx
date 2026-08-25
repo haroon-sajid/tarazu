@@ -28,7 +28,7 @@ const navItems = [
   { href: "/review", label: "Review", icon: TableProperties },
   { href: "/assistant", label: "Assistant", icon: MessageSquare },
   { href: "/audit-trail", label: "Audit trail", icon: ShieldCheck },
-  { href: "/report", label: "Reports", icon: FileText },
+  { href: "/reports", label: "Reports", icon: FileText },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -38,13 +38,25 @@ export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = React.useState(false);
 
-  // Restore the saved state after mount so server and first client render agree.
+  // Restore the saved state after mount and keep the rail in sync with
+  // viewport changes, including resizing an already-open desktop window.
   React.useEffect(() => {
-    try {
-      setCollapsed(window.localStorage.getItem(COLLAPSED_KEY) === "collapsed");
-    } catch {
-      // Storage can be unavailable; stay expanded.
-    }
+    const syncToViewport = () => {
+      if (window.innerWidth < 768) {
+        setCollapsed(true);
+        return;
+      }
+
+      try {
+        setCollapsed(window.localStorage.getItem(COLLAPSED_KEY) === "collapsed");
+      } catch {
+        setCollapsed(false);
+      }
+    };
+
+    syncToViewport();
+    window.addEventListener("resize", syncToViewport);
+    return () => window.removeEventListener("resize", syncToViewport);
   }, []);
 
   const toggle = () =>
