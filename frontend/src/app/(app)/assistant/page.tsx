@@ -209,9 +209,9 @@ export default function AssistantPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-6.5rem)] flex-col">
-      <div className="mb-4 flex items-end justify-between">
-        <div>
+    <div className="flex h-full w-full flex-col gap-4 overflow-hidden">
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
           <h1 className="text-xl font-bold text-ink-900">Assistant</h1>
           <p className="mt-1 text-sm text-ink-600">
             Ask about this case in plain language, English or Urdu. Answers
@@ -220,16 +220,16 @@ export default function AssistantPage() {
           </p>
         </div>
         <span
-          className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-sky-700 ring-1 ring-sky-200"
+          className="animate-glow-pulse shrink-0 rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-sky-700 ring-1 ring-sky-200"
           title="Responses are composed in the frontend from real case data until the assistant module ships. Every number and citation is real."
         >
           PREVIEW
         </span>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="card-3d flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         {/* Transcript */}
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 md:p-5">
           {items === null ? (
             <div className="space-y-3">
               <Skeleton className="h-16 w-2/3" />
@@ -238,7 +238,7 @@ export default function AssistantPage() {
             </div>
           ) : messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center">
-              <span className="mb-3 rounded-full bg-brand-50 p-3 text-brand-700">
+              <span className="mb-3 rounded-full bg-brand-50 p-3 text-brand-700 transition-transform hover:scale-110">
                 <MessageSquare className="h-6 w-6" aria-hidden />
               </span>
               <p className="text-sm font-medium text-ink-900">
@@ -254,7 +254,7 @@ export default function AssistantPage() {
                   <button
                     key={suggestion}
                     onClick={() => ask(suggestion)}
-                    className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-800"
+                    className="hover-lift rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-ink-600 transition-all"
                   >
                     {suggestion}
                   </button>
@@ -266,7 +266,7 @@ export default function AssistantPage() {
               {messages.map((message) =>
                 message.role === "user" ? (
                   <div key={message.id} className="flex justify-end">
-                    <div className="max-w-[75%] rounded-2xl rounded-br-sm bg-brand-800 px-4 py-2.5">
+                    <div className="hover-lift max-w-[85%] rounded-2xl rounded-br-sm bg-linear-to-b from-brand-700 to-brand-800 px-4 py-2.5 shadow-md transition-all sm:max-w-[75%]">
                       {message.text && (
                         <p className="text-sm text-white">{message.text}</p>
                       )}
@@ -280,10 +280,10 @@ export default function AssistantPage() {
                           {message.attachments.map((attachment, index) => (
                             <span
                               key={index}
-                              className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] text-white ring-1 ring-white/25"
+                              className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5 text-[10px] text-white ring-1 ring-white/30 backdrop-blur-sm"
                             >
                               <FileText className="h-3 w-3" aria-hidden />
-                              {attachment.name}
+                              <span className="truncate max-w-xs">{attachment.name}</span>
                             </span>
                           ))}
                         </div>
@@ -294,10 +294,201 @@ export default function AssistantPage() {
                   <div key={message.id} className="flex justify-start">
                     <div
                       className={cn(
-                        "max-w-[85%] rounded-2xl rounded-bl-sm border px-4 py-3",
+                        "hover-lift max-w-[85%] rounded-2xl rounded-bl-sm border px-4 py-3 shadow-sm transition-all sm:max-w-[75%]",
                         message.reply?.grounded === false
                           ? "border-amber-200 bg-amber-50"
                           : "border-slate-200 bg-slate-50",
+                      )}
+                    >
+                      <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                        <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand-700" aria-hidden />
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                          Assistant
+                        </span>
+                        {message.reply && (
+                          <ConfidenceBadge confidence={message.reply.confidence} />
+                        )}
+                      </div>
+                      <p className="whitespace-pre-line text-sm leading-relaxed text-ink-900">
+                        {message.text}
+                      </p>
+                      {message.reply && message.reply.citations.length > 0 && (
+                        <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-slate-200 pt-2">
+                          {message.reply.citations.map((citation, index) => (
+                            <span
+                              key={index}
+                              title={citation.snippet ?? undefined}
+                              className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 font-mono text-[10px] text-ink-600 ring-1 ring-slate-200 hover-lift"
+                            >
+                              <FileText className="h-3 w-3 text-ink-400" aria-hidden />
+                              <span className="truncate">{citation.document_id}</span>
+                              {citation.page != null && ` · p.${citation.page}`}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ),
+              )}
+              {thinking && (
+                <div className="flex justify-start">
+                  <p className="flex items-center gap-2 rounded-2xl rounded-bl-sm border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-ink-400">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    Reading the case…
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Composer */}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            ask(draft);
+          }}
+          className="shrink-0 border-t border-slate-200 bg-white/50 backdrop-blur-sm p-3 transition-all md:p-4"
+        >
+          {attachments.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {attachments.map((attachment, index) => (
+                <span
+                  key={index}
+                  className="hover-lift inline-flex items-center gap-1.5 rounded-full bg-slate-100 py-1 pl-2.5 pr-1.5 text-xs text-ink-900 ring-1 ring-slate-200 transition-all"
+                >
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden />
+                  <span className="max-w-48 truncate">{attachment.name}</span>
+                  <span className="text-[10px] text-ink-400">
+                    {formatChipSize(attachment.size_bytes)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAttachments((current) =>
+                        current.filter((_, candidate) => candidate !== index),
+                      )
+                    }
+                    aria-label={`Remove ${attachment.name}`}
+                    className="rounded-full p-0.5 text-ink-400 transition-all hover:scale-110 hover:bg-slate-200 hover:text-ink-900"
+                  >
+                    <X className="h-3 w-3" aria-hidden />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={items === null || attachments.length >= MAX_ATTACHMENTS}
+              title="Attach documents"
+              aria-label="Attach documents"
+              className={cn(
+                "btn-interactive flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-ink-400 transition-all",
+                "hover:border-brand-600 hover:text-brand-800 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40",
+              )}
+            >
+              <Paperclip className="h-4 w-4" aria-hidden />
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              accept={ACCEPTED_FILES}
+              className="hidden"
+              onChange={(event) => {
+                addFiles(event.target.files);
+                event.target.value = "";
+              }}
+            />
+
+            <input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder={
+                recording
+                  ? "Listening… speak your question"
+                  : "Ask about flags, matches, Benford…"
+              }
+              aria-label="Ask the assistant"
+              disabled={items === null}
+              className={cn(
+                "h-10 min-w-0 flex-1 rounded-lg border bg-white px-3.5 text-sm text-ink-900",
+                "placeholder:text-ink-400 focus:outline-none focus:ring-1 transition-all",
+                recording
+                  ? "border-rose-400 focus:border-rose-400 focus:ring-rose-400"
+                  : "border-slate-300 focus:border-brand-600 focus:ring-brand-600",
+              )}
+            />
+
+            {speechSupported && (
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setVoiceLangIndex((current) => (current + 1) % VOICE_LANGS.length)
+                  }
+                  disabled={recording}
+                  title="Voice input language"
+                  aria-label={`Voice input language: ${VOICE_LANGS[voiceLangIndex].label}`}
+                  className={cn(
+                    "btn-interactive flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-xs font-semibold text-ink-600 transition-all",
+                    "hover:border-brand-600 hover:text-brand-800 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40",
+                  )}
+                >
+                  {VOICE_LANGS[voiceLangIndex].label}
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleRecording}
+                  disabled={items === null}
+                  title={recording ? "Stop listening" : "Speak your question"}
+                  aria-label={recording ? "Stop listening" : "Speak your question"}
+                  className={cn(
+                    "btn-interactive flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-all",
+                    recording
+                      ? "animate-pulse border-rose-400 bg-rose-50 text-rose-600"
+                      : "border-slate-300 text-ink-400 hover:border-brand-600 hover:text-brand-800 hover:scale-105",
+                  )}
+                >
+                  <Mic className="h-4 w-4" aria-hidden />
+                </button>
+              </>
+            )}
+
+            <button
+              type="submit"
+              disabled={
+                (!draft.trim() && attachments.length === 0) ||
+                thinking ||
+                items === null
+              }
+              aria-label="Send"
+              className={cn(
+                "btn-interactive flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-linear-to-b from-brand-700 to-brand-800 text-white transition-all",
+                "hover:from-brand-800 hover:to-brand-900 hover:scale-105 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40",
+              )}
+            >
+              <Send className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+
+          {speechError && (
+            <p className="mt-2 text-xs text-rose-600">{speechError}</p>
+          )}
+        </form>
+      </div>
+
+      <p className="text-center text-[10px] text-ink-400">
+        The assistant explains; it never decides. Voice is transcribed by your
+        browser; approvals and rejections happen only on the review screen.
+      </p>
+    </div>
+  );
                       )}
                     >
                       <div className="mb-1.5 flex items-center gap-2">

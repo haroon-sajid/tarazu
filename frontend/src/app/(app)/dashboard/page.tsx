@@ -38,7 +38,7 @@ function StatCard({
   tone?: "default" | "good" | "warn";
 }) {
   return (
-    <Card>
+    <Card className="hover-lift">
       <CardContent className="flex items-start justify-between px-5 py-4">
         <div>
           <p className="text-xs font-medium text-ink-400">{label}</p>
@@ -48,10 +48,10 @@ function StatCard({
         <span
           className={
             tone === "good"
-              ? "rounded-md bg-emerald-50 p-2 text-emerald-600"
+              ? "rounded-lg bg-gradient-to-br from-emerald-50 to-emerald-100 p-2.5 text-emerald-600 shadow-sm transition-transform hover:scale-110"
               : tone === "warn"
-                ? "rounded-md bg-purple-50 p-2 text-purple-600"
-                : "rounded-md bg-brand-50 p-2 text-brand-700"
+                ? "rounded-lg bg-gradient-to-br from-purple-50 to-purple-100 p-2.5 text-purple-600 shadow-sm transition-transform hover:scale-110"
+                : "rounded-lg bg-gradient-to-br from-brand-50 to-brand-100 p-2.5 text-brand-700 shadow-sm transition-transform hover:scale-110"
           }
         >
           <Icon className="h-5 w-5" aria-hidden />
@@ -135,13 +135,13 @@ export default function DashboardPage() {
   if (summary === null) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
             <Skeleton key={index} className="h-24" />
           ))}
         </div>
-        <div className="grid grid-cols-3 gap-4">
-          <Skeleton className="col-span-2 h-80" />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <Skeleton className="lg:col-span-2 h-80" />
           <Skeleton className="h-80" />
         </div>
       </div>
@@ -186,7 +186,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Total review items"
           value={String(summary.total_review_items)}
@@ -215,9 +215,9 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Benford */}
-        <Card className="col-span-2">
+        <Card className="hover-lift lg:col-span-2">
           <CardHeader>
             <CardTitle>Benford&apos;s Law: first-digit distribution</CardTitle>
           </CardHeader>
@@ -234,7 +234,7 @@ export default function DashboardPage() {
 
         {/* Readiness + data confidence */}
         <div className="space-y-4">
-          <Card>
+          <Card className="hover-lift">
             <CardHeader>
               <CardTitle>Audit readiness</CardTitle>
             </CardHeader>
@@ -259,7 +259,7 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="hover-lift">
             <CardHeader>
               <CardTitle>Data confidence</CardTitle>
             </CardHeader>
@@ -273,7 +273,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Next best actions */}
-      <Card>
+      <Card className="hover-lift">
         <CardHeader>
           <CardTitle>Next best actions</CardTitle>
         </CardHeader>
@@ -288,11 +288,11 @@ export default function DashboardPage() {
                 <li key={`${action.review_item_id}-${action.rule_id}-${index}`}>
                   <Link
                     href={`/review?item=${encodeURIComponent(action.review_item_id)}`}
-                    className="group flex items-center justify-between gap-3 py-2.5"
+                    className="group flex items-center justify-between gap-3 py-2.5 transition-all hover:pl-1"
                   >
                     <span className="flex min-w-0 items-center gap-3">
                       <SeverityBadge severity={action.severity} />
-                      <span className="truncate text-sm text-ink-900 group-hover:text-brand-800">
+                      <span className="truncate text-sm text-ink-900 transition-colors group-hover:text-brand-700">
                         {action.action}
                       </span>
                       <span className="shrink-0 font-mono text-[10px] text-ink-400">

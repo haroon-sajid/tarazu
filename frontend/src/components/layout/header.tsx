@@ -36,24 +36,24 @@ export function Header() {
   }, [pathname]);
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
-      <div className="flex items-center gap-3">
+    <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 px-6 backdrop-blur-sm transition-all duration-300 md:h-12 md:px-4">
+      <div className="flex items-center gap-3 min-w-0">
         {caseLabel && (
           <>
-            <span className="text-xs font-medium text-ink-400">Case:</span>
+            <span className="text-xs font-medium text-ink-400 hidden sm:inline">Case:</span>
             <Link
               href="/cases"
               title="Switch case"
-              className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-ink-900 transition-colors hover:border-brand-600 hover:text-brand-900"
+              className="hover-lift flex items-center gap-1.5 rounded-lg border border-slate-200 bg-gradient-to-b from-slate-50 to-white px-3 py-1.5 text-sm font-medium text-ink-900 transition-all"
             >
-              {caseLabel}
-              <ChevronsUpDown className="h-3.5 w-3.5 text-ink-400" aria-hidden />
+              <span className="truncate">{caseLabel}</span>
+              <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-ink-400 transition-transform group-hover:rotate-180" aria-hidden />
             </Link>
           </>
         )}
         {FIXTURE_MODE && (
           <span
-            className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-sky-700 ring-1 ring-sky-200"
+            className="animate-glow-pulse rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-sky-700 ring-1 ring-sky-200 whitespace-nowrap"
             title="NEXT_PUBLIC_TARAZU_API_URL is unset, so data comes from sample fixtures"
           >
             FIXTURE DATA
