@@ -109,11 +109,11 @@ export function Header() {
   };
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
-      <div className="flex items-center gap-3">
+    <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 px-6 backdrop-blur-sm transition-all duration-300">
+      <div className="flex min-w-0 items-center gap-3">
         {active && cases && cases.length > 0 && (
           <>
-            <span className="text-xs font-medium text-ink-400">Case:</span>
+            <span className="hidden text-xs font-medium text-ink-400 sm:inline">Case:</span>
             <div className="relative" ref={rootRef}>
               <button
                 type="button"
@@ -121,10 +121,10 @@ export function Header() {
                 title="Switch case"
                 aria-haspopup="listbox"
                 aria-expanded={open}
-                className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-ink-900 transition-colors hover:border-brand-600 hover:text-brand-900"
+                className="hover-lift flex items-center gap-1.5 rounded-lg border border-slate-200 bg-linear-to-b from-slate-50 to-white px-3 py-1.5 text-sm font-medium text-ink-900 transition-all hover:border-brand-600 hover:text-brand-900"
               >
                 <span className="max-w-56 truncate">{active.client_name}</span>
-                <ChevronsUpDown className="h-3.5 w-3.5 text-ink-400" aria-hidden />
+                <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden />
               </button>
               {open && (
                 <div className="absolute left-0 top-full z-40 mt-1.5 w-80 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
@@ -188,7 +188,7 @@ export function Header() {
         )}
         {FIXTURE_MODE && (
           <span
-            className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-sky-700 ring-1 ring-sky-200"
+            className="animate-glow-pulse rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-sky-700 ring-1 ring-sky-200 whitespace-nowrap"
             title="NEXT_PUBLIC_TARAZU_API_URL is unset, so data comes from sample fixtures"
           >
             FIXTURE DATA

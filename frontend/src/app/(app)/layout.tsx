@@ -31,12 +31,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-50">
       <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-y-auto px-6 py-6">
-          <Workspace>{children}</Workspace>
+        <main className="flex-1 overflow-hidden px-6 py-6 md:px-6 md:py-6 sm:px-4 sm:py-4 animate-float-in">
+          <div className="h-full w-full overflow-y-auto">
+            <Workspace>{children}</Workspace>
+          </div>
         </main>
       </div>
     </div>

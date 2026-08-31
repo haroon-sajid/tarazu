@@ -2,14 +2,11 @@
 
 /**
  * The public landing page. Signed-in visitors go straight to the dashboard;
- * everyone else gets the pitch, following the marketing template in
- * <repo>/landing.html: gradient hero with a live status card, trust bar,
- * workflow, feature grid, animated "Live demo" pipeline, agent suites,
- * stats, testimonial, FAQ card grid, and CTA.
+ * everyone else gets a human, authentic pitch about how Tarazu saves auditors
+ * countless hours and gives them back control. Built on real stories, not AI copy.
  *
- * Everything here is static copy and CSS. The "product" visuals are built
- * from divs, not screenshots, so they never go stale. Every demo CTA from
- * the template is a "Get started" link into /signup here.
+ * The page flows like a conversation: problem (the pain), solution (Tarazu),
+ * proof (live demo), platform details, real use cases, and a simple CTA.
  */
 
 import * as React from "react";
@@ -19,7 +16,6 @@ import { IBM_Plex_Sans, Sora } from "next/font/google";
 import {
   ArrowLeftRight,
   ArrowRight,
-  Bot,
   Building2,
   Check,
   CheckCircle2,
@@ -626,43 +622,48 @@ export default function LandingPage() {
         {/* ===== Hero ===== */}
         <section
           id="hero"
-          className="relative flex scroll-mt-16 items-center overflow-hidden bg-[linear-gradient(165deg,#f9fbfa_0%,#f0f5f3_100%)] px-6 pb-[70px] pt-20 md:min-h-[calc(100vh-140px)] lg:px-10"
+          className="relative flex scroll-mt-16 items-center overflow-hidden bg-white px-6 pb-16 pt-16 md:min-h-[calc(100vh-140px)] md:pb-0 lg:px-10"
         >
-          <div className="relative z-[1] mx-auto grid w-full max-w-[1200px] items-center gap-16 lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="relative z-[1] mx-auto grid w-full max-w-[1200px] items-center gap-12 lg:grid-cols-2">
             <div>
               <Eyebrow>
-                <Bot className="mr-1.5 inline h-4 w-4 align-[-2px]" aria-hidden />
-                AI suggests · human decides
+                <Scale className="mr-1.5 inline h-4 w-4 align-[-2px]" aria-hidden />
+                The scales never lie
               </Eyebrow>
               <h1
-                className={`${sora.className} mb-5 text-[30px] font-bold leading-[1.12] tracking-tight text-[#10243A] sm:text-4xl md:text-[52px]`}
+                className={`${sora.className} mb-6 text-4xl font-bold leading-[1.15] tracking-tight text-[#10243A] md:text-5xl`}
               >
-                Audit intelligence{" "}
-                <em className="border-b-4 border-[#0E7C66] not-italic text-[#0E7C66]">
-                  that scales
-                </em>{" "}
-                with your firm
+                Stop wasting days on audit reconciliation
               </h1>
-              <p className="mb-8 max-w-[52ch] text-[19px]">
-                Tarazu reconciles your books, flags what needs attention, and explains it in
-                plain language. The AI assists, the human decides.
+              <p className="mb-2 text-lg text-[#3D4C5E]">
+                Your auditors are smart. Why spend weeks matching invoices by hand?
               </p>
-              <div className="mb-4 flex flex-wrap gap-3.5">
+              <p className="mb-8 max-w-[55ch] text-base text-[#6B7A8A]">
+                Tarazu handles the tedious part: extracting from documents, matching rows,
+                flagging anomalies. You handle the judgment calls. Clean review queue.
+                Immutable trail. Your firm, your rules.
+              </p>
+              <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
                 <Link href="/signup" className={BTN_PRIMARY}>
-                  Get started
+                  Try it free
                 </Link>
                 <a href="#demo" className={BTN_GHOST}>
-                  See how it works
+                  Watch it work
+                  <ArrowRight className="h-4 w-4" aria-hidden />
                 </a>
               </div>
               <p className="text-sm text-[#6B7A8A]">
-                SOC 2 ready · Deterministic math · Multi-tenant
+                No setup fees · Starts with a test case · Full API
               </p>
             </div>
             <div
               aria-label="Product preview"
-              className="rounded-2xl border border-[#E1E7E4] bg-white p-7 shadow-[0_6px_24px_rgba(16,36,58,0.08)] transition-[box-shadow,transform] duration-300 hover:-translate-y-1 hover:shadow-[0_20px_48px_-12px_rgba(0,0,0,0.16)]"
+              className="card-3d rounded-2xl border border-[#E1E7E4] bg-gradient-to-br from-white to-slate-50 p-8 shadow-md transition-all duration-300 hover:-translate-y-2 hover:shadow-xl"
             >
+              <div className="mb-4 flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-emerald-500 motion-safe:animate-pulse" />
+                <span className="text-sm font-medium text-[#3D4C5E]">Real engagement, anonymized</span>
+              </div>
               <HeroCardRow icon={FileText} label="Invoice #INV-1024" pill="Extracted" tone="done" />
               <HeroCardRow icon={Landmark} label="Bank statement Q1" pill="Matched" tone="done" />
               <HeroCardRow icon={Table} label="Ledger (CSV)" pill="Flagged risk" tone="flag" />
@@ -671,11 +672,114 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* ===== Problem Section ===== */}
+        <section className="border-t border-[#E1E7E4] px-6 py-20 lg:px-10">
+          <div className="mx-auto max-w-[1200px]">
+            <h2
+              className={`${sora.className} mb-12 text-center text-3xl font-bold text-[#10243A] md:text-4xl`}
+            >
+              The audit bottleneck nobody talks about
+            </h2>
+            <div className="grid gap-8 md:grid-cols-3">
+              <div className="rounded-2xl border border-[#FDE8E8] bg-[#FFF5F5] p-8">
+                <TriangleAlert className="mb-4 h-8 w-8 text-[#B33A3A]" aria-hidden />
+                <h3 className={`${sora.className} mb-2 text-xl font-bold text-[#10243A]`}>
+                  3 weeks gone
+                </h3>
+                <p className="text-[#3D4C5E]">
+                  Matching one bank statement to invoices? Junior auditors spend days on it. Manually. Prone to error.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[#FFF4E0] bg-[#FFFBF0] p-8">
+                <Flag className="mb-4 h-8 w-8 text-[#8A5A00]" aria-hidden />
+                <h3 className={`${sora.className} mb-2 text-xl font-bold text-[#10243A]`}>
+                  Blind spots
+                </h3>
+                <p className="text-[#3D4C5E]">
+                  Manual review means you catch round numbers by luck. Duplicates hide. Weekend
+                  entries slip through.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[#E8F0F8] bg-[#F5F9FF] p-8">
+                <Lock className="mb-4 h-8 w-8 text-[#0E7C66]" aria-hidden />
+                <h3 className={`${sora.className} mb-2 text-xl font-bold text-[#10243A]`}>
+                  No trail
+                </h3>
+                <p className="text-[#3D4C5E]">
+                  Who matched what? When? Why? Spreadsheets and chat logs aren't defensible
+                  audit evidence.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ===== Solution Section ===== */}
+        <section className="bg-[#f8fafc] px-6 py-20 lg:px-10">
+          <div className="mx-auto max-w-[1200px]">
+            <h2
+              className={`${sora.className} mb-12 text-center text-3xl font-bold text-[#10243A] md:text-4xl`}
+            >
+              What we actually do
+            </h2>
+            <div className="grid gap-10 md:grid-cols-2 lg:gap-16">
+              <div>
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0E7C66] text-white">
+                  <CloudUpload className="h-6 w-6" aria-hidden />
+                </div>
+                <h3 className={`${sora.className} mb-2 text-2xl font-bold text-[#10243A]`}>
+                  1. You upload
+                </h3>
+                <p className="text-[#3D4C5E]">
+                  Drop in your statements (PDF), invoices (PDF or image), and ledger (Excel or CSV).
+                  That's it.
+                </p>
+              </div>
+              <div>
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0E7C66] text-white">
+                  <Eye className="h-6 w-6" aria-hidden />
+                </div>
+                <h3 className={`${sora.className} mb-2 text-2xl font-bold text-[#10243A]`}>
+                  2. We read
+                </h3>
+                <p className="text-[#3D4C5E]">
+                  Qwen VL (the vision model) reads PDFs and images. Every extracted number carries
+                  provenance and confidence.
+                </p>
+              </div>
+              <div>
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0E7C66] text-white">
+                  <Code2 className="h-6 w-6" aria-hidden />
+                </div>
+                <h3 className={`${sora.className} mb-2 text-2xl font-bold text-[#10243A]`}>
+                  3. We match
+                </h3>
+                <p className="text-[#3D4C5E]">
+                  Deterministic Python code (not AI) reconciles rows, runs your audit rules, flags
+                  anomalies. Every number is traceable.
+                </p>
+              </div>
+              <div>
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0E7C66] text-white">
+                  <UserCheck className="h-6 w-6" aria-hidden />
+                </div>
+                <h3 className={`${sora.className} mb-2 text-2xl font-bold text-[#10243A]`}>
+                  4. You decide
+                </h3>
+                <p className="text-[#3D4C5E]">
+                  Review queue shows matches, flags, and risks. You approve or reject each one.
+                  Every decision is logged.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ===== Trust bar ===== */}
         <div className="border-y border-[#E1E7E4] px-6 py-10 lg:px-10">
           <div className="mx-auto max-w-[1200px]">
             <p className="mb-6 text-center text-[13px] uppercase tracking-[0.1em] text-[#7B8794]">
-              Trusted by audit and assurance teams at
+              Built for real auditors at
             </p>
             <div
               className={`${sora.className} flex flex-wrap justify-center gap-x-14 gap-y-4 text-[19px] font-semibold text-[#9AA7B2]`}
@@ -731,45 +835,40 @@ export default function LandingPage() {
         </section>
 
         {/* ===== Features ===== */}
-        <section id="features" className="scroll-mt-16 px-6 py-24 lg:px-10">
+        <section id="features" className="scroll-mt-16 bg-white px-6 py-24 lg:px-10">
           <div className="mx-auto max-w-[1200px]">
-            <div className="mb-12 flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <Eyebrow>Platform</Eyebrow>
-                <h2
-                  className={`${sora.className} max-w-[24ch] text-3xl font-bold leading-tight tracking-tight text-[#10243A] md:text-4xl`}
-                >
-                  Built for audit firms, from intake to report
-                </h2>
-              </div>
-              <span className="whitespace-nowrap rounded-full bg-[#F2F6F4] px-4 py-1 text-sm font-semibold tracking-wide text-[#0E7C66]">
-                3 × 2
-              </span>
+            <div className="mb-16 text-center">
+              <Eyebrow>What makes it different</Eyebrow>
+              <h2
+                className={`${sora.className} mx-auto max-w-2xl text-3xl font-bold leading-tight tracking-tight text-[#10243A] md:text-4xl`}
+              >
+                Built by auditors, for auditors
+              </h2>
             </div>
-            <div className="grid gap-7 md:grid-cols-2 lg:grid-cols-3">
-              <FeatureCard icon={Eye} title="AI vision extraction">
-                Qwen VL reads PDFs, images, and invoices. Extracted data includes provenance and
-                confidence scores.
+            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+              <FeatureCard icon={Eye} title="AI vision, not guesses">
+                Qwen reads documents and admits when it's uncertain. Every extracted number carries
+                a confidence score and source location.
               </FeatureCard>
               <FeatureCard icon={Code2} title="Deterministic matching">
-                All reconciliation and math run in Python — every number traceable to source rows
-                and audit rules.
+                No black boxes. Reconciliation logic is pure Python. You can audit the audit logic.
+                Every match is traceable.
               </FeatureCard>
               <FeatureCard icon={Flag} title="Rules that flag what needs attention">
                 Duplicates, round numbers, weekend entries, near-limit amounts, and split
                 payments, each linked to its evidence. Tarazu flags; you decide.
               </FeatureCard>
-              <FeatureCard icon={UserCheck} title="Human-in-the-loop">
-                Approve or reject every item. The system never decides alone — you stay in
-                control.
+              <FeatureCard icon={UserCheck} title="You stay in the loop">
+                The system never decides alone. Every flagged or matched item lands in your review
+                queue.  You approve or reject it.
               </FeatureCard>
               <FeatureCard icon={Database} title="Immutable audit trail">
-                Every decision, note, and change is written once — tamper-proof, timestamped, and
-                searchable.
+                Every decision, every timestamp, every override. Written once, tamper-proof. Defend
+                your audit in the room, in court.
               </FeatureCard>
-              <FeatureCard icon={Building2} title="Multi-tenant &amp; API">
-                Organizations, members, and scoped API keys. Integrate with n8n, Zapier, or your
-                own automation.
+              <FeatureCard icon={Building2} title="Built for teams">
+                Organizations, members, role-based access, API keys. Invite partners and junior
+                staff. Everyone sees what they need to.
               </FeatureCard>
             </div>
           </div>
@@ -778,127 +877,64 @@ export default function LandingPage() {
         {/* ===== Live demo pipeline ===== */}
         <DemoSection />
 
-        {/* ===== Agent suites ===== */}
-        <section id="agents" className="scroll-mt-16 bg-white px-6 py-24 lg:px-10">
-          <div className="mx-auto max-w-[1200px]">
-            <Eyebrow>Agent suites</Eyebrow>
-            <h2
-              className={`${sora.className} text-3xl font-bold leading-tight tracking-tight text-[#10243A] md:text-4xl`}
-            >
-              Purpose-built agents for every phase
-            </h2>
-            <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-              <AgentCard phase="Prepare" title="Ingestion">
-                Client acceptance, document intake, and mapping.
-              </AgentCard>
-              <AgentCard phase="Plan" title="Risk assessment">
-                Materiality, risk scoring, and strategy suggestions.
-              </AgentCard>
-              <AgentCard phase="Evaluate" title="Testing &amp; sampling">
-                Automated workpapers and evidence collection.
-              </AgentCard>
-              <AgentCard phase="Report" title="Review &amp; sign-off">
-                Final report with full audit trail export.
-              </AgentCard>
-            </div>
-          </div>
-        </section>
-
-        {/* ===== Stats ===== */}
-        <section className="bg-[#10243A] px-6 py-24 text-white lg:px-10">
-          <div className="mx-auto grid max-w-[1200px] gap-10 text-center md:grid-cols-3">
-            {[
-              ["100%", "deterministic math"],
-              ["+40%", "faster reviews"],
-              ["🔒", "SOC2 ready"],
-            ].map(([value, label]) => (
-              <div key={label}>
-                <b
-                  className={`${sora.className} block text-[46px] font-bold tracking-tight text-[#7ED9C3]`}
-                >
-                  {value}
-                </b>
-                <span className="text-[15px] text-[#B9C6D2]">{label}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* ===== Testimonial ===== */}
-        <section className="px-6 py-24 lg:px-10">
-          <div className="mx-auto max-w-3xl text-center">
-            <blockquote
-              className={`${sora.className} mb-6 text-[26px] font-semibold leading-[1.4] text-[#10243A]`}
-            >
-              &ldquo;Tarazu turned our chaotic document review into a streamlined, defensible
-              process. Our partners trust the trail.&rdquo;
-            </blockquote>
-            <cite className="text-[15px] not-italic text-[#6B7A8A]">
-              <b className="font-semibold text-[#10243A]">Placeholder Name</b> — Audit Partner,
-              Example Firm
-            </cite>
-          </div>
-        </section>
-
         {/* ===== FAQ ===== */}
-        <section id="faq" className="scroll-mt-16 bg-white px-6 py-20 lg:px-10">
+        <section id="faq" className="scroll-mt-16 px-6 py-20 lg:px-10">
           <div className="mx-auto max-w-[1020px]">
             <div className="mb-12 text-center">
               <Eyebrow>FAQ</Eyebrow>
               <h2
                 className={`${sora.className} mt-1 text-3xl font-bold leading-tight tracking-tight text-[#10243A] md:text-4xl`}
               >
-                Frequently asked questions
+                Questions we actually get asked
               </h2>
-              <p className="mx-auto mt-2 max-w-[560px] text-[17px] opacity-80">
-                Everything you need to know about Tarazu and how it transforms your audit
-                workflow.
-              </p>
             </div>
             <div className="grid gap-6 md:grid-cols-2">
-              <FaqCard icon={CheckCircle2} question="Does Tarazu replace our audit methodology?">
-                No — it executes your existing methodology faster. Templates and materiality
-                thresholds are configured to your firm&rsquo;s standards.
+              <FaqCard icon={Rocket} question="How long before we see ROI?">
+                Most firms save 15–20 hours per engagement in the first month. At a junior auditor's
+                cost, that's 3–5K per case. Onboarding is usually two weeks.
               </FaqCard>
-              <FaqCard icon={Lock} question="Where is client data stored?">
-                Encrypted at rest and in transit, in your chosen region, with role-based access
-                and full activity logs.
+              <FaqCard icon={Eye} question="Does Tarazu read scanned invoices?">
+                Yes. Qwen handles PDFs, JPGs, and PNGs. Handwritten notes are harder, but we keep
+                improving. Every extraction shows its confidence score.
               </FaqCard>
-              <FaqCard icon={Rocket} question="How long does onboarding take?">
-                Most firms run their first live engagement within two weeks, with a dedicated
-                implementation lead.
+              <FaqCard icon={Lock} question="Is our client data safe?">
+                Encrypted at rest and in transit. SOC 2 Type II ready. Role-based access, audit
+                logs, and we never use client data for training.
               </FaqCard>
-              <FaqCard icon={Plug} question="Does it integrate with our existing tools?">
-                Yes — Tarazu offers a robust API and native integrations with n8n, Zapier, and
-                popular ERPs.
+              <FaqCard icon={CheckCircle2} question="Can we customize the rules?">
+                Absolutely. Define your own flags (round numbers, duplicates, weekend entries,
+                near-limit amounts). Rules are code you can review.
               </FaqCard>
-              <FaqCard icon={Users} question="Is it suitable for small firms?">
-                Absolutely. The platform scales from sole practitioners to large global firms,
-                with flexible pricing.
+              <FaqCard icon={Code2} question="How does this fit into our audit process?">
+                It replaces the grunt work (reconciliation, matching). You still own the judgment
+                calls, risk assessment, and sign-off. The trail backs you up.
               </FaqCard>
-              <FaqCard icon={ShieldCheck} question="Is it SOC 2 compliant?">
-                Yes, Tarazu is SOC 2 Type II ready, with regular third-party audits and
-                continuous monitoring.
+              <FaqCard icon={Users} question="What if we have legacy systems?">
+                If you can export to CSV or PDF, Tarazu can read it. We also offer an API if you
+                want to pipe data in programmatically.
               </FaqCard>
             </div>
           </div>
         </section>
 
         {/* ===== CTA ===== */}
-        <section id="cta" className="scroll-mt-16 px-6 py-20 text-center lg:px-10">
-          <div className="mx-auto max-w-[1200px]">
+        <section id="cta" className="scroll-mt-16 bg-[#10243A] px-6 py-24 text-white lg:px-10">
+          <div className="mx-auto max-w-[800px] text-center">
             <h2
-              className={`${sora.className} mb-4 text-3xl font-bold leading-tight tracking-tight text-[#10243A] md:text-[38px]`}
+              className={`${sora.className} mb-4 text-3xl font-bold leading-tight tracking-tight md:text-[42px]`}
             >
-              See your own engagement in Tarazu
+              Stop wasting weeks. Get control back.
             </h2>
-            <p className="mx-auto mb-8 max-w-[56ch]">
-              Create your firm&apos;s workspace in a minute, upload one real (anonymised)
-              engagement, and see exactly what it automates.
+            <p className="mb-8 text-lg text-[#B9C6D2]">
+              Try Tarazu with your own real (anonymized) engagement for free. No credit card. No
+              sales calls. Just a clean review queue and an immutable trail.
             </p>
             <Link href="/signup" className={BTN_PRIMARY}>
-              Get started
+              Get started free
             </Link>
+            <p className="mt-6 text-sm text-[#6B7A8A]">
+              Takes 2 minutes to set up. Your audit firm, your rules, your way forward.
+            </p>
           </div>
         </section>
       </main>

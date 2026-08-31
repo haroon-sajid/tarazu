@@ -16,5 +16,7 @@ import { useActiveCaseVersion } from "@/lib/use-active-case";
  */
 export function Workspace({ children }: { children: React.ReactNode }) {
   const version = useActiveCaseVersion();
-  return <div key={version}>{children}</div>;
+  // `h-full` keeps the height chain from the layout's scroll container intact,
+  // so a screen that fills the viewport (the assistant) can size itself.
+  return <div key={version} className="h-full">{children}</div>;
 }
