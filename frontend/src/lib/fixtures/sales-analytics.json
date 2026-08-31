@@ -1,0 +1,74 @@
+{
+  "record_count": 275,
+  "period_start": "2026-01-05",
+  "period_end": "2026-06-27",
+  "total_revenue": 35500000.0,
+  "monthly_revenue": [
+    { "month": "2026-01", "revenue": 4120000.0, "transaction_count": 38 },
+    { "month": "2026-02", "revenue": 4485500.0, "transaction_count": 41 },
+    { "month": "2026-03", "revenue": 11760000.0, "transaction_count": 66 },
+    { "month": "2026-04", "revenue": 4640250.0, "transaction_count": 39 },
+    { "month": "2026-05", "revenue": 5022750.0, "transaction_count": 44 },
+    { "month": "2026-06", "revenue": 5471500.0, "transaction_count": 47 }
+  ],
+  "revenue_by_product": [
+    { "product": "Dyed Fabric", "revenue": 12075000.0, "transaction_count": 93, "share": 34.01 },
+    { "product": "Greige Fabric", "revenue": 9032500.0, "transaction_count": 71, "share": 25.44 },
+    { "product": "Bed Linen", "revenue": 6382500.0, "transaction_count": 49, "share": 17.98 },
+    { "product": "Bath Towels", "revenue": 4615000.0, "transaction_count": 38, "share": 13.0 },
+    { "product": "Workwear Fabric", "revenue": 3395000.0, "transaction_count": 24, "share": 9.56 }
+  ],
+  "top_customers": [
+    { "customer_name": "Lahore Retail Group", "revenue": 6815000.0, "transaction_count": 52, "share": 19.2 },
+    { "customer_name": "Multan Home Stores", "revenue": 5610000.0, "transaction_count": 43, "share": 15.8 },
+    { "customer_name": "Karachi Wholesale Mart", "revenue": 4945000.0, "transaction_count": 39, "share": 13.93 },
+    { "customer_name": "Islamabad Traders", "revenue": 3890000.0, "transaction_count": 31, "share": 10.96 },
+    { "customer_name": "Rawalpindi Linen House", "revenue": 3210500.0, "transaction_count": 27, "share": 9.04 }
+  ],
+  "sales_by_region": [
+    { "region": "Punjab", "revenue": 14910000.0, "transaction_count": 116, "share": 42.0 },
+    { "region": "Sindh", "revenue": 11207500.0, "transaction_count": 86, "share": 31.57 },
+    { "region": "Khyber Pakhtunkhwa", "revenue": 5680000.0, "transaction_count": 43, "share": 16.0 },
+    { "region": "Balochistan", "revenue": 3550000.0, "transaction_count": 24, "share": 10.0 }
+  ],
+  "anomalies": [
+    {
+      "anomaly_id": "ANOM-0001",
+      "kind": "negative-amount",
+      "explanation": "sale of -85,000.00 to Lahore Retail Group on 2026-03-18 is negative — a refund, a correction, or a sign error in the export",
+      "source_row_id": "SLS-0142",
+      "related_row_ids": [],
+      "month": null,
+      "source": { "document_id": "DOC-SLS-0001", "row_number": 142 }
+    },
+    {
+      "anomaly_id": "ANOM-0002",
+      "kind": "duplicate-transaction",
+      "explanation": "2 identical rows — Karachi Wholesale Mart, Bath Towels, 412,500.00 on 2026-05-07 — share one key",
+      "source_row_id": "SLS-0214",
+      "related_row_ids": ["SLS-0214", "SLS-0215"],
+      "month": null,
+      "source": { "document_id": "DOC-SLS-0001", "row_number": 214 }
+    },
+    {
+      "anomaly_id": "ANOM-0003",
+      "kind": "revenue-spike",
+      "explanation": "2026-03 revenue of 11,760,000.00 is more than double the median month (4,831,500.00)",
+      "source_row_id": null,
+      "related_row_ids": [],
+      "month": "2026-03",
+      "source": null
+    },
+    {
+      "anomaly_id": "ANOM-0004",
+      "kind": "large-transaction",
+      "explanation": "SLS-0358: 3,825,000.00 from Lahore Retail Group is more than 10× the median sale (92,000.00)",
+      "source_row_id": "SLS-0358",
+      "related_row_ids": [],
+      "month": null,
+      "source": { "document_id": "DOC-SLS-0001", "row_number": 358 }
+    }
+  ],
+  "document_ids": ["DOC-SLS-0001"],
+  "generated_at": "2026-06-30T10:14:52Z"
+}

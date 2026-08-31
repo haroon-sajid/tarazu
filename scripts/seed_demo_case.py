@@ -49,6 +49,7 @@ from app.shared.schemas import (  # noqa: E402
     Organization,
     OrganizationMember,
     OrgRole,
+    SalesAnalyticsResult,
 )
 
 FIXTURES = REPO_ROOT / "sample-data" / "fixtures"
@@ -142,6 +143,26 @@ def main() -> int:
     )
     repository.save_review_items(org_id, queue.case_id, items)
     repository.save_benford(org_id, queue.case_id, benford)
+
+    # -- Optional: seed sales analytics if the fixture exists ----------------- #
+    sales_fixture = FIXTURES / "sales-analytics.json"
+    if sales_fixture.is_file():
+        sales_result = SalesAnalyticsResult.model_validate(
+            json.loads(sales_fixture.read_text("utf-8"))
+        )
+        repository.save_sales_analytics(org_id, queue.case_id, sales_result)
+        record_action(
+            repository, org_id, queue.case_id, ActorType.SYSTEM, "seed_demo_case.py",
+            AuditAction.SALES_ANALYTICS_RUN,
+            detail=(
+                f"Seeded {sales_result.record_count} sales records, "
+                f"total revenue {sales_result.total_revenue}, "
+                f"{len(sales_result.anomalies)} anomalies"
+            ),
+        )
+        print(f"  Sales analytics: {sales_result.record_count} records, "
+              f"{len(sales_result.anomalies)} anomalies")
+
     record_action(
         repository, org_id, queue.case_id, ActorType.SYSTEM, "seed_demo_case.py",
         AuditAction.CASE_CREATED,

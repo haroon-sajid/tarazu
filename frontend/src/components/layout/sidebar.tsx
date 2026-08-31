@@ -16,6 +16,7 @@ import {
   Settings,
   ShieldCheck,
   TableProperties,
+  TrendingUp,
   Upload,
   X,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import { ProfileMenu } from "@/components/layout/profile-menu";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
+  { href: "/analytics", label: "Analytics", icon: TrendingUp },
   { href: "/cases", label: "Cases", icon: Briefcase },
   { href: "/upload", label: "Upload", icon: Upload },
   { href: "/documents", label: "Documents", icon: Files },

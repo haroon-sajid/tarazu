@@ -22,7 +22,7 @@ export type MatchStatus = "matched" | "partial" | "unmatched";
 export type Severity = "high" | "medium" | "low";
 export type ReviewDecision = "pending" | "approved" | "rejected";
 export type ActorType = "human" | "ai" | "system";
-export type DocumentType = "bank_statement" | "invoice" | "ledger";
+export type DocumentType = "bank_statement" | "invoice" | "ledger" | "sales_data";
 
 export type CaseStatus =
   | "uploaded"
@@ -44,7 +44,8 @@ export type AuditAction =
   | "item_rejected"
   | "report_generated"
   | "assistant_question_asked"
-  | "assistant_answered";
+  | "assistant_answered"
+  | "sales_analytics_run";
 
 /** Normalised [x0, y0, x1, y1] in 0..1 page space, origin top-left. */
 export type BoundingBox = [number, number, number, number];
@@ -256,6 +257,90 @@ export interface DashboardSummary {
   data_confidence: string;
   next_best_actions: NextBestAction[];
   estimated_hours_saved: number;
+  /** Present when a SALES_DATA document was uploaded and analytics ran. */
+  sales_analytics: SalesAnalyticsResult | null;
+}
+
+// --------------------------------------------------------------------------
+// Sales analytics — deterministic pandas over a SALES_DATA export
+// --------------------------------------------------------------------------
+
+/** One sale row read out of a SALES_DATA export (Excel or CSV), no AI. */
+export interface SalesRecord {
+  sales_row_id: string;
+  date: string; // YYYY-MM-DD
+  amount: number;
+  customer_name: string;
+  product: string;
+  /** null in exports that carry no region column; such rows stay out of sales_by_region. */
+  region: string | null;
+  currency: string;
+  source: Provenance;
+}
+
+/** Revenue for one calendar month. Months are unique and ascending. */
+export interface MonthlyRevenue {
+  month: string; // YYYY-MM
+  revenue: number;
+  transaction_count: number;
+}
+
+/** One product's revenue over the whole period, highest revenue first. */
+export interface ProductRevenue {
+  product: string;
+  revenue: number;
+  transaction_count: number;
+  /** Percent of total revenue, rounded to two decimals. */
+  share: number;
+}
+
+/** One customer's revenue over the whole period. The top five, ranked. */
+export interface CustomerSummary {
+  customer_name: string;
+  revenue: number;
+  transaction_count: number;
+  share: number;
+}
+
+/** One region's revenue over the whole period; region-carrying rows only. */
+export interface RegionSummary {
+  region: string;
+  revenue: number;
+  transaction_count: number;
+  share: number;
+}
+
+/**
+ * A pattern in the sales data worth a human's attention. Like a `Flag`, a
+ * suggestion and never a verdict: `kind` is one of the module's rule ids
+ * (`negative-amount`, `duplicate-transaction`, `revenue-spike`,
+ * `large-transaction`), and row-level anomalies name their row in
+ * `source_row_id` while month-level ones name the month instead.
+ */
+export interface SalesAnomaly {
+  anomaly_id: string;
+  kind: string;
+  explanation: string;
+  source_row_id: string | null;
+  related_row_ids: string[];
+  month: string | null; // YYYY-MM
+  source: Provenance | null;
+}
+
+/** The whole sales-analytics readout for one case. Pure arithmetic, no AI. */
+export interface SalesAnalyticsResult {
+  record_count: number;
+  period_start: string | null;
+  period_end: string | null;
+  total_revenue: number;
+  monthly_revenue: MonthlyRevenue[];
+  revenue_by_product: ProductRevenue[];
+  top_customers: CustomerSummary[];
+  sales_by_region: RegionSummary[];
+  anomalies: SalesAnomaly[];
+  /** The documents the records were read from, so the readout names its sources. */
+  document_ids: string[];
+  generated_at: string; // RFC 3339 UTC
 }
 
 // --------------------------------------------------------------------------
@@ -470,6 +555,8 @@ export interface UploadFiles {
   bankStatement: File;
   ledger: File;
   invoices: File[];
+  /** Optional: a sales data export (Excel or CSV). */
+  salesData?: File;
   clientName?: string;
 }
 

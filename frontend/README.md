@@ -42,8 +42,9 @@ token is held in localStorage and sent on every request. A 401 mid-session
 | `src/lib/assistant.ts` | The fixture-mode assistant (keyword routing over the fixture items). Live mode calls `POST /v1/assistant/chat` instead. |
 | `src/lib/auth.tsx`, `src/lib/auth-storage.ts` | Session context and persistence. All HTTP still goes through `api.ts`. |
 | `src/app/(auth)/{login,signup}` | Signed-out screens. Signup creates the firm and its owner in one step. |
-| `src/app/(app)/{upload,review,documents,assistant,dashboard,audit-trail,report,settings,profile}` | The signed-in app. The group layout redirects anonymous visitors to `/login`. |
+| `src/app/(app)/{upload,review,documents,assistant,dashboard,analytics,audit-trail,report,settings,profile}` | The signed-in app. The group layout redirects anonymous visitors to `/login`. |
 | `src/app/(app)/report` | Generate the PDF and Excel report and browse the append-only history of generations (`/v1/reports`). |
+| `src/app/(app)/analytics` | Sales analytics: the deterministic readout of the case's sales export (`/v1/cases/{case_id}/analytics`) — monthly revenue, product and region breakdowns, top customers, and anomalies. |
 | `src/app/(app)/assistant` | Ask Tarazu: grounded answers with confidence, citations, and the computed facts behind them. |
 | `src/app/(app)/documents` | Side-by-side audit: the real page (`/v1/documents/{id}/pages/{n}`) with every extracted value boxed at its provenance. |
 | `src/app/(app)/settings` | API keys: create (raw key shown exactly once), list, revoke — mirroring `/v1/api-keys`. |

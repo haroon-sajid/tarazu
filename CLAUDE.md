@@ -61,6 +61,7 @@ deployment overhead.
 | `backend/app/modules/extraction/` | Qwen VL document reading, confidence scoring, AI second-opinion check | **Yes** (extraction only) |
 | `backend/app/modules/matching/` | Deterministic matching of statement, invoices, and ledger (pure Python and pandas) | **Never** |
 | `backend/app/modules/rules/` | Deterministic red-flag rules (round numbers, duplicates, weekend entries, near-limit amounts, structuring, sequence gaps) and Benford | **Never** |
+| `backend/app/modules/analytics/` | Deterministic sales analytics over a `sales_data` export (pandas): revenue by month, product, region, top customers, and anomaly findings | **Never** |
 | `backend/app/modules/assistant/` | Ask Tarazu: intent → deterministic query → worded answer with citations and facts, English and Urdu | **Yes** (only to rephrase computed facts; never to compute — ADR 0006) |
 | `backend/app/modules/reports/` | PDF and Excel report generation from decided items, with provenance and the trail; immutable history | No |
 
@@ -68,7 +69,7 @@ deployment overhead.
 
 - **Each module exposes one public interface file: `service.py`.** Other modules may import only that.
 - **No cross-module imports of internals.** Data passes between modules via `app/shared/` schemas.
-- **`matching/` and `rules/` must never import any AI client**, not even transitively through a helper.
+- **`matching/`, `rules/`, and `analytics/` must never import any AI client**, not even transitively through a helper.
 - **Boundaries exist so any module can later be extracted into a microservice without rewrites.** Never take a shortcut (shared mutable state, reaching into another module's files, bypassing `service.py`) that would break extractability.
 
 Each module directory has a README stating its purpose, inputs and outputs, and
@@ -84,7 +85,7 @@ what it must never do. Respect those constraints.
 - **All folder and file names use `lowercase-kebab-case`** (for example `api-contracts.md`).
   Exceptions: conventional files (`README.md`, `CLAUDE.md`, `Dockerfile`) and
   language-mandated names (Python modules use `snake_case.py`; React components may follow framework conventions inside `frontend/`).
-- Python: `snake_case` functions and variables, `PascalCase` classes; module packages under `app/modules/` are single-word lowercase (`extraction`, `matching`, `rules`, `assistant`, `reports`).
+- Python: `snake_case` functions and variables, `PascalCase` classes; module packages under `app/modules/` are single-word lowercase (`extraction`, `matching`, `rules`, `analytics`, `assistant`, `reports`).
 - TypeScript: `camelCase` functions and variables, `PascalCase` types and components.
 - API routes: `lowercase-kebab-case` paths, versioned (`/v1/...`).
 - Environment variables: `SCREAMING_SNAKE_CASE`, prefixed per module (see `.env.example`).
@@ -92,7 +93,7 @@ what it must never do. Respect those constraints.
 ## Rules for AI Agents Working Here
 
 - Do not move logic across module boundaries; propose an ADR in `docs/decisions/` instead.
-- Do not add AI/LLM calls or AI client imports to `matching/`, `rules/`, `reports/`, `core/`, or `main.py`.
+- Do not add AI/LLM calls or AI client imports to `matching/`, `rules/`, `analytics/`, `reports/`, `core/`, or `main.py`.
 - Update `docs/api-contracts.md` and `backend/app/shared/` in the same change whenever a contract changes.
 - Read the README of any folder before modifying its contents.
 
@@ -119,15 +120,19 @@ maps each Phase 0 item to its code.
   `NEXT_PUBLIC_TARAZU_API_URL` in `frontend/.env.local` switches it to
   zero-backend fixture mode.
 - Tests: `pytest` from the repo root (hermetic: no `.env`, no network).
-- Supabase: eight migrations, `python scripts/apply_supabase_schema.py`;
-  `0006-reports-and-assistant.sql` is the newest.
+- Supabase: nine migrations, `python scripts/apply_supabase_schema.py`;
+  `0006-sales-analytics.sql` is the newest.
 
 **Live end to end** (backend + frontend + tests): auth (signup/login/change
 password), tenancy, the **full upload pipeline** — extraction (stubbed by
 `DEMO_MODE`), deterministic matching, red-flag rules, Benford, review queue
 assembly; a deterministic-step failure marks the case `failed` with the
 reason — review queue with approve/reject and audit trail, dashboard with
-Benford, **documents** (`GET /v1/documents`, `/file`, `/pages/{n}`: the
+Benford, **sales analytics** (`POST/GET /v1/cases/{case_id}/analytics`: the
+deterministic pandas readout over a case's `sales_data` exports — revenue by
+month, product, region, top five customers, anomaly findings — saved beside
+the Benford result, replaced by a re-run, every run in the trail; the pipeline
+computes it at upload time when a sales export rides along), **documents** (`GET /v1/documents`, `/file`, `/pages/{n}`: the
 evidence viewer and `/documents` draw provenance on the real page),
 **reports** (`POST/GET /v1/reports`, `/download`: PDF + Excel from decided
 items with provenance and the trail; append-only `reports` history in both

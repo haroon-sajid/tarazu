@@ -2,15 +2,17 @@
 
 App-level orchestration, per [ADR 0001](../../docs/decisions/0001-http-routers-live-in-app-api.md).
 It calls each module's `service.py` and nothing else, and it contains no
-matching, no rule logic, and no arithmetic over amounts. Composing three
+matching, no rule logic, and no arithmetic over amounts. Composing the
 modules is all it does.
 
 The three deterministic steps — `matching.run_matching`, `rules.evaluate_flags`,
-and `rules.benford_analysis` — run on every upload. A case that gets past
-extraction always ends `ready_for_review`; if one of those steps fails the case
-is marked `failed` with the reason, and the error is raised so the caller can
-report it, rather than a half-built review queue being saved as if it were
-whole.
+and `rules.benford_analysis` — run on every upload. A fourth,
+`analytics.analyze_sales`, runs when the upload includes a SALES_DATA
+document: its readout is saved beside the Benford result, and a case without
+sales data simply has none. A case that gets past extraction always ends
+`ready_for_review`; if one of those steps fails the case is marked `failed`
+with the reason, and the error is raised so the caller can report it, rather
+than a half-built review queue being saved as if it were whole.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from typing import Any
 
 from app.core.audit import Actor, record_action, record_actor_action, record_ai_action
 from app.core.repository import CaseRepository, DocumentStore, StoredDocument
+from app.modules.analytics import service as analytics
 from app.modules.extraction import service as extraction
 from app.modules.matching import service as matching
 from app.modules.rules import service as rules
@@ -39,6 +42,7 @@ from app.shared.schemas import (
     LedgerEntry,
     MatchResult,
     ReviewItem,
+    SalesRecord,
 )
 
 __all__ = ["PipelineOutcome", "RULES_CONFIG", "content_type_for", "run_pipeline"]
@@ -134,6 +138,7 @@ def run_pipeline(
     ledger: list[LedgerEntry] = []
     bank: list[BankTransaction] = []
     invoices: list[Invoice] = []
+    sales: list[SalesRecord] = []
 
     for document, content in documents:
         if document.document_type is DocumentType.LEDGER:
@@ -145,6 +150,22 @@ def run_pipeline(
                 repository, org_id, case_id, ActorType.SYSTEM, "pandas",
                 AuditAction.EXTRACTION_COMPLETED, item_id=document.document_id,
                 detail=f"{len(ledger)} ledger rows read with pandas, no model involved",
+            )
+            continue
+
+        if document.document_type is DocumentType.SALES_DATA:
+            # No AI on this path either, for the same reason: the export is
+            # already structured. The analysis happens in step 3-5 below, once
+            # every sales document has been read.
+            sales.extend(
+                analytics.read_sales_data(document.document_id, document.filename, content)
+            )
+            record_action(
+                repository, org_id, case_id, ActorType.SYSTEM, "pandas",
+                AuditAction.EXTRACTION_COMPLETED, item_id=document.document_id,
+                detail=(
+                    f"{len(sales)} sales rows read with pandas, no model involved"
+                ),
             )
             continue
 
@@ -198,6 +219,23 @@ def run_pipeline(
             )
 
         repository.save_benford(org_id, case_id, rules.benford_analysis(ledger))
+
+        if sales:
+            # Deterministic like Benford, and saved beside it. The trail names
+            # `analytics.service` as the actor, so a readout produced at upload
+            # time reads differently from one a person re-ran through the API.
+            sales_result = analytics.analyze_sales(sales)
+            repository.save_sales_analytics(org_id, case_id, sales_result)
+            record_action(
+                repository, org_id, case_id, ActorType.SYSTEM, "analytics.service",
+                AuditAction.SALES_ANALYTICS_RUN,
+                detail=(
+                    f"{sales_result.record_count} sales records over "
+                    f"{len(sales_result.document_ids)} document(s): total revenue "
+                    f"{sales_result.total_revenue}, "
+                    f"{len(sales_result.anomalies)} anomalies"
+                ),
+            )
 
         items = build_review_items(case_id, ledger, bank, invoices, matches, flags,
                                    outcome.extractions)

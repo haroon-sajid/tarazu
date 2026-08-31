@@ -38,6 +38,7 @@ from app.shared.schemas import (
     OrgRole,
     ReportRecord,
     ReviewItem,
+    SalesAnalyticsResult,
     UserProfile,
 )
 
@@ -305,6 +306,7 @@ class SupabaseCaseRepository:
             "extractions",
             "documents",
             "benford_results",
+            "sales_analytics",
         ):
             self._rest.delete(table, {"org_id": f"eq.{org_id}", "case_id": f"eq.{case_id}"})
         self._rest.delete("cases", {"case_id": f"eq.{case_id}", "org_id": f"eq.{org_id}"})
@@ -509,6 +511,34 @@ class SupabaseCaseRepository:
             {"case_id": f"eq.{case_id}", "org_id": f"eq.{org_id}", "limit": "1"},
         )
         return BenfordResult.model_validate(rows[0]["payload"]) if rows else None
+
+    # -- sales analytics ------------------------------------------------------ #
+    # Table from infra/supabase/0006-sales-analytics.sql. Upsert on the
+    # (org_id, case_id) primary key, so a re-run replaces the previous readout.
+
+    def save_sales_analytics(
+        self, org_id: str, case_id: str, result: SalesAnalyticsResult
+    ) -> None:
+        self._rest.insert(
+            "sales_analytics",
+            [
+                {
+                    "org_id": org_id,
+                    "case_id": case_id,
+                    "payload": json.loads(result.model_dump_json()),
+                }
+            ],
+            upsert=True,
+        )
+
+    def get_sales_analytics(
+        self, org_id: str, case_id: str
+    ) -> SalesAnalyticsResult | None:
+        rows = self._rest.select(
+            "sales_analytics",
+            {"case_id": f"eq.{case_id}", "org_id": f"eq.{org_id}", "limit": "1"},
+        )
+        return SalesAnalyticsResult.model_validate(rows[0]["payload"]) if rows else None
 
     # -- reports ------------------------------------------------------------ #
     # Table from infra/supabase/0006-reports-and-assistant.sql. Insert only:

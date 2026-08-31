@@ -1,7 +1,10 @@
-"""`POST /v1/upload` — accept three documents and run the case through the pipeline.
+"""`POST /v1/upload` — accept documents and run the case through the pipeline.
 
 The route validates what arrived and hands it to `app.pipeline`. It contains no
 extraction, matching, or rule logic: everything below the validation is one call.
+An optional fourth slot accepts a SALES_DATA export (Excel or CSV), which feeds
+the deterministic sales-analytics module — no AI on that path, same as the
+ledger.
 """
 
 from __future__ import annotations
@@ -13,6 +16,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 
 from app.api.deps import Principal, get_repository, get_storage, require_write
 from app.core.repository import CaseRepository, DocumentStore, StoredDocument
+from app.modules.analytics import service as analytics
 from app.modules.extraction.service import ExtractionError, LedgerReadError, QwenError
 from app.pipeline import run_pipeline
 from app.shared.api import UploadResponse
@@ -26,6 +30,7 @@ ACCEPTED_SUFFIXES: dict[DocumentType, frozenset[str]] = {
     DocumentType.BANK_STATEMENT: frozenset({".pdf"}),
     DocumentType.INVOICE: frozenset({".pdf", ".png", ".jpg", ".jpeg", ".webp"}),
     DocumentType.LEDGER: frozenset({".xlsx", ".xlsm", ".xls", ".csv"}),
+    DocumentType.SALES_DATA: frozenset({".xlsx", ".xlsm", ".xls", ".csv"}),
 }
 
 #: Guards against a mis-selected file exhausting memory or the model's context.
@@ -68,6 +73,7 @@ def _accept(
         DocumentType.BANK_STATEMENT: "DOC-BNK",
         DocumentType.INVOICE: "DOC-INV",
         DocumentType.LEDGER: "DOC-LED",
+        DocumentType.SALES_DATA: "DOC-SLS",
     }[document_type]
     document_id = f"{prefix}-{uuid4().hex[:8]}"
     filename = upload.filename or "unnamed"
@@ -85,12 +91,13 @@ def _accept(
     "/upload",
     response_model=UploadResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Upload a bank statement, invoices, and a ledger, and process them",
+    summary="Upload documents and process them through the pipeline",
 )
 async def upload_documents(
     bank_statement: UploadFile = File(..., description="Bank statement PDF"),
     ledger: UploadFile = File(..., description="Ledger, Excel or CSV"),
     invoices: list[UploadFile] = File(..., description="One or more invoice PDFs or images"),
+    sales_data: UploadFile | None = File(None, description="Optional sales data export (Excel or CSV)"),
     client_name: str = Form("Haroon Textiles", description="The audited client"),
     principal: Principal = Depends(require_write),
     repository: CaseRepository = Depends(get_repository),
@@ -118,6 +125,8 @@ async def upload_documents(
         _accept(ledger, DocumentType.LEDGER, case_id),
         *(_accept(invoice, DocumentType.INVOICE, case_id) for invoice in invoices),
     ]
+    if sales_data is not None:
+        documents.append(_accept(sales_data, DocumentType.SALES_DATA, case_id))
 
     try:
         outcome = run_pipeline(
@@ -141,6 +150,11 @@ async def upload_documents(
     except ExtractionError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+        ) from error
+    except analytics.SalesReadError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"The sales data could not be read: {error}",
         ) from error
     except Exception as error:  # noqa: BLE001 - a deterministic step failed
         # The pipeline has already marked the case `failed` with the reason and

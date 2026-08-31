@@ -38,6 +38,33 @@ export function formatTimestamp(isoTimestamp: string): string {
   })} UTC`;
 }
 
+/** "Jan 2026" (or "Jan 26" for chart axes) for a `YYYY-MM` calendar month. */
+export function formatMonth(
+  month: string,
+  yearStyle: "numeric" | "2-digit" = "numeric",
+): string {
+  const date = new Date(`${month}-01T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return month;
+  return date.toLocaleDateString("en-GB", {
+    month: "short",
+    year: yearStyle,
+    timeZone: "UTC",
+  });
+}
+
+/** "35.5M" / "412.5k" — a number squeezed onto a chart axis. */
+export function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat("en-PK", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+/** "PKR 35.5M" — money squeezed into a chart legend or tooltip. */
+export function formatMoneyCompact(amount: number, currency = "PKR"): string {
+  return `${currency} ${formatCompactNumber(amount)}`;
+}
+
 export function formatPercent(fraction: number, decimals = 1): string {
   return `${(fraction * 100).toFixed(decimals)}%`;
 }

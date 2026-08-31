@@ -1,6 +1,6 @@
 """Apply `infra/supabase/*.sql` to the configured project, in order.
 
-The three files are idempotent by design, so this is safe to re-run and safe to
+The migrations are idempotent by design, so this is safe to re-run and safe to
 run against a project that is already partly migrated — which is the usual case,
 because `schema.sql` tends to get pasted into the dashboard early and the
 migrations after it get forgotten.
@@ -40,6 +40,7 @@ MIGRATIONS = (
     ("0005-audit-id-is-text.sql", "audit_id is text, matching the ids the app mints"),
     ("0005-org-invitations.sql", "org_invitations: single-use join codes"),
     ("0006-reports-and-assistant.sql", "append-only reports, assistant audit actions"),
+    ("0006-sales-analytics.sql", "sales_analytics readout, sales_analytics_run action"),
 )
 
 #: What each migration should leave behind, so --check can say where a project is.
@@ -55,6 +56,7 @@ EXPECTED_TABLES = {
     "0005-audit-id-is-text.sql": (),
     "0005-org-invitations.sql": ("org_invitations",),
     "0006-reports-and-assistant.sql": ("reports",),
+    "0006-sales-analytics.sql": ("sales_analytics",),
 }
 
 #: Migrations whose effect is a privilege or a trigger rather than a table.

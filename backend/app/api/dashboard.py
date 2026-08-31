@@ -49,6 +49,7 @@ async def get_dashboard(
     case = repository.get_case(principal.org_id, case_id)
     items = repository.list_review_items(principal.org_id, case_id)
     benford = repository.get_benford(principal.org_id, case_id)
+    sales_analytics = repository.get_sales_analytics(principal.org_id, case_id)
 
     flags = [flag for item in items for flag in item.flags]
     period_start = _earliest(items) or (case.period_start if case else None)
@@ -89,6 +90,7 @@ async def get_dashboard(
         data_confidence=data_confidence(items, period_start, period_end),
         next_best_actions=next_best_actions(items),
         estimated_hours_saved=round(len(items) * MINUTES_SAVED_PER_ITEM / 60, 1),
+        sales_analytics=sales_analytics,
     )
 
 

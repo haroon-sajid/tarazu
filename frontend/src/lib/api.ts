@@ -21,6 +21,7 @@
 
 import dashboardFixture from "./fixtures/dashboard.json";
 import reviewItemsFixture from "./fixtures/review-items.json";
+import salesAnalyticsFixture from "./fixtures/sales-analytics.json";
 import { answerFromCase, toAssistantAnswer } from "./assistant";
 import { clearSession, getStoredSession } from "./auth-storage";
 import type {
@@ -51,6 +52,7 @@ import type {
   ReviewItem,
   ReviewItemFilters,
   ReviewItemsResponse,
+  SalesAnalyticsResult,
   SignupResponse,
   UpdateCaseRequest,
   UpdateProfileRequest,
@@ -346,6 +348,8 @@ export async function getDashboard(caseId?: string): Promise<DashboardSummary> {
   const decisions = { pending: 0, approved: 0, rejected: 0 };
   for (const item of fixtureStore.items) decisions[item.decision] += 1;
   summary.decisions = decisions;
+  // Include the sales analytics fixture so the dashboard's Sales Overview renders.
+  summary.sales_analytics = clone(salesAnalyticsFixture) as unknown as SalesAnalyticsResult;
   return summary;
 }
 
@@ -534,6 +538,7 @@ export async function uploadDocuments(files: UploadFiles): Promise<UploadRespons
     form.append("bank_statement", files.bankStatement);
     form.append("ledger", files.ledger);
     for (const invoice of files.invoices) form.append("invoices", invoice);
+    if (files.salesData) form.append("sales_data", files.salesData);
     if (files.clientName) form.append("client_name", files.clientName);
     const token = authToken();
     const headers: Record<string, string> = token
@@ -593,6 +598,17 @@ export async function uploadDocuments(files: UploadFiles): Promise<UploadRespons
         size_bytes: invoice.size,
         storage_path: `${reviewItemsFixture.case_id}/DOC-INV-${index + 1}/${invoice.name}`,
       })),
+      ...(files.salesData
+        ? [
+            {
+              document_id: "DOC-SLS-001",
+              document_type: "sales_data" as const,
+              filename: files.salesData.name,
+              size_bytes: files.salesData.size,
+              storage_path: `${reviewItemsFixture.case_id}/DOC-SLS-001/${files.salesData.name}`,
+            },
+          ]
+        : []),
     ],
     status: "ready_for_review",
     review_item_count: fixtureStore.items.length,
@@ -654,6 +670,61 @@ export async function downloadReport(
   const blob = await requestBlob(report.downloads[format]);
   const extension = format === "pdf" ? "pdf" : "xlsx";
   saveBlob(blob, `tarazu-${report.case_id}-${report.report_id}.${extension}`);
+}
+
+// --------------------------------------------------------------------------
+// Sales analytics — the deterministic readout of a SALES_DATA export
+// --------------------------------------------------------------------------
+
+/**
+ * The case to analyse: the caller's explicit id, else the saved selection.
+ * The analytics routes carry the case in the path, so live mode without one
+ * is a hard stop rather than a quiet fetch against the wrong case.
+ */
+function analyticsCaseId(caseId?: string): string {
+  const effective = caseId ?? getActiveCaseId();
+  if (!effective) {
+    throw new ApiError(422, "Select a case before working with its sales analytics.");
+  }
+  return effective;
+}
+
+/**
+ * GET /v1/cases/{case_id}/analytics — the saved sales-analytics readout.
+ * Computes nothing and reads no documents: every figure was summed by the
+ * backend's pandas when the analysis ran. 404 until it has been run at all.
+ */
+export async function getSalesAnalytics(
+  caseId?: string,
+): Promise<SalesAnalyticsResult> {
+  if (!FIXTURE_MODE) {
+    return request<SalesAnalyticsResult>(
+      `/v1/cases/${encodeURIComponent(analyticsCaseId(caseId))}/analytics`,
+    );
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  return clone(salesAnalyticsFixture) as unknown as SalesAnalyticsResult;
+}
+
+/**
+ * POST /v1/cases/{case_id}/analytics — re-read the stored sales exports and
+ * recompute the readout from scratch, replacing what an earlier run saved.
+ * Only ever called from an explicit user click, like every mutating route.
+ */
+export async function runSalesAnalytics(
+  caseId?: string,
+): Promise<SalesAnalyticsResult> {
+  if (!FIXTURE_MODE) {
+    return request<SalesAnalyticsResult>(
+      `/v1/cases/${encodeURIComponent(analyticsCaseId(caseId))}/analytics`,
+      { method: "POST" },
+    );
+  }
+  // Fixture mode: the analysis "runs" against the same sample export, so the
+  // deterministic readout comes back identical except for the run timestamp.
+  await sleep(1400);
+  const result = clone(salesAnalyticsFixture) as unknown as SalesAnalyticsResult;
+  return { ...result, generated_at: new Date().toISOString() };
 }
 
 // --------------------------------------------------------------------------

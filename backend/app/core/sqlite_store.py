@@ -48,6 +48,7 @@ from app.shared.schemas import (
     OrgRole,
     ReportRecord,
     ReviewItem,
+    SalesAnalyticsResult,
     UserProfile,
 )
 
@@ -229,6 +230,17 @@ create table if not exists benford_results (
   case_id text primary key references cases (case_id) on delete cascade,
   org_id  text not null,
   payload text not null
+);
+
+-- The sales-analytics readout: one row per case, replaced on each re-run.
+-- Derived output like benford_results, and keyed by tenant and case for the
+-- same reason `flags` is — a bare `case_id` key would let one firm's re-run
+-- replace a row it can never see.
+create table if not exists sales_analytics (
+  org_id  text not null,
+  case_id text not null references cases (case_id) on delete cascade,
+  payload text not null,
+  primary key (org_id, case_id)
 );
 
 -- API keys. One organization's machine credentials, for n8n, Zapier, or its own
@@ -864,6 +876,10 @@ class SqliteCaseRepository:
                     "delete from benford_results where org_id = ? and case_id = ?",
                     (org_id, case_id),
                 ),
+                (
+                    "delete from sales_analytics where org_id = ? and case_id = ?",
+                    (org_id, case_id),
+                ),
                 ("delete from cases where case_id = ? and org_id = ?", (case_id, org_id)),
             ]
         )
@@ -1065,6 +1081,34 @@ class SqliteCaseRepository:
             (case_id, org_id),
         )
         return BenfordResult.model_validate_json(rows[0]["payload"]) if rows else None
+
+    # -- sales analytics ------------------------------------------------------ #
+
+    def save_sales_analytics(
+        self, org_id: str, case_id: str, result: SalesAnalyticsResult
+    ) -> None:
+        self._write(
+            [
+                (
+                    "insert or replace into sales_analytics (org_id, case_id, payload) "
+                    "values (?, ?, ?)",
+                    (org_id, case_id, result.model_dump_json()),
+                )
+            ]
+        )
+
+    def get_sales_analytics(
+        self, org_id: str, case_id: str
+    ) -> SalesAnalyticsResult | None:
+        rows = self._rows(
+            "select payload from sales_analytics where org_id = ? and case_id = ?",
+            (org_id, case_id),
+        )
+        return (
+            SalesAnalyticsResult.model_validate_json(rows[0]["payload"])
+            if rows
+            else None
+        )
 
     # -- reports ------------------------------------------------------------ #
 
