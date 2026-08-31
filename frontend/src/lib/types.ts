@@ -27,8 +27,14 @@ export type DocumentType = "bank_statement" | "invoice" | "ledger";
 export type CaseStatus =
   | "uploaded"
   | "extracting"
+  /** Legacy: the pipeline no longer produces it, old rows still carry it. */
   | "awaiting_matching"
+  | "matching"
   | "ready_for_review"
+  /** Every item carries an explicit human decision. */
+  | "approved"
+  /** A report has been generated for the case. */
+  | "reported"
   | "failed";
 
 export type AuditAction =
@@ -44,7 +50,20 @@ export type AuditAction =
   | "item_rejected"
   | "report_generated"
   | "assistant_question_asked"
-  | "assistant_answered";
+  | "assistant_answered"
+  | "value_corrected"
+  | "case_signed_off"
+  | "evidence_requested"
+  | "evidence_answered"
+  | "evidence_resolved"
+  | "evidence_cancelled"
+  | "client_created"
+  | "client_updated"
+  | "client_archived"
+  | "job_queued"
+  | "job_failed"
+  | "sample_drawn"
+  | "bundle_exported";
 
 /** Normalised [x0, y0, x1, y1] in 0..1 page space, origin top-left. */
 export type BoundingBox = [number, number, number, number];
@@ -266,6 +285,8 @@ export interface DashboardSummary {
 export interface CaseSummary {
   case_id: string;
   client_name: string;
+  /** The recurring client this period belongs to (ADR 0005), if any. */
+  client_id?: string | null;
   period_start: string | null;
   period_end: string | null;
   status: CaseStatus;
@@ -289,6 +310,8 @@ export interface CaseListResponse {
  */
 export interface UpdateCaseRequest {
   client_name?: string;
+  /** Attach the period to a recurring client, or detach it with `null`. */
+  client_id?: string | null;
   period_start?: string | null;
   period_end?: string | null;
 }
@@ -464,6 +487,8 @@ export interface UploadResponse {
   review_item_count: number;
   needs_human_review_count: number;
   message: string;
+  /** Present when the work was queued. Poll `getJob(job_id)`. */
+  job_id?: string | null;
 }
 
 export interface UploadFiles {
@@ -471,13 +496,18 @@ export interface UploadFiles {
   ledger: File;
   invoices: File[];
   clientName?: string;
+  /** Run this period against a recurring client's own rule thresholds. */
+  clientId?: string;
+  /** Queue the processing and return a job to poll instead of blocking. */
+  background?: boolean;
 }
 
 // --------------------------------------------------------------------------
 // Auth
 // --------------------------------------------------------------------------
 
-export type OrgRole = "owner" | "member";
+/** `viewer` is the read-only role from ADR 0005 — the audited business's owner. */
+export type OrgRole = "owner" | "member" | "viewer";
 
 /** POST /v1/auth/login response. */
 export interface LoginResponse {
@@ -622,4 +652,376 @@ export interface UpdateProfileRequest {
   notify_case_ready?: boolean;
   notify_high_severity?: boolean;
   notify_weekly_digest?: boolean;
+}
+
+// --------------------------------------------------------------------------
+// Clients and periods (ADR 0005)
+//
+// A firm audits a business every month or quarter, not a case once. The client
+// carries what outlives a period: its rule thresholds, its currency, and the
+// language its owner reads.
+// --------------------------------------------------------------------------
+
+/** One client's own red-flag thresholds. The firm's rules, not the product's. */
+export interface ClientRuleConfig {
+  approval_limits: number[];
+  round_number_floor: number;
+  date_tolerance_days: number;
+  duplicate_window_days: number;
+  near_limit_tolerance: number;
+  /** Maker-checker: a report needs a second person's signature first. */
+  require_sign_off: boolean;
+}
+
+export interface ClientSummary {
+  client_id: string;
+  name: string;
+  reference: string | null;
+  rules: ClientRuleConfig;
+  currency: string;
+  language: AssistantLanguage;
+  relationship_owner: string | null;
+  notes: string | null;
+  created_by: string;
+  created_at: string;
+  archived_at: string | null;
+  archived: boolean;
+  period_count: number;
+  pending_items: number;
+  open_evidence_requests: number;
+  last_period_end: string | null;
+  last_activity_at: string | null;
+}
+
+export interface ClientListResponse {
+  total: number;
+  clients: ClientSummary[];
+}
+
+export interface ClientDetailResponse {
+  client: ClientSummary;
+  periods: CaseSummary[];
+}
+
+export interface CreateClientRequest {
+  name: string;
+  reference?: string | null;
+  rules?: ClientRuleConfig;
+  currency?: string;
+  language?: AssistantLanguage;
+  relationship_owner?: string | null;
+  notes?: string | null;
+}
+
+/** PATCH /v1/clients/{id} — only what the request names changes. */
+export type UpdateClientRequest = Partial<CreateClientRequest>;
+
+// --------------------------------------------------------------------------
+// Background jobs
+// --------------------------------------------------------------------------
+
+export type JobStatus = "queued" | "running" | "succeeded" | "failed";
+
+/**
+ * How far a queued upload has got. Presentation only — every result comes from
+ * the case, the queue, and the trail, exactly as in the synchronous path.
+ */
+export interface JobSummary {
+  job_id: string;
+  case_id: string;
+  status: JobStatus;
+  progress: number;
+  step: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string | null;
+  finished: boolean;
+}
+
+export interface JobListResponse {
+  total: number;
+  jobs: JobSummary[];
+}
+
+// --------------------------------------------------------------------------
+// Value corrections
+// --------------------------------------------------------------------------
+
+/**
+ * What a human says a misread value actually is. Both readings are kept: the
+ * extraction is never overwritten, and recording one does not re-run matching.
+ */
+export interface ValueCorrection {
+  correction_id: string;
+  case_id: string;
+  review_item_id: string;
+  document_id: string;
+  field: string;
+  ai_value: string | null;
+  corrected_value: string;
+  note: string | null;
+  corrected_by: string;
+  corrected_at: string;
+}
+
+export interface CreateCorrectionRequest {
+  document_id: string;
+  field: string;
+  ai_value?: string | null;
+  corrected_value: string;
+  note?: string | null;
+}
+
+export interface CorrectionResponse {
+  correction: ValueCorrection;
+  audit_record: AuditRecord;
+}
+
+export interface CorrectionListResponse {
+  case_id: string;
+  total: number;
+  corrections: ValueCorrection[];
+}
+
+// --------------------------------------------------------------------------
+// Evidence requests — what the auditor still needs from the client
+// --------------------------------------------------------------------------
+
+export type EvidenceRequestStatus = "open" | "answered" | "resolved" | "cancelled";
+
+export interface EvidenceRequest {
+  request_id: string;
+  case_id: string;
+  review_item_id: string | null;
+  title: string;
+  detail: string | null;
+  status: EvidenceRequestStatus;
+  due_date: string | null;
+  requested_by: string;
+  requested_at: string;
+  response_note: string | null;
+  responded_by: string | null;
+  responded_at: string | null;
+  cancellation_note: string | null;
+  closed_by: string | null;
+  closed_at: string | null;
+}
+
+export interface CreateEvidenceRequestRequest {
+  title: string;
+  detail?: string | null;
+  case_id?: string | null;
+  review_item_id?: string | null;
+  due_date?: string | null;
+}
+
+export interface EvidenceRequestResponse {
+  request: EvidenceRequest;
+  audit_record: AuditRecord;
+}
+
+export interface EvidenceRequestListResponse {
+  case_id: string;
+  total: number;
+  /** Open or answered: the work still outstanding. */
+  open_total: number;
+  requests: EvidenceRequest[];
+}
+
+// --------------------------------------------------------------------------
+// Sign-off (maker-checker)
+// --------------------------------------------------------------------------
+
+export interface SignOff {
+  sign_off_id: string;
+  case_id: string;
+  signed_by: string;
+  signed_at: string;
+  note: string | null;
+  item_count: number;
+  approved_count: number;
+  rejected_count: number;
+}
+
+export interface SignOffResponse {
+  sign_off: SignOff;
+  audit_record: AuditRecord;
+}
+
+export interface SignOffListResponse {
+  case_id: string;
+  total: number;
+  sign_offs: SignOff[];
+  /** Whether this case's client requires a signature before a report. */
+  required: boolean;
+  satisfied: boolean;
+}
+
+// --------------------------------------------------------------------------
+// The firm's letterhead
+// --------------------------------------------------------------------------
+
+export interface OrgProfileResponse {
+  org_id: string;
+  name: string;
+  legal_name: string | null;
+  address: string | null;
+  contact_email: string | null;
+  phone: string | null;
+  website: string | null;
+  registration_number: string | null;
+  logo: string | null;
+  report_footer: string | null;
+  updated_at: string | null;
+}
+
+/** PUT /v1/org-profile — a full replacement; omitted fields are cleared. */
+export interface UpdateOrgProfileRequest {
+  legal_name?: string | null;
+  address?: string | null;
+  contact_email?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  registration_number?: string | null;
+  logo?: string | null;
+  report_footer?: string | null;
+}
+
+// --------------------------------------------------------------------------
+// Insights and period comparison
+//
+// Counted across the firm's cases from the same deterministic results the
+// dashboard shows. Nothing here is modelled, scored, or estimated.
+// --------------------------------------------------------------------------
+
+/**
+ * One party and what the rules have said about it. Deliberately *not* a risk
+ * score: Tarazu flags what needs review and never claims fraud detection.
+ */
+export interface VendorAttention {
+  party_name: string;
+  flag_count: number;
+  high: number;
+  medium: number;
+  low: number;
+  rules: string[];
+  case_count: number;
+  item_count: number;
+  total_amount: string;
+  currency: string;
+}
+
+export interface RuleFrequency {
+  rule_id: string;
+  count: number;
+  severity: Severity;
+  /** Of those, how many sit on an item somebody has already decided. */
+  reviewed: number;
+}
+
+export interface MonthlyPoint {
+  month: string; // YYYY-MM
+  item_count: number;
+  flag_count: number;
+  total_amount: string;
+  currency: string;
+}
+
+export interface InsightsResponse {
+  case_count: number;
+  client_count: number;
+  total_review_items: number;
+  pending_items: number;
+  total_flags: number;
+  unreviewed_flags: number;
+  open_evidence_requests: number;
+  estimated_hours_saved: number;
+  vendors: VendorAttention[];
+  rules: RuleFrequency[];
+  months: MonthlyPoint[];
+}
+
+/** `GET /v1/business-summary` — the engagement as the audited owner sees it. */
+export interface BusinessSummary {
+  case_id: string;
+  client_name: string;
+  period_start: string | null;
+  period_end: string | null;
+  status: CaseStatus;
+  total_review_items: number;
+  matched: number;
+  partial: number;
+  unmatched: number;
+  approved: number;
+  rejected: number;
+  pending: number;
+  flag_count: number;
+  high_severity: number;
+  medium_severity: number;
+  low_severity: number;
+  total_amount: string;
+  currency: string;
+  owner_summary: string;
+  urdu_summary: string | null;
+  sign_off_required: boolean;
+  sign_off_satisfied: boolean;
+  latest_report: ReportSummary | null;
+  generated_at: string | null;
+}
+
+export interface PeriodDelta {
+  label: string;
+  left: string;
+  right: string;
+  change: string;
+  notable: boolean;
+}
+
+export interface CompareResponse {
+  left: CaseSummary;
+  right: CaseSummary;
+  deltas: PeriodDelta[];
+  new_parties: string[];
+  dropped_parties: string[];
+}
+
+// --------------------------------------------------------------------------
+// Sampling — substantive testing, reproducible from its seed
+// --------------------------------------------------------------------------
+
+export type SamplingMethod = "random" | "monetary_unit" | "high_value";
+
+export interface SampleRequest {
+  case_id?: string | null;
+  method?: SamplingMethod;
+  size?: number;
+  /** Supply one to repeat an earlier draw exactly. */
+  seed?: number | null;
+}
+
+export interface SampleItem {
+  review_item_id: string;
+  party_name: string;
+  date: string;
+  amount: string;
+  currency: string;
+  match_status: string;
+  flag_count: number;
+  reason: string;
+}
+
+export interface SampleResponse {
+  case_id: string;
+  method: SamplingMethod;
+  seed: number;
+  population_size: number;
+  population_amount: string;
+  sample_size: number;
+  sample_amount: string;
+  coverage_percent: number;
+  items: SampleItem[];
+  /** How the sample was drawn, in working-paper language. */
+  method_note: string;
+  audit_record: AuditRecord;
 }

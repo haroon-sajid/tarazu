@@ -58,9 +58,9 @@ const sora = Sora({ subsets: ["latin"], weight: ["600", "700"] });
 const plexSans = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "600"] });
 
 const BTN_PRIMARY =
-  "inline-flex items-center justify-center gap-2 rounded-[10px] bg-[#0E7C66] px-6 py-3 text-center text-[15px] font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#0A5F4F] hover:shadow-[0_8px_20px_rgba(14,124,102,0.25)] sm:px-8 sm:py-3.5 md:text-base";
+  "inline-flex items-center justify-center gap-2 rounded-[10px] bg-[#0E7C66] px-6 py-3 text-center text-[15px] font-semibold text-white transition-colors hover:bg-[#0A5F4F] sm:px-8 sm:py-3.5 md:text-base";
 const BTN_GHOST =
-  "inline-flex items-center justify-center gap-2 rounded-[10px] border-[1.5px] border-[#E1E7E4] bg-white px-6 py-3 text-center text-[15px] font-semibold text-[#10243A] transition hover:-translate-y-0.5 hover:border-[#10243A] hover:shadow-[0_8px_20px_rgba(0,0,0,0.04)] sm:px-8 sm:py-3.5 md:text-base";
+  "inline-flex items-center justify-center gap-2 rounded-[10px] border-[1.5px] border-[#E1E7E4] bg-white px-6 py-3 text-center text-[15px] font-semibold text-[#10243A] transition-colors hover:border-[#10243A] hover:bg-[#F8FAF9] sm:px-8 sm:py-3.5 md:text-base";
 
 const NAV_LINKS: { label: string; href: string }[] = [
   { label: "Platform", href: "#how" },
@@ -140,7 +140,7 @@ function SiteHeader() {
           </Link>
           <Link
             href="/signup"
-            className="whitespace-nowrap rounded-md bg-[#0E7C66] px-4 py-2 text-[13px] font-semibold text-white transition hover:-translate-y-px hover:bg-[#0A5F4F] sm:px-6 md:text-sm"
+            className="whitespace-nowrap rounded-md bg-[#0E7C66] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#0A5F4F] sm:px-6 md:text-sm"
           >
             Get started
           </Link>
@@ -251,24 +251,18 @@ function FeatureCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="group flex flex-col rounded-[10px] border border-[#E1E7E4] bg-white p-6 pt-7 transition-all duration-300 hover:-translate-y-1.5 hover:border-[#0E7C66] hover:shadow-[0_16px_32px_-12px_rgba(0,0,0,0.12)] md:p-7 md:pt-8">
-      <Icon
-        className="mb-4 h-8 w-8 text-[#0E7C66] transition-transform duration-300 group-hover:scale-105 md:h-9 md:w-9"
-        aria-hidden
-      />
+    <div className="flex flex-col rounded-[10px] border border-[#E1E7E4] bg-white p-6 pt-7 transition-[border-color,box-shadow] duration-200 hover:border-[#0E7C66] hover:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.10)] md:p-7 md:pt-8">
+      <Icon className="mb-4 h-8 w-8 text-[#0E7C66] md:h-9 md:w-9" aria-hidden />
       <h3 className={`${sora.className} mb-2.5 text-[19px] font-bold text-[#10243A] md:text-xl`}>
         {title}
       </h3>
       <p className="mb-5 flex-1 text-[15px] text-[#3D4C5E] md:text-base">{children}</p>
       <Link
         href="/signup"
-        className="group/link inline-flex items-center gap-1.5 self-start border-b-[1.5px] border-transparent text-sm font-semibold text-[#0E7C66] transition-colors hover:border-[#0E7C66]"
+        className="inline-flex items-center gap-1.5 self-start border-b-[1.5px] border-transparent text-sm font-semibold text-[#0E7C66] transition-colors hover:border-[#0E7C66]"
       >
         Click to explore
-        <ArrowRight
-          className="h-3.5 w-3.5 transition-transform group-hover/link:translate-x-1"
-          aria-hidden
-        />
+        <ArrowRight className="h-3.5 w-3.5" aria-hidden />
       </Link>
     </div>
   );
@@ -284,7 +278,7 @@ function FaqCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-[#E1E7E4] bg-white px-5 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-[3px] hover:border-[#0E7C66] hover:shadow-[0_8px_28px_rgba(0,0,0,0.06)] sm:px-7 sm:py-6">
+    <div className="rounded-2xl border border-[#E1E7E4] bg-white px-5 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-[border-color,box-shadow] duration-200 hover:border-[#0E7C66] hover:shadow-[0_6px_20px_rgba(0,0,0,0.05)] sm:px-7 sm:py-6">
       <div className="mb-2.5 flex items-start gap-3 text-[16px] font-semibold text-[#10243A] md:gap-3.5 md:text-[17px]">
         <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[#0E7C66]" aria-hidden />
         {question}
@@ -388,7 +382,7 @@ const SPEED_LABELS = ["1×", "2×", "3×"];
 const BASE_DELAY = 2200;
 
 const CTRL_BTN =
-  "inline-flex items-center gap-1.5 rounded-full border border-[#E1E7E4] bg-white px-5 py-2 text-[13px] font-medium text-[#3D4C5E] shadow-[0_2px_6px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-0.5 hover:border-[#0E7C66] hover:bg-[#0E7C66] hover:text-white hover:shadow-[0_8px_24px_rgba(14,124,102,0.20)] active:translate-y-0 sm:px-6 sm:py-2.5";
+  "inline-flex items-center gap-1.5 rounded-full border border-[#E1E7E4] bg-white px-5 py-2 text-[13px] font-medium text-[#3D4C5E] shadow-[0_2px_6px_rgba(0,0,0,0.02)] transition-colors hover:border-[#0E7C66] hover:bg-[#0E7C66] hover:text-white sm:px-6 sm:py-2.5";
 
 /* The pipeline track and its fill share these insets so the fill ends on the
    last node, not the card edge. Below `md` the five nodes are equal flex
@@ -491,7 +485,7 @@ function DemoSection() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-white/70 bg-white/80 px-3 pb-4 pt-4 shadow-[0_20px_60px_rgba(0,0,0,0.06)] backdrop-blur-[16px] transition-shadow duration-[400ms] hover:shadow-[0_28px_72px_rgba(0,0,0,0.08)] sm:rounded-3xl sm:px-5 sm:pb-[18px] sm:pt-5 md:px-10 md:pb-7 md:pt-8">
+        <div className="rounded-2xl border border-white/70 bg-white/80 px-3 pb-4 pt-4 shadow-[0_20px_60px_rgba(0,0,0,0.06)] backdrop-blur-[16px] sm:rounded-3xl sm:px-5 sm:pb-[18px] sm:pt-5 md:px-10 md:pb-7 md:pt-8">
           {/* Pipeline steps — five equal cells on every viewport; the sub-labels
               appear from `sm` and the travelling particle from `md`. */}
           <div className="relative flex items-start justify-between pb-[4px] pt-[4px] md:pb-3 md:pt-2">
@@ -514,12 +508,12 @@ function DemoSection() {
               return (
                 <div
                   key={label}
-                  className="z-[3] flex min-w-0 flex-1 flex-col items-center gap-1.5 transition-transform duration-300 hover:-translate-y-[3px] md:gap-0"
+                  className="z-[3] flex min-w-0 flex-1 flex-col items-center gap-1.5 md:gap-0"
                 >
                   <div
                     className={`relative flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full border-2 shadow-[0_4px_12px_rgba(0,0,0,0.04)] transition-all duration-[600ms] ease-[cubic-bezier(0.22,1,0.36,1)] sm:h-[48px] sm:w-[48px] sm:border-[3px] md:mb-2.5 md:h-14 md:w-14 ${
                       state === "active"
-                        ? "scale-[1.04] border-[#0E7C66] bg-[#0E7C66] text-white shadow-[0_0_0_8px_rgba(14,124,102,0.12),0_8px_28px_rgba(14,124,102,0.18)]"
+                        ? "border-[#0E7C66] bg-[#0E7C66] text-white shadow-[0_0_0_8px_rgba(14,124,102,0.12),0_8px_28px_rgba(14,124,102,0.18)]"
                         : state === "completed"
                           ? "border-[#0E7C66] bg-[#0A5F4F] text-white"
                           : "border-[#E1E7E4] bg-white text-[#3D4C5E]"
@@ -854,7 +848,7 @@ export default function LandingPage() {
             <div
               role="group"
               aria-label="Product preview"
-              className="card-3d w-full max-w-[600px] rounded-2xl border border-[#E1E7E4] bg-gradient-to-br from-white to-slate-50 p-5 shadow-md transition-all duration-300 hover:-translate-y-2 hover:shadow-xl sm:p-8 lg:max-w-none"
+              className="w-full max-w-[600px] rounded-2xl border border-[#E1E7E4] bg-gradient-to-br from-white to-slate-50 p-5 shadow-md sm:p-8 lg:max-w-none"
             >
               <div className="mb-4 flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-emerald-500 motion-safe:animate-pulse" />

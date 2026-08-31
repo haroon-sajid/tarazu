@@ -25,14 +25,22 @@ from app.api import (
     assistant,
     audit_trail,
     auth,
+    business,
     cases,
+    clients,
     dashboard,
     documents,
+    evidence_requests,
     health,
+    insights,
+    jobs,
     members,
+    org_profile,
     profile,
     reports,
     review,
+    sampling,
+    sign_offs,
     upload,
 )
 from app.core.config import get_settings
@@ -87,3 +95,11 @@ app.include_router(audit_trail.router, prefix="/v1")
 app.include_router(documents.router, prefix="/v1")
 app.include_router(reports.router, prefix="/v1")
 app.include_router(assistant.router, prefix="/v1")
+app.include_router(clients.router, prefix="/v1")
+app.include_router(jobs.router, prefix="/v1")
+app.include_router(evidence_requests.router, prefix="/v1")
+app.include_router(sign_offs.router, prefix="/v1")
+app.include_router(insights.router, prefix="/v1")
+app.include_router(sampling.router, prefix="/v1")
+app.include_router(org_profile.router, prefix="/v1")
+app.include_router(business.router, prefix="/v1")

@@ -18,6 +18,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from app.modules.reports.content import ReportContent, TableSection
+from app.modules.reports.urdu import URDU_HEADING
 
 __all__ = ["render_excel"]
 
@@ -70,6 +71,31 @@ def _write_section(workbook: Workbook, section: TableSection, used: set[str]) ->
     for index, weight in enumerate(weights, start=1):
         sheet.column_dimensions[get_column_letter(index)].width = max(12, min(70, int(16 * weight)))
     sheet.freeze_panes = sheet.cell(row=header_row + 1, column=1)
+
+
+def _write_urdu(workbook: Workbook, content: ReportContent, used: set[str]) -> None:
+    """The business owner's summary, on its own sheet, right to left.
+
+    Excel renders Arabic-script text with the reader's own fonts and applies
+    the bidirectional algorithm itself, which is exactly what the PDF cannot do
+    — so this is where the Urdu actually reads correctly. `sheet_view.rightToLeft`
+    puts column A on the right, where an Urdu reader looks first.
+    """
+    sheet = workbook.create_sheet(_sheet_title("Urdu summary", used))
+    sheet.sheet_view.rightToLeft = True
+    sheet.cell(row=1, column=1, value=URDU_HEADING).font = Font(bold=True, size=13)
+    cell = sheet.cell(row=3, column=1, value=content.urdu_summary)
+    cell.alignment = Alignment(wrap_text=True, vertical="top", horizontal="right")
+    sheet.column_dimensions["A"].width = 110
+    sheet.row_dimensions[3].height = 150
+    sheet.cell(
+        row=6,
+        column=1,
+        value=(
+            "یہ خلاصہ خودکار طریقے سے اعداد و شمار سے تیار کیا گیا ہے۔ "
+            "تفصیلات انگریزی صفحات میں موجود ہیں۔"
+        ),
+    ).alignment = Alignment(wrap_text=True, horizontal="right")
 
 
 def _restamp(archive: bytes, stamp: datetime) -> bytes:
@@ -133,6 +159,21 @@ def render_excel(content: ReportContent) -> bytes:
         ),
     ).font = Font(color="6B7A8A")
     row = 4
+    if content.branding is not None:
+        # The firm's letterhead, above its own figures. The logo is not drawn
+        # into the workbook: an embedded image would break the byte-for-byte
+        # reproducibility the digest on the report record depends on, and the
+        # PDF is the deliverable a client looks at anyway.
+        summary.cell(row=row, column=1, value="Prepared by").font = _LABEL_FONT
+        summary.cell(row=row, column=2, value=content.branding.display_name)
+        row += 1
+        if content.branding.contact_line:
+            summary.cell(row=row, column=1, value="Firm details").font = _LABEL_FONT
+            summary.cell(
+                row=row, column=2, value=content.branding.contact_line
+            ).alignment = _WRAP
+            row += 1
+        row += 1
     for label, value in content.summary:
         summary.cell(row=row, column=1, value=label).font = _LABEL_FONT
         summary.cell(row=row, column=2, value=value).alignment = _WRAP
@@ -141,6 +182,9 @@ def render_excel(content: ReportContent) -> bytes:
     summary.cell(row=row, column=1, value=content.closing).alignment = _WRAP
     summary.column_dimensions["A"].width = 26
     summary.column_dimensions["B"].width = 100
+
+    if content.urdu_summary:
+        _write_urdu(workbook, content, used)
 
     for section in content.sections:
         _write_section(workbook, section, used)

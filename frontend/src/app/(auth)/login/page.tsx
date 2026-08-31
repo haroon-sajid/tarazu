@@ -3,11 +3,11 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { ArrowRight, Loader2, Lock, Mail } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { ApiError, FIXTURE_MODE } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input, PasswordInput } from "@/components/ui/input";
+import { AuthField, AuthPasswordField } from "../auth-field";
 
 export default function LoginPage() {
   const { session, signIn } = useAuth();
@@ -56,9 +56,10 @@ export default function LoginPage() {
         </p>
       )}
 
-      <form onSubmit={submit} className="mt-6 space-y-4">
-        <Input
+      <form onSubmit={submit} className="mt-6 space-y-5">
+        <AuthField
           label="Email"
+          icon={Mail}
           type="email"
           autoComplete="email"
           required
@@ -66,13 +67,14 @@ export default function LoginPage() {
           onChange={(event) => setEmail(event.target.value)}
           placeholder="partner@lahore-audit.pk"
         />
-        <PasswordInput
+        <AuthPasswordField
           label="Password"
+          icon={Lock}
           autoComplete="current-password"
           required
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          placeholder="••••••••"
+          placeholder="Enter your password..."
         />
 
         {error && (
@@ -81,9 +83,17 @@ export default function LoginPage() {
           </p>
         )}
 
-        <Button type="submit" size="lg" className="w-full" disabled={busy}>
-          {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+        <Button
+          type="submit"
+          size="lg"
+          className="h-12 w-full rounded-xl"
+          disabled={busy}
+        >
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : null}
           Sign in
+          {!busy && <ArrowRight className="h-4 w-4" aria-hidden />}
         </Button>
       </form>
 

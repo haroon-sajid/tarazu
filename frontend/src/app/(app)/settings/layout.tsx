@@ -32,6 +32,7 @@ const NAV: {
     icon: Building2,
     items: [
       { href: "/settings/general", label: "General" },
+      { href: "/settings/branding", label: "Report branding" },
       { href: "/settings/members", label: "Members" },
     ],
   },

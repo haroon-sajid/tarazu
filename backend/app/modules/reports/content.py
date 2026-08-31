@@ -20,15 +20,62 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 
+from app.modules.reports.urdu import urdu_executive_summary
 from app.shared.schemas import (
     AuditRecord,
     BenfordResult,
     CaseRecord,
     ReviewDecision,
     ReviewItem,
+    SignOff,
+    ValueCorrection,
 )
 
-__all__ = ["ReportContent", "ReportMeta", "TableSection", "build_report_content"]
+__all__ = [
+    "ReportBranding",
+    "ReportContent",
+    "ReportMeta",
+    "TableSection",
+    "build_report_content",
+]
+
+
+@dataclass(frozen=True)
+class ReportBranding:
+    """The firm's own letterhead, as it appears on the deliverable.
+
+    Presentation only, and deliberately kept out of `ReportMeta`: nothing here
+    changes a figure, and a report generated before a firm filled its details
+    in is the same report with a plainer heading.
+    """
+
+    firm_name: str
+    legal_name: str | None = None
+    address: str | None = None
+    contact_email: str | None = None
+    phone: str | None = None
+    website: str | None = None
+    registration_number: str | None = None
+    #: A `data:image/...` URL, as stored on the organization profile.
+    logo: str | None = None
+    footer: str | None = None
+
+    @property
+    def display_name(self) -> str:
+        """What to print as the firm's name: the legal one when there is one."""
+        return self.legal_name or self.firm_name
+
+    @property
+    def contact_line(self) -> str:
+        """Address, email, phone, and registration on one line, blanks skipped."""
+        parts = [
+            self.address,
+            self.contact_email,
+            self.phone,
+            self.website,
+            f"Reg. {self.registration_number}" if self.registration_number else None,
+        ]
+        return " · ".join(part for part in parts if part)
 
 
 @dataclass(frozen=True)
@@ -68,6 +115,13 @@ class ReportContent:
     flag_count: int = 0
     audit_record_count: int = 0
     excluded_pending_items: list[str] = field(default_factory=list)
+    #: The firm's letterhead. None means the plain heading.
+    branding: ReportBranding | None = None
+    #: The plain-Urdu summary for the business owner, when the client reads
+    #: Urdu. Rendered in the workbook and carried in the evidence bundle; the
+    #: PDF points at it rather than drawing glyphs it has no font for — see
+    #: `modules/reports/urdu.py` for why that is the honest choice.
+    urdu_summary: str | None = None
 
 
 CLOSING = (
@@ -164,8 +218,20 @@ def build_report_content(
     report_id: str,
     generated_by: str,
     generated_at: datetime,
+    branding: ReportBranding | None = None,
+    corrections: list[ValueCorrection] | None = None,
+    sign_offs: list[SignOff] | None = None,
+    urdu: bool = False,
 ) -> ReportContent:
-    """Assemble the report from persisted results. Pure; no I/O."""
+    """Assemble the report from persisted results. Pure; no I/O.
+
+    `corrections` and `sign_offs` are additive: a case with neither produces
+    exactly the report it always did. `urdu` asks for the business owner's
+    plain-language summary, which is composed from the counts below by
+    deterministic code and never translated by a model.
+    """
+    corrections = list(corrections or [])
+    sign_offs = list(sign_offs or [])
     decided = [item for item in items if item.decision is not ReviewDecision.PENDING]
     pending = [item for item in items if item.decision is ReviewDecision.PENDING]
     approved = [item for item in decided if item.decision is ReviewDecision.APPROVED]
@@ -223,6 +289,26 @@ def build_report_content(
         ("Generated at", _when(generated_at)),
         ("Report id", report_id),
     ]
+
+    if corrections:
+        summary.insert(
+            -3,
+            (
+                "Corrections recorded",
+                f"{len(corrections)} extracted value(s) corrected by a human; "
+                "both the model's reading and the correction are listed below",
+            ),
+        )
+    if sign_offs:
+        latest = sign_offs[0]
+        summary.insert(
+            -3,
+            (
+                "Signed off by",
+                f"{latest.signed_by} on {_when(latest.signed_at)}"
+                + (f" — {latest.note}" if latest.note else ""),
+            ),
+        )
 
     sections: list[TableSection] = []
 
@@ -287,6 +373,62 @@ def build_report_content(
             ],
         )
     )
+
+    if corrections:
+        sections.append(
+            TableSection(
+                title="Corrections to extracted values",
+                note=(
+                    "Where a human read the source differently from the model. Both "
+                    "readings are kept: the extraction is not overwritten, and these "
+                    "corrections did not re-run matching — the figures in the tables "
+                    "above are as the deterministic modules computed them."
+                ),
+                columns=[
+                    "Item", "Document", "Field", "Model read", "Corrected to",
+                    "Corrected by", "When", "Note",
+                ],
+                widths=[1.2, 1.3, 1.0, 1.3, 1.3, 1.2, 1.1, 2.4],
+                rows=[
+                    [
+                        correction.review_item_id,
+                        correction.document_id,
+                        correction.field,
+                        correction.ai_value if correction.ai_value is not None else "(unreadable)",
+                        correction.corrected_value,
+                        correction.corrected_by,
+                        _when(correction.corrected_at),
+                        correction.note or "",
+                    ]
+                    for correction in corrections
+                ],
+            )
+        )
+
+    if sign_offs:
+        sections.append(
+            TableSection(
+                title="Sign-off",
+                note=(
+                    "The second pair of eyes. Whoever signed the engagement off did "
+                    "not decide the items on it — that is what a sign-off is for."
+                ),
+                columns=["Sign-off", "Signed by", "When", "Items", "Approved", "Rejected", "Note"],
+                widths=[1.2, 1.4, 1.2, 0.7, 0.8, 0.8, 2.4],
+                rows=[
+                    [
+                        sign_off.sign_off_id,
+                        sign_off.signed_by,
+                        _when(sign_off.signed_at),
+                        str(sign_off.item_count),
+                        str(sign_off.approved_count),
+                        str(sign_off.rejected_count),
+                        sign_off.note or "",
+                    ]
+                    for sign_off in sign_offs
+                ],
+            )
+        )
 
     sections.append(
         TableSection(
@@ -358,6 +500,35 @@ def build_report_content(
         )
     )
 
+    urdu_summary = None
+    if urdu:
+        currency = items[0].ledger_entry.currency if items else "PKR"
+        urdu_summary = urdu_executive_summary(
+            client_name=case.client_name,
+            period_start=period_start.isoformat() if period_start else None,
+            period_end=period_end.isoformat() if period_end else None,
+            item_count=len(items),
+            matched=by_status["matched"],
+            partial=by_status["partial"],
+            unmatched=by_status["unmatched"],
+            approved=len(approved),
+            rejected=len(rejected),
+            pending=len(pending),
+            flag_count=len(all_flags),
+            high_severity=by_severity["high"],
+            total_amount=sum(
+                (
+                    item.ledger_entry.amount
+                    for item in items
+                    if item.ledger_entry.currency == currency
+                ),
+                Decimal("0"),
+            )
+            if items
+            else None,
+            currency=currency,
+        )
+
     return ReportContent(
         meta=meta,
         summary=summary,
@@ -370,4 +541,6 @@ def build_report_content(
         flag_count=len(all_flags),
         audit_record_count=len(audit),
         excluded_pending_items=[item.review_item_id for item in pending],
+        branding=branding,
+        urdu_summary=urdu_summary,
     )

@@ -31,6 +31,11 @@ from pathlib import Path
 
 #: Do not read the developer's `.env`.
 os.environ["TARAZU_DOTENV"] = "0"
+#: Run background jobs on the calling thread. A queued upload's effects are then
+#: visible the moment the request returns, so no test has to poll or sleep, and
+#: a job that raises fails the test that queued it instead of a worker thread
+#: nobody is watching. The pool is what a deployment uses; see `core/jobs.py`.
+os.environ["TARAZU_JOBS_INLINE"] = "1"
 #: And should one have leaked in through the real environment, unset it: with
 #: `SUPABASE_URL` present the app would sign tokens with the project's JWT
 #: secret, take the GoTrue branch on login, and talk to a real database.

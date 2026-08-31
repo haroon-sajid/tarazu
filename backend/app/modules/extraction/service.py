@@ -32,6 +32,10 @@ from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 
 from app.modules.extraction import demo_mode
+from app.modules.extraction.bank_reader import (
+    BankStatementReadError,
+    read_bank_statement,
+)
 from app.modules.extraction.ledger_reader import LedgerReadError, read_ledger
 from app.modules.extraction.page_images import (
     PageImage,
@@ -71,6 +75,7 @@ from app.shared.schemas import (
 )
 
 __all__ = [
+    "BankStatementReadError",
     "ExtractionError",
     "LedgerReadError",
     "PageImage",
@@ -84,10 +89,24 @@ __all__ = [
     "document_page_count",
     "invoices_from",
     "pdf_to_page_images",
+    "read_bank_statement",
     "read_ledger",
     "render_document_page",
     "verify_page",
 ]
+
+#: Bank-statement extensions that are read deterministically with pandas
+#: instead of by the vision model. Every Pakistani bank's internet banking can
+#: export one of these, and a statement read this way carries no extraction
+#: uncertainty at all: there is no model to be unsure, no API to be down, and
+#: no cost per page. Reserve the vision model for the paper that has no
+#: machine-readable form.
+SPREADSHEET_STATEMENT_SUFFIXES = (".csv", ".xlsx", ".xlsm", ".xls")
+
+
+def statement_is_a_spreadsheet(filename: str) -> bool:
+    """Whether this bank statement should be read by pandas rather than Qwen."""
+    return filename.lower().endswith(SPREADSHEET_STATEMENT_SUFFIXES)
 
 logger = logging.getLogger(__name__)
 

@@ -4,9 +4,11 @@ From hackathon project to a SaaS for accountants and small businesses.
 
 - **Date:** 29 August 2026
 - **Owner:** Muhammad Haroon Sajid
-- **Status:** Adopted. Phase 0 delivered on 29 August 2026 (see
-  [Delivery status](#delivery-status) at the end). Phases 1–4 are sequenced
-  behind pilot feedback, as section 12 requires.
+- **Status:** Adopted. Phase 0 delivered 29 August 2026; Phase 1 delivered
+  31 August 2026, with several Phase 2/4 items pulled forward because the
+  pilot needs them (see [Delivery status](#delivery-status) at the end).
+  Phase 3 (webhooks, n8n, scheduled reports) is deferred at the owner's
+  request — the firm does not use n8n.
 
 The decisions in this plan that shape the codebase are recorded as ADRs:
 [0004](decisions/0004-tarazu-is-an-audit-layer-not-a-system-of-record.md)
@@ -233,10 +235,36 @@ Kept current as phases land. Dates are absolute.
 | Original documents in the evidence viewer | `GET /v1/documents`, `/file`, `/pages/{page}` (PyMuPDF render); the evidence viewer and Documents screen draw provenance boxes on the real page, schematic fallback kept. | Done |
 | Acceptance: a real client folder from upload to report with no manual steps | The code path is complete and tested end to end over the demo extraction (`DEMO_MODE`). The run over a real folder with live Qwen extraction is the pilot's first task and is recorded here when it happens. | Pending real-folder run |
 
-### Phase 1 — not started
+### Phase 1 — delivered 31 August 2026
 
-Sequenced after pilot recruitment (section 12, week 4). The client/period
-data model is designed in ADR 0005 so it lands as an additive change.
+Executed as ADR 0005 designed it: additively. New tables plus one nullable
+column on `cases`, so **a case created before this is still a valid one-off
+engagement** and nothing that referenced `case_id` moved.
+
+| Item | Where | Status |
+|---|---|---|
+| Client entity, rolling forward each period | `clients` table; `Client` / `ClientRuleConfig` in `shared/schemas.py`; `GET/POST /v1/clients`, `GET/PATCH /v1/clients/{id}`, archive and restore. Archiving never deletes: the periods, decisions, reports, and trail behind a relationship outlive it. | Done |
+| Period entity | The `cases` row **is** the period: `client_id`, `period_start`, `period_end`, and the fuller status set (`matching`, `approved`, `reported` added). `case_id` is unchanged, so every foreign key and the whole audit trail carried over untouched. | Done |
+| Per-client rule configuration | `ClientRuleConfig.to_rules_config()` is handed to `rules.evaluate_flags` by the pipeline; `POST /v1/upload` with `client_id` runs that case against **the client's own** thresholds instead of the firm-wide `RULES_*` defaults. The rules are the firm's, not the product's. | Done |
+| Processing as background jobs | `core/jobs.py` (a small in-process pool, replaceable by a broker without changing a route), `jobs` table, `GET /v1/jobs`, `GET /v1/jobs/{id}`; `POST /v1/upload?background=true` creates the case, queues the work, and answers with a `job_id`. The upload screen polls it and shows the pipeline's own `progress` and `step`. | Done |
+| Read-only owner role | `OrgRole.VIEWER` with `can_decide` false; the review routes refuse it (`_deciding_principal`), as does sign-off. | Done |
+| Business view dashboard | **Not built as a separate screen.** The owner-facing artefact shipped instead as the Urdu executive summary in the report (below), which is what an owner actually receives. A dedicated in-product Business view is still open. | Partial |
+
+**Beyond the plan, shipped in the same pass** because the pilot needs them
+before a real client folder is run:
+
+| Item | Where | Why it was pulled forward |
+|---|---|---|
+| Bank statements as CSV/XLSX | `extraction/bank_reader.py`; accepted by `POST /v1/upload`; the pipeline branches on the extension and the trail records `pandas` as the actor | Every Pakistani bank exports one from internet banking. Reading it deterministically removes the extraction risk, the model cost, and the confidence question from the riskiest document in the case. Phase 4's "library of Pakistani bank statement formats" starts here. |
+| Value corrections | `value_corrections` table; `POST /v1/review-items/{id}/corrections`, `GET /v1/corrections`; own section in the report | A real statement will produce a low-confidence reading. Until now the only response was rejecting the whole item. Both readings are kept and matching is **not** re-run — see ADR 0004 and rule 2. |
+| Evidence requests | `evidence_requests` table; `/v1/evidence-requests` with respond / resolve / cancel | "Ask the client for invoice #43" is the workflow a firm lives in, and it belongs in the trail rather than in somebody's inbox. |
+| Maker-checker sign-off | `sign_offs` table (append-only in both stores); `/v1/sign-offs`; gates `POST /v1/reports` when the client's `require_sign_off` is set | Strengthens rule 1 rather than relaxing it: the signer may not be anyone who decided an item, and a case with anything pending cannot be signed at all. |
+| Firm branding on reports | `org_profiles` table; `GET/PUT /v1/org-profile`; drawn into the PDF letterhead and the workbook | White-label for free, and read at generation time so last year's report keeps last year's letterhead. |
+| Urdu executive summary | `reports/urdu.py`, composed from the counts, rendered in the workbook and carried in the bundle | The assistant has spoken Urdu since the first build; the deliverable the owner receives had not. **Not drawn into the PDF**: reportlab has no Arabic-script glyphs and does no bidi or shaping, so it would render as empty boxes. Doing it properly needs a bundled Nastaliq font and a shaping pass — a deliberate, separate piece of work. |
+| Evidence bundle | `reports/bundle.py`; `GET /v1/cases/{id}/bundle` | One byte-reproducible zip — documents, reports, queue, corrections, sign-offs, trail, and a SHA-256 manifest. The regulator-grade artefact the trail was always for. |
+| Audit sampling | `modules/sampling/` (random, monetary-unit, high-value), `POST /v1/sampling` | Classic substantive testing, deterministic and reproducible from its seed — a sample nobody can reproduce is not audit evidence. |
+| Firm-wide insights and period comparison | `GET /v1/insights`, `GET /v1/compare` | What a firm asks between engagements rather than during one. Every figure is counted from the same persisted results the dashboard uses. |
+| Public demo playground | `/demo`, rendered from the bundled fixtures with no backend call | Zero-friction evaluation. Deliberately calls no API, so it works with or without a backend and cannot 401. |
 
 ### Phase 2 — partly delivered with Phase 0
 
@@ -251,4 +279,15 @@ answerable once the Phase 1 normalized transactions table carries direction
 (money in / money out). The "done when" criterion — all ten correct on the
 demo case and one real case — therefore stays open until Phase 1.
 
-### Phase 3 and Phase 4 — not started
+### Phase 3 — deferred by the owner
+
+Webhooks, n8n templates, and scheduled reports were explicitly deferred on
+31 August 2026: the firm running this does not use n8n, so the automation
+phase buys nothing until there is a channel it will actually use. The API keys
+and scopes that Phase 3 would have built on are already live, so this can be
+picked up whenever a channel is chosen.
+
+### Phase 4 — not started
+
+One piece of it landed early: the deterministic bank-statement reader is the
+beginning of "a library of Pakistani bank statement formats".

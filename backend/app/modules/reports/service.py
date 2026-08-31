@@ -20,7 +20,12 @@ import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 
-from app.modules.reports.content import ReportContent, build_report_content
+from app.modules.reports.bundle import build_bundle
+from app.modules.reports.content import (
+    ReportBranding,
+    ReportContent,
+    build_report_content,
+)
 from app.modules.reports.excel import render_excel
 from app.modules.reports.pdf import render_pdf
 from app.shared.schemas import (
@@ -29,9 +34,17 @@ from app.shared.schemas import (
     CaseRecord,
     ReportRecord,
     ReviewItem,
+    SignOff,
+    ValueCorrection,
 )
 
-__all__ = ["ReportFiles", "generate_report", "report_content"]
+__all__ = [
+    "ReportBranding",
+    "ReportFiles",
+    "build_bundle",
+    "generate_report",
+    "report_content",
+]
 
 
 @dataclass(frozen=True)
@@ -58,11 +71,16 @@ def report_content(
     report_id: str,
     generated_by: str,
     generated_at: datetime,
+    branding: ReportBranding | None = None,
+    corrections: list[ValueCorrection] | None = None,
+    sign_offs: list[SignOff] | None = None,
+    urdu: bool = False,
 ) -> ReportContent:
     """The report as tables of strings, before rendering. Useful for tests."""
     return build_report_content(
         case, items, audit, benford,
         report_id=report_id, generated_by=generated_by, generated_at=generated_at,
+        branding=branding, corrections=corrections, sign_offs=sign_offs, urdu=urdu,
     )
 
 
@@ -75,6 +93,10 @@ def generate_report(
     report_id: str,
     generated_by: str,
     generated_at: datetime,
+    branding: ReportBranding | None = None,
+    corrections: list[ValueCorrection] | None = None,
+    sign_offs: list[SignOff] | None = None,
+    urdu: bool = False,
 ) -> ReportFiles:
     """Render the PDF and the Excel workbook for one case.
 
@@ -87,6 +109,11 @@ def generate_report(
         report_id: The id the caller minted for this generation.
         generated_by: The accountable person, as a user id.
         generated_at: When. Printed on every page and kept on the record.
+        branding: The firm's letterhead, or None for the plain heading.
+        corrections: Human corrections of misread values, listed beside the
+            model's readings rather than replacing them.
+        sign_offs: Recorded sign-offs, if the engagement has any.
+        urdu: Compose the business owner's plain-Urdu summary as well.
 
     Returns:
         `ReportFiles` with both files and a `ReportRecord` describing them.
@@ -94,6 +121,7 @@ def generate_report(
     content = report_content(
         case, items, audit, benford,
         report_id=report_id, generated_by=generated_by, generated_at=generated_at,
+        branding=branding, corrections=corrections, sign_offs=sign_offs, urdu=urdu,
     )
     pdf = render_pdf(content)
     excel = render_excel(content)

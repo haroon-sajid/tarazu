@@ -3,11 +3,11 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { ArrowRight, Building2, Loader2, Lock, Mail, Ticket } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input, PasswordInput } from "@/components/ui/input";
+import { AuthField, AuthPasswordField } from "../auth-field";
 import { cn } from "@/lib/utils";
 
 type Mode = "create" | "join";
@@ -96,10 +96,11 @@ export default function SignupPage() {
         ))}
       </div>
 
-      <form onSubmit={submit} className="mt-5 space-y-4">
+      <form onSubmit={submit} className="mt-5 space-y-5">
         {mode === "create" ? (
-          <Input
+          <AuthField
             label="Organization name"
+            icon={Building2}
             required
             maxLength={200}
             value={organizationName}
@@ -107,8 +108,9 @@ export default function SignupPage() {
             placeholder="Lahore Audit Associates"
           />
         ) : (
-          <Input
+          <AuthField
             label="Invite code"
+            icon={Ticket}
             required
             maxLength={40}
             value={inviteCode}
@@ -117,8 +119,9 @@ export default function SignupPage() {
             hint="Single-use, from your workspace owner (Settings → Members)."
           />
         )}
-        <Input
+        <AuthField
           label="Work email"
+          icon={Mail}
           type="email"
           autoComplete="email"
           required
@@ -126,8 +129,9 @@ export default function SignupPage() {
           onChange={(event) => setEmail(event.target.value)}
           placeholder="partner@lahore-audit.pk"
         />
-        <PasswordInput
+        <AuthPasswordField
           label="Password"
+          icon={Lock}
           autoComplete="new-password"
           required
           minLength={8}
@@ -135,8 +139,9 @@ export default function SignupPage() {
           onChange={(event) => setPassword(event.target.value)}
           hint="At least 8 characters."
         />
-        <PasswordInput
+        <AuthPasswordField
           label="Confirm password"
+          icon={Lock}
           autoComplete="new-password"
           required
           value={confirm}
@@ -149,9 +154,17 @@ export default function SignupPage() {
           </p>
         )}
 
-        <Button type="submit" size="lg" className="w-full" disabled={busy}>
-          {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+        <Button
+          type="submit"
+          size="lg"
+          className="h-12 w-full rounded-xl"
+          disabled={busy}
+        >
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : null}
           {mode === "create" ? "Create organization" : "Join workspace"}
+          {!busy && <ArrowRight className="h-4 w-4" aria-hidden />}
         </Button>
       </form>
 

@@ -42,9 +42,18 @@ const STATUS_STYLE: Record<CaseStatus, { label: string; className: string }> = {
     label: "Awaiting matching",
     className: "bg-amber-50 text-amber-800 ring-amber-200",
   },
+  matching: { label: "Matching", className: "bg-sky-50 text-sky-700 ring-sky-200" },
   ready_for_review: {
     label: "Ready for review",
     className: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  },
+  approved: {
+    label: "Approved",
+    className: "bg-brand-50 text-brand-800 ring-brand-200",
+  },
+  reported: {
+    label: "Reported",
+    className: "bg-brand-50 text-brand-900 ring-brand-200",
   },
   failed: { label: "Failed", className: "bg-rose-50 text-rose-700 ring-rose-200" },
 };

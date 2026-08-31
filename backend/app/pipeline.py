@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from app.core.audit import Actor, record_action, record_actor_action, record_ai_action
 from app.core.repository import CaseRepository, DocumentStore, StoredDocument
@@ -41,7 +41,12 @@ from app.shared.schemas import (
     ReviewItem,
 )
 
-__all__ = ["PipelineOutcome", "RULES_CONFIG", "content_type_for", "run_pipeline"]
+__all__ = [
+    "PipelineOutcome",
+    "RULES_CONFIG",
+    "content_type_for",
+    "run_pipeline",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +54,20 @@ logger = logging.getLogger(__name__)
 #: defaults, with any `RULES_*` environment overrides. Kept as a module-level
 #: name because the API contract documents it; read once at import, like every
 #: other setting in this process.
+#:
+#: This is the firm-wide fallback. A case that belongs to a client uses that
+#: client's own thresholds instead (ADR 0005) — the caller passes them in as
+#: `rules_config`, which is the change the ADR anticipated when it said the
+#: configuration was "already a dictionary the pipeline passes in".
 RULES_CONFIG: dict[str, Any] = rules.default_config()
+
+#: Reported as the pipeline moves, so a queued upload can show a real stage
+#: rather than a spinner. Presentation only: no result is read from it.
+ProgressReporter = Callable[[int, str], None]
+
+
+def _noop_progress(percent: int, step: str) -> None:
+    """The default reporter: the pipeline runs the same either way."""
 
 
 @dataclass
@@ -77,6 +95,11 @@ def run_pipeline(
     actor: Actor,
     repository: CaseRepository,
     storage: DocumentStore,
+    *,
+    client_id: str | None = None,
+    rules_config: dict[str, Any] | None = None,
+    on_progress: ProgressReporter | None = None,
+    create_case: bool = True,
 ) -> PipelineOutcome:
     """Run one case from uploaded bytes to a persisted review queue.
 
@@ -94,29 +117,46 @@ def run_pipeline(
             an integration reads as `api-key:<prefix>` rather than as a person.
         repository: Where cases, extractions, and review items are persisted.
         storage: Where document bytes are persisted.
+        client_id: The recurring client this period belongs to (ADR 0005), or
+            None for a one-off engagement.
+        rules_config: The red-flag thresholds to evaluate against. Defaults to
+            the firm-wide `RULES_CONFIG`; a case belonging to a client is run
+            with that client's own limits instead, which is what makes the
+            rules the firm's rather than the product's.
+        on_progress: Called as `(percent, step)` as the pipeline advances, so a
+            queued upload can report a stage. Never influences a result.
+        create_case: Whether to create the case row. False when the caller has
+            already created it — the background path does, so that the case is
+            visible and pollable the instant the upload request returns rather
+            than only once the worker gets to it.
 
     Returns:
         A `PipelineOutcome` describing what was produced. Extraction errors
         propagate to the caller, which turns them into HTTP responses; a
         failure in a deterministic step marks the case `failed` and re-raises.
     """
+    progress = on_progress or _noop_progress
+    config = RULES_CONFIG if rules_config is None else rules_config
     created_at = datetime.now(timezone.utc)
-    repository.create_case(
-        org_id,
-        CaseRecord(
-            case_id=case_id,
-            client_name=client_name,
-            status=CaseStatus.UPLOADED,
-            created_by=actor.user_id,
-            created_at=created_at,
-        ),
-    )
+    if create_case:
+        repository.create_case(
+            org_id,
+            CaseRecord(
+                case_id=case_id,
+                client_name=client_name,
+                client_id=client_id,
+                status=CaseStatus.UPLOADED,
+                created_by=actor.user_id,
+                created_at=created_at,
+            ),
+        )
     record_actor_action(repository, org_id, case_id, actor, AuditAction.CASE_CREATED,
                         detail=f"{len(documents)} documents for {client_name}")
 
     outcome = PipelineOutcome(case_id=case_id, status=CaseStatus.UPLOADED)
 
     # -- 1. Store the bytes ------------------------------------------------- #
+    progress(5, f"Storing {len(documents)} documents")
     stored: list[StoredDocument] = []
     for document, content in documents:
         storage.put(document.storage_path, content, content_type_for(document.filename))
@@ -131,11 +171,18 @@ def run_pipeline(
 
     # -- 2. Extract --------------------------------------------------------- #
     repository.set_case_status(org_id, case_id, CaseStatus.EXTRACTING)
+    progress(15, "Reading documents")
     ledger: list[LedgerEntry] = []
     bank: list[BankTransaction] = []
     invoices: list[Invoice] = []
 
-    for document, content in documents:
+    total_documents = max(1, len(documents))
+    for index, (document, content) in enumerate(documents, start=1):
+        # 15% → 65% across the documents, so a 40-invoice case still moves.
+        progress(
+            15 + int(50 * (index - 1) / total_documents),
+            f"Reading {document.filename}",
+        )
         if document.document_type is DocumentType.LEDGER:
             # No AI on this path. A spreadsheet is already structured.
             ledger.extend(
@@ -145,6 +192,29 @@ def run_pipeline(
                 repository, org_id, case_id, ActorType.SYSTEM, "pandas",
                 AuditAction.EXTRACTION_COMPLETED, item_id=document.document_id,
                 detail=f"{len(ledger)} ledger rows read with pandas, no model involved",
+            )
+            continue
+
+        if document.document_type is DocumentType.BANK_STATEMENT and (
+            extraction.statement_is_a_spreadsheet(document.filename)
+        ):
+            # The same reasoning as the ledger, applied to the riskiest document
+            # in the case. Every Pakistani bank exports the statement as CSV or
+            # Excel from internet banking, and a statement read by pandas has no
+            # extraction confidence to weigh, no model to be unavailable, and no
+            # page to be misread — so when the machine-readable form exists, the
+            # vision model is the wrong tool.
+            rows = extraction.read_bank_statement(
+                document.document_id, document.filename, content
+            )
+            bank.extend(rows)
+            record_action(
+                repository, org_id, case_id, ActorType.SYSTEM, "pandas",
+                AuditAction.EXTRACTION_COMPLETED, item_id=document.document_id,
+                detail=(
+                    f"{len(rows)} bank transactions read with pandas from "
+                    f"{document.filename}, no model involved"
+                ),
             )
             continue
 
@@ -176,6 +246,8 @@ def run_pipeline(
     outcome.ledger_entries = ledger
 
     # -- 3-5. Match, flag, and assemble — all deterministic ------------------ #
+    repository.set_case_status(org_id, case_id, CaseStatus.MATCHING)
+    progress(70, "Matching transactions")
     try:
         matches = matching.run_matching(ledger, bank, invoices)
         record_action(
@@ -187,8 +259,9 @@ def run_pipeline(
             ),
         )
 
+        progress(82, "Applying audit rules")
         flags = rules.evaluate_flags(
-            ledger, matches, RULES_CONFIG, invoices=invoices, bank=bank
+            ledger, matches, config, invoices=invoices, bank=bank
         )
         for flag in flags:
             record_action(
@@ -197,8 +270,10 @@ def run_pipeline(
                 detail=f"{flag.rule_id} ({flag.severity.value}): {flag.explanation}",
             )
 
+        progress(90, "Running Benford analysis")
         repository.save_benford(org_id, case_id, rules.benford_analysis(ledger))
 
+        progress(95, "Assembling the review queue")
         items = build_review_items(case_id, ledger, bank, invoices, matches, flags,
                                    outcome.extractions)
         repository.save_review_items(org_id, case_id, items)
@@ -214,6 +289,7 @@ def run_pipeline(
         raise
 
     repository.set_case_status(org_id, case_id, CaseStatus.READY_FOR_REVIEW)
+    progress(100, f"{len(items)} items ready for review")
     outcome.review_items = items
     outcome.status = CaseStatus.READY_FOR_REVIEW
     return outcome

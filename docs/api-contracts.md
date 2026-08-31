@@ -456,6 +456,29 @@ highlights the matching text instead.
 | `GET` | `/v1/reports` | Every report generated for a case, newest first | Live |
 | `GET` | `/v1/reports/{id}/download` | Download a report file (`?format=pdf\|excel`) | Live |
 | `POST` | `/v1/assistant/chat` | Ask Tarazu: a grounded answer with citations and facts | Live |
+| `GET` | `/v1/clients` | The firm's recurring clients (`?include_archived=`) | Live |
+| `POST` | `/v1/clients` | Add a recurring client | Live |
+| `GET` | `/v1/clients/{client_id}` | One client and every period run for it | Live |
+| `PATCH` | `/v1/clients/{client_id}` | Change a client's details or its rule thresholds | Live |
+| `POST` | `/v1/clients/{client_id}/archive` | Archive a client (deletes nothing) | Live |
+| `POST` | `/v1/clients/{client_id}/restore` | Restore an archived client | Live |
+| `GET` | `/v1/jobs` | Recent background jobs, newest first (`?status=`) | Live |
+| `GET` | `/v1/jobs/{job_id}` | One queued upload's progress — what the upload screen polls | Live |
+| `POST` | `/v1/review-items/{id}/corrections` | Record what a misread value actually is | Live |
+| `GET` | `/v1/corrections` | Every correction on a case, oldest first | Live |
+| `GET` | `/v1/evidence-requests` | What is still outstanding with the client | Live |
+| `POST` | `/v1/evidence-requests` | Ask the client for a document or an explanation | Live |
+| `POST` | `/v1/evidence-requests/{id}/respond` | Record the client's answer | Live |
+| `POST` | `/v1/evidence-requests/{id}/resolve` | Close a satisfied request | Live |
+| `POST` | `/v1/evidence-requests/{id}/cancel` | Close a request without a response | Live |
+| `GET` | `/v1/sign-offs` | Signatures on a case, and whether one is required | Live |
+| `POST` | `/v1/sign-offs` | Sign a finished engagement off (never its own decider) | Live |
+| `GET` | `/v1/insights` | The firm across all of its cases | Live |
+| `GET` | `/v1/compare` | Two periods side by side (`?left=&right=`) | Live |
+| `POST` | `/v1/sampling` | Draw a reproducible sample for substantive testing | Live |
+| `GET` | `/v1/org-profile` | The firm's letterhead, as printed on its reports | Live |
+| `PUT` | `/v1/org-profile` | Replace the firm's letterhead (owner only) | Live |
+| `GET` | `/v1/cases/{case_id}/bundle` | The whole engagement as one verifiable zip | Live |
 
 All of these read and write real persisted data. `SUPABASE_URL` selects the
 store: set it and the app uses Supabase Postgres and Storage; leave it unset and
@@ -464,12 +487,99 @@ it runs on local SQLite and the filesystem, with the same behaviour either side.
 ### Which case?
 
 `/v1/review-items`, `/v1/dashboard`, `/v1/documents`, `/v1/reports`,
-`/v1/audit-trail`, and `/v1/assistant/chat` are always about one case. Pass
-`?case_id=CASE-...` (or `case_id` in the JSON body of the two `POST`s), or
+`/v1/audit-trail`, `/v1/corrections`, `/v1/evidence-requests`, `/v1/sign-offs`,
+`/v1/sampling`, and `/v1/assistant/chat` are always about one case. Pass
+`?case_id=CASE-...` (or `case_id` in the JSON body of the `POST`s), or
 omit it and the backend uses **your organization's** most recent case. With no
 cases in your organization, all of them return `404` telling you to upload
 first — including when another firm's database rows are sitting right beside
 yours. One function, `resolve_case_id`, applies the rule for every route.
+
+---
+
+## Clients, periods, and background work
+
+Three things changed shape with Phase 1, and they are worth reading together.
+
+### A case is a period (ADR 0005)
+
+A firm audits a **client** every month or quarter, not a case once. The `cases`
+row *is* the period: `case_id` stays its identity, and `client_id`,
+`period_start`, and `period_end` say which client and which span. **A case with
+no `client_id` is a one-off engagement and stays completely valid** — every
+case created before Phase 1 is one.
+
+Attaching a period to a client is what makes the flags the firm's rather than
+the product's: `POST /v1/upload` with `client_id` evaluates that case against
+**that client's own thresholds** (`ClientRuleConfig`) instead of the firm-wide
+`RULES_*` defaults. Changing a client's rules affects the **next** period
+processed; a decided queue is never silently recomputed.
+
+### Uploads can be queued
+
+`POST /v1/upload` runs the pipeline inside the request by default, which is
+what an integration wanting the finished counts should keep doing. Add
+`?background=true` and the case row is created immediately, the work is queued,
+and the response carries a `job_id`:
+
+```jsonc
+{
+  "case_id": "CASE-90472590af",
+  "job_id": "JOB-1a2b3c4d5e",
+  "status": "uploaded",
+  "review_item_count": 0,
+  "message": "Processing started. Poll GET /v1/jobs/{job_id} for progress."
+}
+```
+
+Poll `GET /v1/jobs/{job_id}` until `finished` is true, then read the case as
+usual. **A job row is working state, never evidence**: it says how far the work
+got so a screen can show a bar, and everything that actually happened is in the
+append-only trail exactly as when the pipeline runs inside the request.
+
+### Bank statements can be spreadsheets
+
+`POST /v1/upload` now accepts a bank statement as `.csv`, `.xlsx`, `.xlsm`, or
+`.xls` as well as `.pdf`. A spreadsheet statement is read by pandas in
+`extraction/bank_reader.py` and **never reaches the vision model** — the trail
+records `pandas` as the actor, exactly as it does for the ledger. Every
+Pakistani bank exports one from internet banking, and reading it deterministically
+removes the extraction risk, the model cost, and the confidence question from
+the riskiest document in the case. Prefer it where it exists; the vision model
+is for paper that has no machine-readable form.
+
+---
+
+## Corrections, sign-offs, and the evidence bundle
+
+### A correction adds a reading; it never replaces one
+
+`POST /v1/review-items/{id}/corrections` records that the model read `49,500`
+where the statement says `49,900`, who says so, and when. Both values are kept.
+It is evidence *about the extraction*, not a rewrite of it, and it is not
+data entry into the client's books (ADR 0004).
+
+**It does not re-run matching.** Changing a figure changes arithmetic, and
+arithmetic here is deterministic code run over a whole case (rule 2) — silently
+re-matching one row would produce a queue that no single run ever computed.
+Corrections appear in the report in their own section, beside the model's
+readings.
+
+### Sign-off is a gate, never a release
+
+`POST /v1/sign-offs` is refused unless the caller is a signed-in person (not a
+key), every item on the case carries a decision, and **the caller decided none
+of them**. With `require_sign_off` set on the client, `POST /v1/reports`
+returns `409` until a sign-off exists. Sign-offs are append-only in both
+stores, like reports and the trail.
+
+### The evidence bundle
+
+`GET /v1/cases/{case_id}/bundle` returns one zip: the source documents, every
+generated report, the decided queue, the corrections, the sign-offs, the full
+trail, and a `MANIFEST.txt` giving a SHA-256 for every other file in it. The
+archive is byte-reproducible from the same inputs and export time, and taking
+it out of the building is recorded in the trail.
 
 ---
 

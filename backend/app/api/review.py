@@ -20,6 +20,7 @@ a screen. A firm that automates approvals can be seen to have done so.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -34,6 +35,9 @@ from app.core.audit import record_actor_action
 from app.core.repository import CaseRepository
 from app.shared.api import (
     ApproveRequest,
+    CorrectionListResponse,
+    CorrectionResponse,
+    CreateCorrectionRequest,
     DecisionResponse,
     RejectRequest,
     ReviewItemsResponse,
@@ -43,11 +47,31 @@ from app.shared.schemas import (
     AuditRecord,
     CaseStatus,
     MatchStatus,
+    OrgRole,
     ReviewDecision,
     ReviewItem,
+    ValueCorrection,
 )
 
 router = APIRouter(tags=["review"])
+
+
+def _deciding_principal(principal: Principal) -> Principal:
+    """Refuse a read-only viewer. Rule 1 needs an accountable decider.
+
+    `require_write` guards the credential's scope; this guards the seat. A
+    `viewer` is the audited business's own owner (ADR 0005), invited to watch
+    their engagement — they may read everything on it and change none of it.
+    """
+    if principal.role is OrgRole.VIEWER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Your role is read-only. Approving, rejecting, and correcting are "
+                "the auditor's; ask the firm running this engagement."
+            ),
+        )
+    return principal
 
 
 @router.get(
@@ -184,6 +208,118 @@ async def reject_review_item(
     return _decide(
         repository, principal, item, ReviewDecision.REJECTED,
         rejection_reason=body.reason, detail=body.reason,
+    )
+
+
+@router.post(
+    "/review-items/{review_item_id}/corrections",
+    response_model=CorrectionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record what a misread value actually is (both readings are kept)",
+)
+async def correct_value(
+    review_item_id: str,
+    body: CreateCorrectionRequest,
+    principal: Principal = Depends(require_write),
+    repository: CaseRepository = Depends(get_repository),
+) -> CorrectionResponse:
+    """Record a human's correction of a value the model misread.
+
+    A real bank statement will produce a low-confidence reading sooner or
+    later, and until now the only thing an auditor could do about it was reject
+    the whole item. This records the narrower, truer fact: the model read
+    `49,500`, the statement says `49,900`, and a named person says so at a
+    named time.
+
+    **Both readings survive.** The correction never overwrites the extraction:
+    it sits beside it, travels into the report's provenance section, and lands
+    in the append-only trail. That is evidence about the extraction, which is
+    what Tarazu is for — and it is not bookkeeping, because the client's own
+    books are not being written here (ADR 0004).
+
+    **It does not re-run matching.** Changing a figure changes arithmetic, and
+    arithmetic in this product is deterministic code run over a whole case
+    (rule 2). Silently re-matching one row against a corrected amount would
+    produce a queue that no single run ever computed. Re-processing stays an
+    explicit act; this route records the finding that prompts it.
+    """
+    _deciding_principal(principal)
+    item = repository.get_review_item(principal.org_id, review_item_id)
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No review item with id {review_item_id!r}.",
+        )
+
+    # The document must be one this firm holds, and one this case is actually
+    # built from: a correction citing a document from another engagement would
+    # put unverifiable provenance into the report.
+    document = repository.get_document(principal.org_id, body.document_id)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No document with id {body.document_id!r}.",
+        )
+    if document.case_id != item.case_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Document {body.document_id} belongs to case {document.case_id}, not "
+                f"to {item.case_id}. A correction cites evidence from its own case."
+            ),
+        )
+
+    try:
+        correction = ValueCorrection(
+            correction_id=f"COR-{uuid4().hex[:10]}",
+            case_id=item.case_id,
+            review_item_id=review_item_id,
+            document_id=body.document_id,
+            field=body.field,
+            ai_value=body.ai_value,
+            corrected_value=body.corrected_value,
+            note=body.note,
+            corrected_by=principal.user_id,
+            corrected_at=datetime.now(timezone.utc),
+        )
+    except ValueError as error:
+        # The schema refuses a "correction" that changes nothing.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+        ) from error
+
+    repository.save_correction(principal.org_id, correction)
+    record = record_actor_action(
+        repository,
+        principal.org_id,
+        item.case_id,
+        principal.actor,
+        AuditAction.VALUE_CORRECTED,
+        item_id=review_item_id,
+        detail=(
+            f"{body.field} on {body.document_id}: model read "
+            f"{body.ai_value if body.ai_value is not None else '(nothing)'!r}, "
+            f"corrected to {body.corrected_value!r}"
+            + (f" — {body.note}" if body.note else "")
+        ),
+    )
+    return CorrectionResponse(correction=correction, audit_record=record)
+
+
+@router.get(
+    "/corrections",
+    response_model=CorrectionListResponse,
+    summary="Every correction recorded on a case",
+)
+async def list_corrections(
+    case_id: str = Depends(get_case_id),
+    principal: Principal = Depends(require_read),
+    repository: CaseRepository = Depends(get_repository),
+) -> CorrectionListResponse:
+    """Oldest first, so the case's corrections read as a sequence of events."""
+    corrections = repository.list_corrections(principal.org_id, case_id)
+    return CorrectionListResponse(
+        case_id=case_id, total=len(corrections), corrections=corrections
     )
 
 
