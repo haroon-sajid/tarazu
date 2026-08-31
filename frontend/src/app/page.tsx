@@ -7,6 +7,14 @@
  *
  * The page flows like a conversation: problem (the pain), solution (Tarazu),
  * proof (live demo), platform details, real use cases, and a simple CTA.
+ *
+ * Responsive notes. The page is built mobile-first with three tiers — phones
+ * (<640px), tablets / small laptops (640–1023px) and desktops (≥1024px). Two
+ * things in `globals.css` are written for the signed-in app shell but match
+ * bare element selectors, so they reach this page too on viewports ≤768px:
+ * `main` and `header` get `!important` padding, and the root font size drops to
+ * 14px. The `p-0!` / `px-6!` utilities below cancel the padding, and the copy
+ * uses pixel sizes so the rem change cannot skew the typography.
  */
 
 import * as React from "react";
@@ -31,18 +39,18 @@ import {
   Landmark,
   LoaderCircle,
   Lock,
+  Menu,
   Pause,
   Play,
-  Plug,
   Receipt,
   Rocket,
   RotateCw,
   Scale,
-  ShieldCheck,
   Table,
   TriangleAlert,
   UserCheck,
   Users,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -50,13 +58,20 @@ const sora = Sora({ subsets: ["latin"], weight: ["600", "700"] });
 const plexSans = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "600"] });
 
 const BTN_PRIMARY =
-  "inline-block rounded-[10px] bg-[#0E7C66] px-8 py-3.5 text-base font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#0A5F4F] hover:shadow-[0_8px_20px_rgba(14,124,102,0.25)]";
+  "inline-flex items-center justify-center gap-2 rounded-[10px] bg-[#0E7C66] px-6 py-3 text-center text-[15px] font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#0A5F4F] hover:shadow-[0_8px_20px_rgba(14,124,102,0.25)] sm:px-8 sm:py-3.5 md:text-base";
 const BTN_GHOST =
-  "inline-block rounded-[10px] border-[1.5px] border-[#E1E7E4] bg-white px-8 py-3.5 text-base font-semibold text-[#10243A] transition hover:-translate-y-0.5 hover:border-[#10243A] hover:shadow-[0_8px_20px_rgba(0,0,0,0.04)]";
+  "inline-flex items-center justify-center gap-2 rounded-[10px] border-[1.5px] border-[#E1E7E4] bg-white px-6 py-3 text-center text-[15px] font-semibold text-[#10243A] transition hover:-translate-y-0.5 hover:border-[#10243A] hover:shadow-[0_8px_20px_rgba(0,0,0,0.04)] sm:px-8 sm:py-3.5 md:text-base";
+
+const NAV_LINKS: { label: string; href: string }[] = [
+  { label: "Platform", href: "#how" },
+  { label: "Solutions", href: "#features" },
+  { label: "Live demo", href: "#demo" },
+  { label: "Company", href: "#faq" },
+];
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <span className="mb-3.5 inline-block text-[13px] font-semibold uppercase tracking-[0.12em] text-[#0E7C66]">
+    <span className="mb-3 inline-block text-[12px] font-semibold uppercase tracking-[0.12em] text-[#0E7C66] md:mb-3.5 md:text-[13px]">
       {children}
     </span>
   );
@@ -70,6 +85,118 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
     >
       {children}
     </a>
+  );
+}
+
+/* Sticky header with the desktop nav and a hamburger panel below `md`. */
+function SiteHeader() {
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const closeMenu = () => setMenuOpen(false);
+
+  // Escape closes the panel; crossing the `md` breakpoint discards it so the
+  // desktop nav never coexists with a stale open panel after a rotation.
+  React.useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    const desktop = window.matchMedia("(min-width: 768px)");
+    const onChange = (event: MediaQueryListEvent) => {
+      if (event.matches) setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    desktop.addEventListener("change", onChange);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      desktop.removeEventListener("change", onChange);
+    };
+  }, [menuOpen]);
+
+  return (
+    <header className="sticky top-0 z-50 border-b border-[#E1E7E4] bg-white/95 px-6! py-0! backdrop-blur lg:px-10!">
+      <div className="mx-auto flex h-16 max-w-[1200px] flex-nowrap! items-center justify-between gap-4">
+        <a
+          href="#hero"
+          className={`${sora.className} flex shrink-0 items-center gap-1.5 text-[20px] font-bold tracking-tight text-[#10243A] md:text-[22px]`}
+        >
+          <Scale className="h-5 w-5 text-[#0E7C66] md:h-6 md:w-6" aria-hidden />
+          <span>
+            Tara<span className="text-[#0E7C66]">zu</span>
+          </span>
+        </a>
+        <nav className="hidden items-center gap-8 md:flex" aria-label="Primary">
+          {NAV_LINKS.map(({ label, href }) => (
+            <NavLink key={href} href={href}>
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="flex items-center gap-2 sm:gap-4 md:gap-5">
+          <Link
+            href="/login"
+            className="hidden text-sm font-medium text-[#3D4C5E] transition-colors hover:text-[#10243A] md:block"
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/signup"
+            className="whitespace-nowrap rounded-md bg-[#0E7C66] px-4 py-2 text-[13px] font-semibold text-white transition hover:-translate-y-px hover:bg-[#0A5F4F] sm:px-6 md:text-sm"
+          >
+            Get started
+          </Link>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((open) => !open)}
+            aria-expanded={menuOpen}
+            aria-controls="landing-mobile-nav"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            className="-mr-2 inline-flex h-10 w-10 items-center justify-center rounded-md text-[#10243A] transition-colors hover:bg-[#F2F6F4] md:hidden"
+          >
+            {menuOpen ? (
+              <X className="h-5 w-5" aria-hidden />
+            ) : (
+              <Menu className="h-5 w-5" aria-hidden />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {menuOpen && (
+        <div
+          id="landing-mobile-nav"
+          className="absolute inset-x-0 top-full border-b border-[#E1E7E4] bg-white shadow-[0_16px_32px_-12px_rgba(16,36,58,0.15)] md:hidden"
+        >
+          <nav className="mx-auto flex max-w-[1200px] flex-col px-6 py-3" aria-label="Mobile">
+            {NAV_LINKS.map(({ label, href }) => (
+              <a
+                key={href}
+                href={href}
+                onClick={closeMenu}
+                className="rounded-md px-3 py-3 text-[15px] font-medium text-[#10243A] transition-colors hover:bg-[#F2F6F4]"
+              >
+                {label}
+              </a>
+            ))}
+            <div className="mt-2 grid grid-cols-2 gap-3 border-t border-[#E1E7E4] pt-4">
+              <Link
+                href="/login"
+                onClick={closeMenu}
+                className="rounded-[10px] border-[1.5px] border-[#E1E7E4] py-2.5 text-center text-[15px] font-semibold text-[#10243A] transition-colors hover:border-[#10243A]"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/signup"
+                onClick={closeMenu}
+                className="rounded-[10px] bg-[#0E7C66] py-2.5 text-center text-[15px] font-semibold text-white transition-colors hover:bg-[#0A5F4F]"
+              >
+                Get started
+              </Link>
+            </div>
+          </nav>
+        </div>
+      )}
+    </header>
   );
 }
 
@@ -93,13 +220,13 @@ function HeroCardRow({
   tone: keyof typeof PILL_TONES;
 }) {
   return (
-    <div className="mb-3 flex items-center justify-between rounded-[10px] border border-[#E1E7E4] bg-[#F2F6F4] px-4.5 py-3.5 text-[15px] transition-colors duration-300 hover:border-[#0E7C66]">
-      <strong className="flex items-center gap-2 font-semibold text-[#10243A]">
-        <Icon className="h-4 w-4 text-[#0E7C66]" aria-hidden />
-        {label}
+    <div className="mb-2.5 flex items-center justify-between gap-3 rounded-[10px] border border-[#E1E7E4] bg-[#F2F6F4] px-3.5 py-3 text-[14px] transition-colors duration-300 hover:border-[#0E7C66] sm:mb-3 sm:px-4.5 sm:py-3.5 sm:text-[15px]">
+      <strong className="flex min-w-0 items-center gap-2 font-semibold text-[#10243A]">
+        <Icon className="h-4 w-4 shrink-0 text-[#0E7C66]" aria-hidden />
+        <span className="truncate">{label}</span>
       </strong>
       <span
-        className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-semibold ${PILL_TONES[tone]}`}
+        className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-semibold sm:px-3.5 sm:text-[12px] ${PILL_TONES[tone]}`}
       >
         {tone === "done" ? (
           <span className="h-2 w-2 rounded-full bg-current motion-safe:animate-[pulse-dot_1.4s_infinite]" />
@@ -124,13 +251,15 @@ function FeatureCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="group flex flex-col rounded-[10px] border border-[#E1E7E4] bg-white p-7 pt-8 transition-all duration-300 hover:-translate-y-1.5 hover:border-[#0E7C66] hover:shadow-[0_16px_32px_-12px_rgba(0,0,0,0.12)]">
+    <div className="group flex flex-col rounded-[10px] border border-[#E1E7E4] bg-white p-6 pt-7 transition-all duration-300 hover:-translate-y-1.5 hover:border-[#0E7C66] hover:shadow-[0_16px_32px_-12px_rgba(0,0,0,0.12)] md:p-7 md:pt-8">
       <Icon
-        className="mb-4 h-9 w-9 text-[#0E7C66] transition-transform duration-300 group-hover:scale-105"
+        className="mb-4 h-8 w-8 text-[#0E7C66] transition-transform duration-300 group-hover:scale-105 md:h-9 md:w-9"
         aria-hidden
       />
-      <h3 className={`${sora.className} mb-2.5 text-xl font-bold text-[#10243A]`}>{title}</h3>
-      <p className="mb-5 flex-1 text-base text-[#3D4C5E]">{children}</p>
+      <h3 className={`${sora.className} mb-2.5 text-[19px] font-bold text-[#10243A] md:text-xl`}>
+        {title}
+      </h3>
+      <p className="mb-5 flex-1 text-[15px] text-[#3D4C5E] md:text-base">{children}</p>
       <Link
         href="/signup"
         className="group/link inline-flex items-center gap-1.5 self-start border-b-[1.5px] border-transparent text-sm font-semibold text-[#0E7C66] transition-colors hover:border-[#0E7C66]"
@@ -145,26 +274,6 @@ function FeatureCard({
   );
 }
 
-function AgentCard({
-  phase,
-  title,
-  children,
-}: {
-  phase: string;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-[10px] border border-[#E1E7E4] bg-white p-6 text-center transition-all hover:-translate-y-1 hover:border-[#0E7C66] hover:shadow-[0_6px_24px_rgba(16,36,58,0.08)]">
-      <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#0E7C66]">
-        {phase}
-      </span>
-      <h4 className={`${sora.className} mb-1 mt-2 text-xl font-semibold text-[#10243A]`}>{title}</h4>
-      <p className="text-sm text-[#6B7A8A]">{children}</p>
-    </div>
-  );
-}
-
 function FaqCard({
   icon: Icon,
   question,
@@ -175,12 +284,14 @@ function FaqCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-[#E1E7E4] bg-white px-7 py-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-[3px] hover:border-[#0E7C66] hover:shadow-[0_8px_28px_rgba(0,0,0,0.06)]">
-      <div className="mb-2.5 flex items-start gap-3.5 text-[17px] font-semibold text-[#10243A]">
+    <div className="rounded-2xl border border-[#E1E7E4] bg-white px-5 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-[3px] hover:border-[#0E7C66] hover:shadow-[0_8px_28px_rgba(0,0,0,0.06)] sm:px-7 sm:py-6">
+      <div className="mb-2.5 flex items-start gap-3 text-[16px] font-semibold text-[#10243A] md:gap-3.5 md:text-[17px]">
         <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[#0E7C66]" aria-hidden />
         {question}
       </div>
-      <p className="text-[15px] leading-relaxed opacity-85 md:pl-[34px]">{children}</p>
+      <p className="text-[14px] leading-relaxed opacity-85 md:pl-[34px] md:text-[15px]">
+        {children}
+      </p>
     </div>
   );
 }
@@ -277,7 +388,18 @@ const SPEED_LABELS = ["1×", "2×", "3×"];
 const BASE_DELAY = 2200;
 
 const CTRL_BTN =
-  "inline-flex items-center gap-1.5 rounded-full border border-[#E1E7E4] bg-white px-6 py-2.5 text-[13px] font-medium text-[#3D4C5E] shadow-[0_2px_6px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-0.5 hover:border-[#0E7C66] hover:bg-[#0E7C66] hover:text-white hover:shadow-[0_8px_24px_rgba(14,124,102,0.20)] active:translate-y-0";
+  "inline-flex items-center gap-1.5 rounded-full border border-[#E1E7E4] bg-white px-5 py-2 text-[13px] font-medium text-[#3D4C5E] shadow-[0_2px_6px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-0.5 hover:border-[#0E7C66] hover:bg-[#0E7C66] hover:text-white hover:shadow-[0_8px_24px_rgba(14,124,102,0.20)] active:translate-y-0 sm:px-6 sm:py-2.5";
+
+/* The pipeline track and its fill share these insets so the fill ends on the
+   last node, not the card edge. Below `md` the five nodes are equal flex
+   cells, so 10% is exactly the first and last node's centre. */
+const TRACK_INSETS =
+  "absolute left-[10%] right-[10%] top-[22px] h-[4px] sm:top-[26px] md:left-10 md:right-10 md:top-[34px]";
+
+/* Pointer devices pause the demo on hover; on touch screens `mouseenter` fires
+   on tap and `mouseleave` may never come, which would freeze the animation. */
+const canHover = () =>
+  typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches;
 
 function DemoSection() {
   const [step, setStep] = React.useState(-1);
@@ -337,12 +459,12 @@ function DemoSection() {
   return (
     <section
       id="demo"
-      className="relative flex scroll-mt-16 items-center overflow-hidden bg-[linear-gradient(165deg,#f6f9f8_0%,#eaf0ee_100%)] px-6 pb-10 pt-[30px] md:min-h-screen md:pb-[60px] md:pt-[50px] lg:px-10"
+      className="relative flex scroll-mt-16 items-center overflow-hidden bg-[linear-gradient(165deg,#f6f9f8_0%,#eaf0ee_100%)] px-4 pb-10 pt-8 sm:px-6 md:pb-[60px] md:pt-[50px] lg:min-h-screen lg:px-10"
       onMouseEnter={() => {
-        if (playing) setPlaying(false);
+        if (canHover() && playing) setPlaying(false);
       }}
       onMouseLeave={() => {
-        if (!playing && !finished && step < DEMO_STEPS.length - 1) {
+        if (canHover() && !playing && !finished && step < DEMO_STEPS.length - 1) {
           setStep((s) => (s < 0 ? 0 : s));
           setPlaying(true);
         }
@@ -354,31 +476,27 @@ function DemoSection() {
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_50%,rgba(14,124,102,0.04)_0%,transparent_50%),radial-gradient(circle_at_80%_50%,rgba(14,124,102,0.04)_0%,transparent_50%)]"
       />
       <div className="relative z-[1] mx-auto w-full max-w-[1200px]">
-        <div className="mb-8 text-center">
-          <span className="mb-3.5 inline-flex items-center gap-1.5 rounded-full bg-[#0E7C66]/10 px-4.5 py-1 text-xs font-semibold uppercase tracking-[0.1em] text-[#0E7C66]">
+        <div className="mb-6 text-center md:mb-8">
+          <span className="mb-3.5 inline-flex items-center gap-1.5 rounded-full bg-[#0E7C66]/10 px-4.5 py-1 text-[12px] font-semibold uppercase tracking-[0.1em] text-[#0E7C66]">
             <CirclePlay className="h-4 w-4" aria-hidden /> Live demo
           </span>
           <h2
-            className={`${sora.className} mb-1.5 mt-1 text-[28px] font-bold leading-tight tracking-tight text-[#10243A] md:text-[34px]`}
+            className={`${sora.className} mb-1.5 mt-1 text-[26px] font-bold leading-tight tracking-tight text-[#10243A] sm:text-[28px] md:text-[34px]`}
           >
             See the audit engine in motion
           </h2>
-          <p className="mx-auto max-w-[600px] text-base opacity-80">
+          <p className="mx-auto max-w-[600px] text-[15px] opacity-80 md:text-base">
             Watch how Tarazu processes documents, extracts data, matches transactions, flags
             risks, and generates reports — all in real time.
           </p>
         </div>
 
-        <div className="rounded-3xl border border-white/70 bg-white/80 px-4 pb-[18px] pt-5 shadow-[0_20px_60px_rgba(0,0,0,0.06)] backdrop-blur-[16px] transition-shadow duration-[400ms] hover:shadow-[0_28px_72px_rgba(0,0,0,0.08)] md:px-10 md:pb-7 md:pt-8">
-          {/* Pipeline steps */}
-          <div className="relative flex flex-col items-start gap-3 py-1 md:flex-row md:items-start md:justify-between md:gap-0 md:pb-3 md:pt-2">
-            <span
-              aria-hidden
-              className="absolute left-10 right-10 top-11 z-0 hidden h-1 rounded-sm bg-[#E1E7E4] md:block"
-            />
-            {/* The fill lives inside the same 40px insets as the track, so at
-                100% it stops at the track's end instead of the card edge. */}
-            <span aria-hidden className="absolute left-10 right-10 top-11 z-[1] hidden h-1 md:block">
+        <div className="rounded-2xl border border-white/70 bg-white/80 px-3 pb-4 pt-4 shadow-[0_20px_60px_rgba(0,0,0,0.06)] backdrop-blur-[16px] transition-shadow duration-[400ms] hover:shadow-[0_28px_72px_rgba(0,0,0,0.08)] sm:rounded-3xl sm:px-5 sm:pb-[18px] sm:pt-5 md:px-10 md:pb-7 md:pt-8">
+          {/* Pipeline steps — five equal cells on every viewport; the sub-labels
+              appear from `sm` and the travelling particle from `md`. */}
+          <div className="relative flex items-start justify-between pb-[4px] pt-[4px] md:pb-3 md:pt-2">
+            <span aria-hidden className={`${TRACK_INSETS} z-0 rounded-sm bg-[#E1E7E4]`} />
+            <span aria-hidden className={`${TRACK_INSETS} z-[1]`}>
               <span
                 className="block h-full rounded-sm bg-gradient-to-r from-[#0E7C66] to-[#0A5F4F] shadow-[0_0_20px_rgba(14,124,102,0.25)] transition-[width] duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
                 style={{ width: `${fillPct}%` }}
@@ -386,7 +504,7 @@ function DemoSection() {
             </span>
             <span
               aria-hidden
-              className={`absolute top-10 z-[2] hidden h-3 w-3 rounded-full bg-[#0E7C66] shadow-[0_0_20px_rgba(14,124,102,0.25)] transition-[left,opacity] duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)] md:block ${
+              className={`absolute top-[30px] z-[2] hidden h-3 w-3 rounded-full bg-[#0E7C66] shadow-[0_0_20px_rgba(14,124,102,0.25)] transition-[left,opacity] duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)] md:block ${
                 particleVisible ? "opacity-100" : "opacity-0"
               }`}
               style={{ left: particleLeft }}
@@ -396,10 +514,10 @@ function DemoSection() {
               return (
                 <div
                   key={label}
-                  className="z-[3] flex w-full flex-row items-center gap-3.5 transition-transform duration-300 hover:-translate-y-[3px] md:w-auto md:flex-1 md:flex-col md:gap-0"
+                  className="z-[3] flex min-w-0 flex-1 flex-col items-center gap-1.5 transition-transform duration-300 hover:-translate-y-[3px] md:gap-0"
                 >
                   <div
-                    className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-[3px] shadow-[0_4px_12px_rgba(0,0,0,0.04)] transition-all duration-[600ms] ease-[cubic-bezier(0.22,1,0.36,1)] md:mb-2.5 md:h-14 md:w-14 ${
+                    className={`relative flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full border-2 shadow-[0_4px_12px_rgba(0,0,0,0.04)] transition-all duration-[600ms] ease-[cubic-bezier(0.22,1,0.36,1)] sm:h-[48px] sm:w-[48px] sm:border-[3px] md:mb-2.5 md:h-14 md:w-14 ${
                       state === "active"
                         ? "scale-[1.04] border-[#0E7C66] bg-[#0E7C66] text-white shadow-[0_0_0_8px_rgba(14,124,102,0.12),0_8px_28px_rgba(14,124,102,0.18)]"
                         : state === "completed"
@@ -407,9 +525,9 @@ function DemoSection() {
                           : "border-[#E1E7E4] bg-white text-[#3D4C5E]"
                     }`}
                   >
-                    <Icon className="h-[18px] w-[18px] md:h-6 md:w-6" aria-hidden />
+                    <Icon className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6" aria-hidden />
                     <span
-                      className={`absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white text-white transition-all duration-500 ${
+                      className={`absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white text-white transition-all duration-500 md:-bottom-1 md:-right-1 md:h-5 md:w-5 ${
                         state === "completed"
                           ? "bg-emerald-500"
                           : state === "active"
@@ -424,11 +542,13 @@ function DemoSection() {
                       )}
                     </span>
                   </div>
-                  <span className="flex flex-col md:items-center">
-                    <span className="text-[13px] font-semibold text-[#10243A] md:text-sm">
+                  <span className="flex flex-col items-center text-center">
+                    <span className="text-[11px] font-semibold text-[#10243A] sm:text-[13px] md:text-sm">
                       {label}
                     </span>
-                    <span className="text-[11px] opacity-60 md:max-w-20 md:text-center">{sub}</span>
+                    <span className="hidden text-[10px] opacity-60 sm:block sm:max-w-20 md:text-[11px]">
+                      {sub}
+                    </span>
                   </span>
                 </div>
               );
@@ -436,8 +556,8 @@ function DemoSection() {
           </div>
 
           {/* Stats bar */}
-          <div className="mt-4 flex flex-col gap-2.5 rounded-2xl border border-[#E1E7E4] bg-white/50 px-4 py-3 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-3.5 md:px-6 md:py-3.5">
-            <div className="flex flex-wrap items-center gap-3 md:gap-5">
+          <div className="mt-3 flex flex-col gap-3 rounded-xl border border-[#E1E7E4] bg-white/50 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:rounded-2xl sm:px-5 md:mt-4 md:gap-3.5 md:px-6 md:py-3.5">
+            <div className="flex items-center justify-between gap-2 sm:justify-start sm:gap-5">
               {[
                 { icon: Receipt, value: current?.docs ?? 0, label: "documents", red: false },
                 { icon: ArrowLeftRight, value: current?.matches ?? 0, label: "matched", red: false },
@@ -445,7 +565,7 @@ function DemoSection() {
               ].map(({ icon: Icon, value, label, red }) => (
                 <div key={label} className="flex items-center gap-2">
                   <span
-                    className={`flex h-8 w-8 items-center justify-center rounded-[10px] text-white ${
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-white ${
                       red ? "bg-[#B33A3A]" : "bg-[#0E7C66]"
                     }`}
                   >
@@ -453,7 +573,7 @@ function DemoSection() {
                   </span>
                   <span>
                     <span
-                      className={`${sora.className} block text-[17px] font-bold tracking-tight tabular-nums ${
+                      className={`${sora.className} block text-[16px] font-bold tracking-tight tabular-nums md:text-[17px] ${
                         red ? "text-[#B33A3A]" : "text-[#10243A]"
                       }`}
                     >
@@ -489,7 +609,7 @@ function DemoSection() {
                 digit check
               </span>
             </div>
-            <div className="flex items-center gap-2 self-start rounded-full border border-[#0E7C66]/15 bg-[#0E7C66]/10 py-1 pl-3 pr-4 md:self-auto">
+            <div className="flex items-center gap-2 self-start rounded-full border border-[#0E7C66]/15 bg-[#0E7C66]/10 py-1 pl-3 pr-4 sm:self-auto">
               <span className="h-2 w-2 rounded-full bg-[#0E7C66] motion-safe:animate-[pulse-dot_1.2s_infinite]" />
               <span className="text-[13px] font-medium text-[#0A5F4F]">
                 {current?.status ?? "Ready"}
@@ -498,18 +618,18 @@ function DemoSection() {
           </div>
 
           {/* Progress panel */}
-          <div className="mt-4 flex flex-col gap-2.5 rounded-[14px] border border-[#E1E7E4] bg-white px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.02)] md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-3 md:px-5 md:py-3.5">
+          <div className="mt-3 flex flex-col gap-3 rounded-[14px] border border-[#E1E7E4] bg-white px-3 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.02)] sm:px-4 md:mt-4 md:flex-row md:flex-wrap md:items-center md:justify-between md:px-5 md:py-3.5">
             <div className="flex items-center gap-3">
               <span
-                className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl text-white transition-colors duration-[400ms] ${
+                className={`flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-xl text-white transition-colors duration-[400ms] md:h-[38px] md:w-[38px] ${
                   panelGreen ? "bg-emerald-500" : "bg-[#0E7C66]"
                 }`}
               >
                 <PanelIcon className="h-4 w-4" aria-hidden />
               </span>
-              <span className="text-sm font-medium text-[#10243A]">
+              <span className="text-[14px] font-medium text-[#10243A]">
                 {current?.title ?? "Ready"}
-                <small className="mt-px block text-xs font-normal text-[#3D4C5E]">
+                <small className="mt-px block text-[12px] font-normal text-[#3D4C5E]">
                   {current?.sub ?? "Press Play to start"}
                 </small>
               </span>
@@ -528,7 +648,9 @@ function DemoSection() {
                   </span>
                 ))}
             </div>
-            <div className="flex w-full flex-1 items-center gap-3.5 md:max-w-80">
+            {/* The bar yields room to the chips on laptops and takes it back
+                once the viewport is wide enough for both. */}
+            <div className="flex w-full flex-1 items-center gap-3.5 md:max-w-80 lg:max-w-56 xl:max-w-80">
               <span className="h-[5px] flex-1 overflow-hidden rounded-[3px] bg-[#E1E7E4]">
                 <span
                   className="block h-full rounded-[3px] bg-gradient-to-r from-[#0E7C66] to-[#0A5F4F] transition-[width] duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
@@ -544,7 +666,7 @@ function DemoSection() {
           </div>
 
           {/* Controls */}
-          <div className="mt-[18px] flex flex-wrap justify-center gap-2 md:gap-3">
+          <div className="mt-4 flex flex-wrap justify-center gap-2 md:mt-[18px] md:gap-3">
             <button type="button" onClick={togglePlay} className={CTRL_BTN}>
               {playing ? (
                 <Pause className="h-3.5 w-3.5" aria-hidden />
@@ -559,7 +681,7 @@ function DemoSection() {
             <button
               type="button"
               onClick={() => setSpeedIdx((i) => (i + 1) % SPEEDS.length)}
-              className={`${CTRL_BTN} px-4 py-2 text-xs`}
+              className={`${CTRL_BTN} px-4 py-2 text-xs sm:px-4 sm:py-2`}
             >
               <Gauge className="h-3.5 w-3.5" aria-hidden /> {SPEED_LABELS[speedIdx]}
             </button>
@@ -569,6 +691,110 @@ function DemoSection() {
     </section>
   );
 }
+
+/* ============================================================
+   Static section content
+============================================================ */
+
+const PROBLEMS: {
+  icon: LandingIcon;
+  iconClass: string;
+  cardClass: string;
+  title: string;
+  body: string;
+}[] = [
+  {
+    icon: TriangleAlert,
+    iconClass: "text-[#B33A3A]",
+    cardClass: "border-[#FDE8E8] bg-[#FFF5F5]",
+    title: "3 weeks gone",
+    body: "Matching one bank statement to invoices? Junior auditors spend days on it. Manually. Prone to error.",
+  },
+  {
+    icon: Flag,
+    iconClass: "text-[#8A5A00]",
+    cardClass: "border-[#FFF4E0] bg-[#FFFBF0]",
+    title: "Blind spots",
+    body: "Manual review means you catch round numbers by luck. Duplicates hide. Weekend entries slip through.",
+  },
+  {
+    icon: Lock,
+    iconClass: "text-[#0E7C66]",
+    cardClass: "border-[#E8F0F8] bg-[#F5F9FF]",
+    title: "No trail",
+    body: "Who matched what? When? Why? Spreadsheets and chat logs aren't defensible audit evidence.",
+  },
+];
+
+const SOLUTION_STEPS: { icon: LandingIcon; title: string; body: string }[] = [
+  {
+    icon: CloudUpload,
+    title: "1. You upload",
+    body: "Drop in your statements (PDF), invoices (PDF or image), and ledger (Excel or CSV). That's it.",
+  },
+  {
+    icon: Eye,
+    title: "2. We read",
+    body: "Qwen VL (the vision model) reads PDFs and images. Every extracted number carries provenance and confidence.",
+  },
+  {
+    icon: Code2,
+    title: "3. We match",
+    body: "Deterministic Python code (not AI) reconciles rows, runs your audit rules, flags anomalies. Every number is traceable.",
+  },
+  {
+    icon: UserCheck,
+    title: "4. You decide",
+    body: "Review queue shows matches, flags, and risks. You approve or reject each one. Every decision is logged.",
+  },
+];
+
+const WORKFLOW_STEPS: { num: string; title: string; body: string }[] = [
+  {
+    num: "01",
+    title: "Upload & ingest",
+    body: "Drop in bank statements (PDF), invoices (PDF/images), and ledgers (Excel/CSV). Tarazu classifies and indexes everything.",
+  },
+  {
+    num: "02",
+    title: "Extract & match",
+    body: "Qwen VL reads documents, deterministic Python runs reconciliation and math — no black boxes.",
+  },
+  {
+    num: "03",
+    title: "Review & approve",
+    body: "Every item is presented for approval or rejection. Each action is written to an immutable audit trail.",
+  },
+];
+
+const FOOTER_GROUPS: { heading: string; links: [string, string][] }[] = [
+  {
+    heading: "Product",
+    links: [
+      ["How it works", "#how"],
+      ["Platform", "#features"],
+      ["Agents", "#agents"],
+    ],
+  },
+  {
+    heading: "Company",
+    links: [
+      ["About", "#"],
+      ["Careers", "#"],
+      ["Contact", "#"],
+    ],
+  },
+  {
+    heading: "Resources",
+    links: [
+      ["Blog", "#"],
+      ["Guides", "#"],
+      ["FAQ", "#faq"],
+    ],
+  },
+];
+
+const H2 = `${sora.className} text-[26px] font-bold leading-tight tracking-tight text-[#10243A] sm:text-[30px] md:text-4xl`;
 
 export default function LandingPage() {
   const { session } = useAuth();
@@ -581,69 +807,38 @@ export default function LandingPage() {
 
   return (
     <div
-      className={`${plexSans.className} min-h-screen bg-white text-[17px] leading-[1.65] text-[#3D4C5E]`}
+      className={`${plexSans.className} min-h-screen overflow-x-clip bg-white text-[15px] leading-[1.6] text-[#3D4C5E] md:text-[16px] lg:text-[17px] lg:leading-[1.65]`}
     >
-      {/* ===== Header ===== */}
-      <header className="sticky top-0 z-50 border-b border-[#E1E7E4] bg-white/95 px-6 backdrop-blur lg:px-10">
-        <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between">
-          <a
-            href="#hero"
-            className={`${sora.className} flex items-center gap-1.5 text-[22px] font-bold tracking-tight text-[#10243A]`}
-          >
-            <Scale className="h-6 w-6 text-[#0E7C66]" aria-hidden />
-            <span>
-              Tara<span className="text-[#0E7C66]">zu</span>
-            </span>
-          </a>
-          <nav className="hidden items-center gap-8 md:flex">
-            <NavLink href="#how">Platform</NavLink>
-            <NavLink href="#features">Solutions</NavLink>
-            <NavLink href="#demo">Live demo</NavLink>
-            <NavLink href="#faq">Company</NavLink>
-          </nav>
-          <div className="flex items-center gap-5">
-            <Link
-              href="/login"
-              className="hidden text-sm font-medium text-[#3D4C5E] transition-colors hover:text-[#10243A] sm:block"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/signup"
-              className="rounded-md bg-[#0E7C66] px-6 py-2 text-sm font-semibold text-white transition hover:-translate-y-px hover:bg-[#0A5F4F]"
-            >
-              Get started
-            </Link>
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
-      <main>
+      {/* `p-0!` cancels the app shell's mobile `main` padding (globals.css) so
+          the full-bleed section backgrounds reach the viewport edges. */}
+      <main className="p-0!">
         {/* ===== Hero ===== */}
         <section
           id="hero"
-          className="relative flex scroll-mt-16 items-center overflow-hidden bg-white px-6 pb-16 pt-16 md:min-h-[calc(100vh-140px)] md:pb-0 lg:px-10"
+          className="relative flex scroll-mt-16 items-center overflow-hidden bg-white px-6 py-12 sm:py-16 lg:min-h-[calc(100vh-140px)] lg:px-10"
         >
-          <div className="relative z-[1] mx-auto grid w-full max-w-[1200px] items-center gap-12 lg:grid-cols-2">
-            <div>
+          <div className="relative z-[1] mx-auto grid w-full max-w-[1200px] items-center gap-10 lg:grid-cols-2 lg:gap-12">
+            <div className="max-w-[640px] lg:max-w-none">
               <Eyebrow>
                 <Scale className="mr-1.5 inline h-4 w-4 align-[-2px]" aria-hidden />
                 The scales never lie
               </Eyebrow>
               <h1
-                className={`${sora.className} mb-6 text-4xl font-bold leading-[1.15] tracking-tight text-[#10243A] md:text-5xl`}
+                className={`${sora.className} mb-5 text-[32px] font-bold leading-[1.15] tracking-tight text-[#10243A] sm:text-[40px] md:mb-6 md:text-5xl`}
               >
                 Stop wasting days on audit reconciliation
               </h1>
-              <p className="mb-2 text-lg text-[#3D4C5E]">
+              <p className="mb-2 text-[17px] text-[#3D4C5E] md:text-lg">
                 Your auditors are smart. Why spend weeks matching invoices by hand?
               </p>
-              <p className="mb-8 max-w-[55ch] text-base text-[#6B7A8A]">
+              <p className="mb-7 max-w-[55ch] text-[15px] text-[#6B7A8A] md:mb-8 md:text-base">
                 Tarazu handles the tedious part: extracting from documents, matching rows,
                 flagging anomalies. You handle the judgment calls. Clean review queue.
                 Immutable trail. Your firm, your rules.
               </p>
-              <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
+              <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:gap-4 md:mb-8">
                 <Link href="/signup" className={BTN_PRIMARY}>
                   Try it free
                 </Link>
@@ -652,17 +847,20 @@ export default function LandingPage() {
                   <ArrowRight className="h-4 w-4" aria-hidden />
                 </a>
               </div>
-              <p className="text-sm text-[#6B7A8A]">
+              <p className="text-[13px] text-[#6B7A8A] md:text-sm">
                 No setup fees · Starts with a test case · Full API
               </p>
             </div>
             <div
+              role="group"
               aria-label="Product preview"
-              className="card-3d rounded-2xl border border-[#E1E7E4] bg-gradient-to-br from-white to-slate-50 p-8 shadow-md transition-all duration-300 hover:-translate-y-2 hover:shadow-xl"
+              className="card-3d w-full max-w-[600px] rounded-2xl border border-[#E1E7E4] bg-gradient-to-br from-white to-slate-50 p-5 shadow-md transition-all duration-300 hover:-translate-y-2 hover:shadow-xl sm:p-8 lg:max-w-none"
             >
               <div className="mb-4 flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-emerald-500 motion-safe:animate-pulse" />
-                <span className="text-sm font-medium text-[#3D4C5E]">Real engagement, anonymized</span>
+                <span className="text-[13px] font-medium text-[#3D4C5E] md:text-sm">
+                  Real engagement, anonymized
+                </span>
               </div>
               <HeroCardRow icon={FileText} label="Invoice #INV-1024" pill="Extracted" tone="done" />
               <HeroCardRow icon={Landmark} label="Bank statement Q1" pill="Matched" tone="done" />
@@ -673,116 +871,57 @@ export default function LandingPage() {
         </section>
 
         {/* ===== Problem Section ===== */}
-        <section className="border-t border-[#E1E7E4] px-6 py-20 lg:px-10">
+        <section className="border-t border-[#E1E7E4] px-6 py-14 md:py-20 lg:px-10">
           <div className="mx-auto max-w-[1200px]">
-            <h2
-              className={`${sora.className} mb-12 text-center text-3xl font-bold text-[#10243A] md:text-4xl`}
-            >
+            <h2 className={`${H2} mb-8 text-center md:mb-12`}>
               The audit bottleneck nobody talks about
             </h2>
-            <div className="grid gap-8 md:grid-cols-3">
-              <div className="rounded-2xl border border-[#FDE8E8] bg-[#FFF5F5] p-8">
-                <TriangleAlert className="mb-4 h-8 w-8 text-[#B33A3A]" aria-hidden />
-                <h3 className={`${sora.className} mb-2 text-xl font-bold text-[#10243A]`}>
-                  3 weeks gone
-                </h3>
-                <p className="text-[#3D4C5E]">
-                  Matching one bank statement to invoices? Junior auditors spend days on it. Manually. Prone to error.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-[#FFF4E0] bg-[#FFFBF0] p-8">
-                <Flag className="mb-4 h-8 w-8 text-[#8A5A00]" aria-hidden />
-                <h3 className={`${sora.className} mb-2 text-xl font-bold text-[#10243A]`}>
-                  Blind spots
-                </h3>
-                <p className="text-[#3D4C5E]">
-                  Manual review means you catch round numbers by luck. Duplicates hide. Weekend
-                  entries slip through.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-[#E8F0F8] bg-[#F5F9FF] p-8">
-                <Lock className="mb-4 h-8 w-8 text-[#0E7C66]" aria-hidden />
-                <h3 className={`${sora.className} mb-2 text-xl font-bold text-[#10243A]`}>
-                  No trail
-                </h3>
-                <p className="text-[#3D4C5E]">
-                  Who matched what? When? Why? Spreadsheets and chat logs aren't defensible
-                  audit evidence.
-                </p>
-              </div>
+            <div className="grid gap-5 md:grid-cols-3 md:gap-6 lg:gap-8">
+              {PROBLEMS.map(({ icon: Icon, iconClass, cardClass, title, body }) => (
+                <div key={title} className={`rounded-2xl border p-6 lg:p-8 ${cardClass}`}>
+                  <Icon className={`mb-4 h-8 w-8 ${iconClass}`} aria-hidden />
+                  <h3
+                    className={`${sora.className} mb-2 text-[19px] font-bold text-[#10243A] md:text-xl`}
+                  >
+                    {title}
+                  </h3>
+                  <p className="text-[#3D4C5E]">{body}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
         {/* ===== Solution Section ===== */}
-        <section className="bg-[#f8fafc] px-6 py-20 lg:px-10">
+        <section className="bg-[#f8fafc] px-6 py-14 md:py-20 lg:px-10">
           <div className="mx-auto max-w-[1200px]">
-            <h2
-              className={`${sora.className} mb-12 text-center text-3xl font-bold text-[#10243A] md:text-4xl`}
-            >
-              What we actually do
-            </h2>
-            <div className="grid gap-10 md:grid-cols-2 lg:gap-16">
-              <div>
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0E7C66] text-white">
-                  <CloudUpload className="h-6 w-6" aria-hidden />
+            <h2 className={`${H2} mb-8 text-center md:mb-12`}>What we actually do</h2>
+            <div className="grid gap-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-10 lg:gap-16">
+              {SOLUTION_STEPS.map(({ icon: Icon, title, body }) => (
+                <div key={title}>
+                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0E7C66] text-white">
+                    <Icon className="h-6 w-6" aria-hidden />
+                  </div>
+                  <h3
+                    className={`${sora.className} mb-2 text-[21px] font-bold text-[#10243A] md:text-2xl`}
+                  >
+                    {title}
+                  </h3>
+                  <p className="text-[#3D4C5E]">{body}</p>
                 </div>
-                <h3 className={`${sora.className} mb-2 text-2xl font-bold text-[#10243A]`}>
-                  1. You upload
-                </h3>
-                <p className="text-[#3D4C5E]">
-                  Drop in your statements (PDF), invoices (PDF or image), and ledger (Excel or CSV).
-                  That's it.
-                </p>
-              </div>
-              <div>
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0E7C66] text-white">
-                  <Eye className="h-6 w-6" aria-hidden />
-                </div>
-                <h3 className={`${sora.className} mb-2 text-2xl font-bold text-[#10243A]`}>
-                  2. We read
-                </h3>
-                <p className="text-[#3D4C5E]">
-                  Qwen VL (the vision model) reads PDFs and images. Every extracted number carries
-                  provenance and confidence.
-                </p>
-              </div>
-              <div>
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0E7C66] text-white">
-                  <Code2 className="h-6 w-6" aria-hidden />
-                </div>
-                <h3 className={`${sora.className} mb-2 text-2xl font-bold text-[#10243A]`}>
-                  3. We match
-                </h3>
-                <p className="text-[#3D4C5E]">
-                  Deterministic Python code (not AI) reconciles rows, runs your audit rules, flags
-                  anomalies. Every number is traceable.
-                </p>
-              </div>
-              <div>
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0E7C66] text-white">
-                  <UserCheck className="h-6 w-6" aria-hidden />
-                </div>
-                <h3 className={`${sora.className} mb-2 text-2xl font-bold text-[#10243A]`}>
-                  4. You decide
-                </h3>
-                <p className="text-[#3D4C5E]">
-                  Review queue shows matches, flags, and risks. You approve or reject each one.
-                  Every decision is logged.
-                </p>
-              </div>
+              ))}
             </div>
           </div>
         </section>
 
         {/* ===== Trust bar ===== */}
-        <div className="border-y border-[#E1E7E4] px-6 py-10 lg:px-10">
+        <div className="border-y border-[#E1E7E4] px-6 py-8 md:py-10 lg:px-10">
           <div className="mx-auto max-w-[1200px]">
-            <p className="mb-6 text-center text-[13px] uppercase tracking-[0.1em] text-[#7B8794]">
+            <p className="mb-5 text-center text-[12px] uppercase tracking-[0.1em] text-[#7B8794] md:mb-6 md:text-[13px]">
               Built for real auditors at
             </p>
             <div
-              className={`${sora.className} flex flex-wrap justify-center gap-x-14 gap-y-4 text-[19px] font-semibold text-[#9AA7B2]`}
+              className={`${sora.className} flex flex-wrap justify-center gap-x-8 gap-y-3 text-[16px] font-semibold text-[#9AA7B2] sm:gap-x-10 md:gap-x-14 md:gap-y-4 md:text-[19px]`}
             >
               <span>Meridian LLP</span>
               <span>Northgate</span>
@@ -794,37 +933,19 @@ export default function LandingPage() {
         </div>
 
         {/* ===== How it works ===== */}
-        <section id="how" className="scroll-mt-16 px-6 py-24 lg:px-10">
+        <section id="how" className="scroll-mt-16 px-6 py-16 md:py-24 lg:px-10">
           <div className="mx-auto max-w-[1200px]">
             <Eyebrow>Workflow</Eyebrow>
-            <h2
-              className={`${sora.className} text-3xl font-bold leading-tight tracking-tight text-[#10243A] md:text-4xl`}
-            >
-              AI suggests, human decides — end to end
-            </h2>
-            <div className="mt-14 grid gap-10 md:grid-cols-3">
-              {[
-                {
-                  num: "01",
-                  title: "Upload & ingest",
-                  body: "Drop in bank statements (PDF), invoices (PDF/images), and ledgers (Excel/CSV). Tarazu classifies and indexes everything.",
-                },
-                {
-                  num: "02",
-                  title: "Extract & match",
-                  body: "Qwen VL reads documents, deterministic Python runs reconciliation and math — no black boxes.",
-                },
-                {
-                  num: "03",
-                  title: "Review & approve",
-                  body: "Every item is presented for approval or rejection. Each action is written to an immutable audit trail.",
-                },
-              ].map(({ num, title, body }) => (
-                <div key={num} className="border-l-[3px] border-[#0E7C66] pl-6">
+            <h2 className={H2}>AI suggests, human decides — end to end</h2>
+            <div className="mt-10 grid gap-8 md:mt-14 md:grid-cols-3 md:gap-6 lg:gap-10">
+              {WORKFLOW_STEPS.map(({ num, title, body }) => (
+                <div key={num} className="border-l-[3px] border-[#0E7C66] pl-5 md:pl-6">
                   <span className={`${sora.className} text-[15px] font-bold text-[#0E7C66]`}>
                     {num}
                   </span>
-                  <h3 className={`${sora.className} my-2.5 text-[21px] font-bold text-[#10243A]`}>
+                  <h3
+                    className={`${sora.className} my-2.5 text-[19px] font-bold text-[#10243A] md:text-[21px]`}
+                  >
                     {title}
                   </h3>
                   <p>{body}</p>
@@ -835,20 +956,16 @@ export default function LandingPage() {
         </section>
 
         {/* ===== Features ===== */}
-        <section id="features" className="scroll-mt-16 bg-white px-6 py-24 lg:px-10">
+        <section id="features" className="scroll-mt-16 bg-white px-6 py-16 md:py-24 lg:px-10">
           <div className="mx-auto max-w-[1200px]">
-            <div className="mb-16 text-center">
+            <div className="mb-10 text-center md:mb-16">
               <Eyebrow>What makes it different</Eyebrow>
-              <h2
-                className={`${sora.className} mx-auto max-w-2xl text-3xl font-bold leading-tight tracking-tight text-[#10243A] md:text-4xl`}
-              >
-                Built by auditors, for auditors
-              </h2>
+              <h2 className={`${H2} mx-auto max-w-2xl`}>Built by auditors, for auditors</h2>
             </div>
-            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 lg:gap-8">
               <FeatureCard icon={Eye} title="AI vision, not guesses">
-                Qwen reads documents and admits when it's uncertain. Every extracted number carries
-                a confidence score and source location.
+                Qwen reads documents and admits when it&apos;s uncertain. Every extracted number
+                carries a confidence score and source location.
               </FeatureCard>
               <FeatureCard icon={Code2} title="Deterministic matching">
                 No black boxes. Reconciliation logic is pure Python. You can audit the audit logic.
@@ -860,7 +977,7 @@ export default function LandingPage() {
               </FeatureCard>
               <FeatureCard icon={UserCheck} title="You stay in the loop">
                 The system never decides alone. Every flagged or matched item lands in your review
-                queue.  You approve or reject it.
+                queue. You approve or reject it.
               </FeatureCard>
               <FeatureCard icon={Database} title="Immutable audit trail">
                 Every decision, every timestamp, every override. Written once, tamper-proof. Defend
@@ -878,20 +995,16 @@ export default function LandingPage() {
         <DemoSection />
 
         {/* ===== FAQ ===== */}
-        <section id="faq" className="scroll-mt-16 px-6 py-20 lg:px-10">
+        <section id="faq" className="scroll-mt-16 px-6 py-14 md:py-20 lg:px-10">
           <div className="mx-auto max-w-[1020px]">
-            <div className="mb-12 text-center">
+            <div className="mb-8 text-center md:mb-12">
               <Eyebrow>FAQ</Eyebrow>
-              <h2
-                className={`${sora.className} mt-1 text-3xl font-bold leading-tight tracking-tight text-[#10243A] md:text-4xl`}
-              >
-                Questions we actually get asked
-              </h2>
+              <h2 className={`${H2} mt-1`}>Questions we actually get asked</h2>
             </div>
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 md:gap-6">
               <FaqCard icon={Rocket} question="How long before we see ROI?">
-                Most firms save 15–20 hours per engagement in the first month. At a junior auditor's
-                cost, that's 3–5K per case. Onboarding is usually two weeks.
+                Most firms save 15–20 hours per engagement in the first month. At a junior
+                auditor&apos;s cost, that&apos;s 3–5K per case. Onboarding is usually two weeks.
               </FaqCard>
               <FaqCard icon={Eye} question="Does Tarazu read scanned invoices?">
                 Yes. Qwen handles PDFs, JPGs, and PNGs. Handwritten notes are harder, but we keep
@@ -918,21 +1031,24 @@ export default function LandingPage() {
         </section>
 
         {/* ===== CTA ===== */}
-        <section id="cta" className="scroll-mt-16 bg-[#10243A] px-6 py-24 text-white lg:px-10">
+        <section
+          id="cta"
+          className="scroll-mt-16 bg-[#10243A] px-6 py-16 text-white md:py-24 lg:px-10"
+        >
           <div className="mx-auto max-w-[800px] text-center">
             <h2
-              className={`${sora.className} mb-4 text-3xl font-bold leading-tight tracking-tight md:text-[42px]`}
+              className={`${sora.className} mb-4 text-[28px] font-bold leading-tight tracking-tight sm:text-[32px] md:text-[42px]`}
             >
               Stop wasting weeks. Get control back.
             </h2>
-            <p className="mb-8 text-lg text-[#B9C6D2]">
+            <p className="mb-8 text-[16px] text-[#B9C6D2] md:text-lg">
               Try Tarazu with your own real (anonymized) engagement for free. No credit card. No
               sales calls. Just a clean review queue and an immutable trail.
             </p>
             <Link href="/signup" className={BTN_PRIMARY}>
               Get started free
             </Link>
-            <p className="mt-6 text-sm text-[#6B7A8A]">
+            <p className="mt-6 text-[13px] text-[#6B7A8A] md:text-sm">
               Takes 2 minutes to set up. Your audit firm, your rules, your way forward.
             </p>
           </div>
@@ -940,9 +1056,9 @@ export default function LandingPage() {
       </main>
 
       {/* ===== Footer ===== */}
-      <footer className="bg-[#10243A] px-6 pb-8 pt-16 text-[15px] text-[#B9C6D2] lg:px-10">
+      <footer className="bg-[#10243A] px-6 pb-8 pt-12 text-[14px] text-[#B9C6D2] md:pt-16 md:text-[15px] lg:px-10">
         <div className="mx-auto max-w-[1200px]">
-          <div className="mb-12 grid gap-10 md:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr]">
+          <div className="mb-10 flex flex-col gap-10 md:mb-12 lg:grid lg:grid-cols-[2fr_1fr_1fr_1fr]">
             <div>
               <a
                 href="#hero"
@@ -957,49 +1073,28 @@ export default function LandingPage() {
                 AI-powered audit automation for modern assurance teams.
               </p>
             </div>
-            {[
-              {
-                heading: "Product",
-                links: [
-                  ["How it works", "#how"],
-                  ["Platform", "#features"],
-                  ["Agents", "#agents"],
-                ],
-              },
-              {
-                heading: "Company",
-                links: [
-                  ["About", "#"],
-                  ["Careers", "#"],
-                  ["Contact", "#"],
-                ],
-              },
-              {
-                heading: "Resources",
-                links: [
-                  ["Blog", "#"],
-                  ["Guides", "#"],
-                  ["FAQ", "#faq"],
-                ],
-              },
-            ].map(({ heading, links }) => (
-              <div key={heading}>
-                <h4 className="mb-4 text-sm font-semibold uppercase tracking-[0.08em] text-white">
-                  {heading}
-                </h4>
-                <ul className="space-y-2.5">
-                  {links.map(([label, href]) => (
-                    <li key={label}>
-                      <a href={href} className="transition-colors hover:text-white">
-                        {label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            {/* Two link columns on phones, three from `sm`; at `lg` the wrapper
+                dissolves (`contents`) so the groups sit in the outer grid. */}
+            <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:contents">
+              {FOOTER_GROUPS.map(({ heading, links }) => (
+                <div key={heading}>
+                  <h4 className="mb-4 text-[13px] font-semibold uppercase tracking-[0.08em] text-white md:text-sm">
+                    {heading}
+                  </h4>
+                  <ul className="space-y-2.5">
+                    {links.map(([label, href]) => (
+                      <li key={label}>
+                        <a href={href} className="transition-colors hover:text-white">
+                          {label}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="flex flex-wrap justify-between gap-3 border-t border-[#24374D] pt-6 text-[13.5px]">
+          <div className="flex flex-col items-center gap-2 border-t border-[#24374D] pt-6 text-center text-[13px] sm:flex-row sm:justify-between sm:text-left md:text-[13.5px]">
             <span>© 2026 Tarazu. All rights reserved.</span>
             <span>
               <a href="#" className="transition-colors hover:text-white">
