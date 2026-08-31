@@ -36,23 +36,32 @@ MIGRATIONS = (
     ("0002-organizations.sql", "organizations, org_id everywhere, tenant-scoped RLS"),
     ("0003-api-keys.sql", "api_keys, with key_hash unreadable to browser roles"),
     ("0004-revoke-truncate.sql", "revoke TRUNCATE, which RLS does not cover"),
+    ("0004-user-profiles.sql", "user_profiles: name, picture, contact details"),
     ("0005-audit-id-is-text.sql", "audit_id is text, matching the ids the app mints"),
+    ("0005-org-invitations.sql", "org_invitations: single-use join codes"),
+    ("0006-reports-and-assistant.sql", "append-only reports, assistant audit actions"),
 )
 
 #: What each migration should leave behind, so --check can say where a project is.
-#: Keyed by table for most; 0004 grants nothing and creates nothing, so it is
-#: detected by the trigger it installs instead.
+#: Keyed by table for most; 0004-revoke-truncate grants nothing and creates
+#: nothing, so it is detected by the trigger it installs instead.
 EXPECTED_TABLES = {
     "schema.sql": ("cases", "documents", "extractions", "review_items", "flags",
                    "benford_results", "audit_trail"),
     "0002-organizations.sql": ("organizations", "organization_members"),
     "0003-api-keys.sql": ("api_keys",),
     "0004-revoke-truncate.sql": (),
+    "0004-user-profiles.sql": ("user_profiles",),
     "0005-audit-id-is-text.sql": (),
+    "0005-org-invitations.sql": ("org_invitations",),
+    "0006-reports-and-assistant.sql": ("reports",),
 }
 
 #: Migrations whose effect is a privilege or a trigger rather than a table.
-EXPECTED_TRIGGERS = {"0004-revoke-truncate.sql": ("audit_trail_no_truncate",)}
+EXPECTED_TRIGGERS = {
+    "0004-revoke-truncate.sql": ("audit_trail_no_truncate",),
+    "0006-reports-and-assistant.sql": ("reports_no_update_or_delete", "reports_no_truncate"),
+}
 
 #: Migrations detected by a column's type: (table, column, expected data_type).
 EXPECTED_COLUMN_TYPES = {

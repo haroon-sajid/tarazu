@@ -2,11 +2,15 @@
 
 **AI Audit Assistant for accounting firms.**
 
-Tarazu (ترازو, "the scales") reconciles a client's books in minutes instead of days.
-An auditor uploads a bank statement, invoices, and a ledger. Vision AI reads the
-documents, deterministic code matches every entry and flags the risks, and the
-auditor approves or rejects each item with the evidence on screen. Every action
-lands in an audit trail that nothing can edit or delete.
+**Tarazu reconciles your books, flags what needs attention, and explains it in
+plain language. The AI assists, the human decides.**
+
+Tarazu (ترازو, "the scales") sits on top of the records a business already
+has. An accountant uploads a bank statement, invoices, and a ledger export.
+Vision AI reads the documents, deterministic code matches every entry and
+flags the items that need review, and the accountant approves or rejects each
+one with the evidence on screen. Every action lands in an audit trail that
+nothing can edit or delete, and the report is generated from what was decided.
 
 The product stands on one rule: **the AI suggests, the human decides.** No model
 ever produces a number, a match, or a verdict.
@@ -21,16 +25,21 @@ ever produces a number, a match, or a verdict.
 - **Reconciles deterministically.** Three-tier matching (exact, date window,
   tolerance) in pure Python and pandas. Each match ships a plain-language reason
   an auditor can quote in a report.
-- **Flags fraud risks.** Round numbers, duplicates, weekend entries, near-limit
-  amounts, structuring, and sequence gaps, each with severity and explanation,
-  plus a Benford first-digit analysis.
+- **Flags what needs attention.** Round numbers, duplicates, weekend entries,
+  near-limit amounts, structuring, and sequence gaps, each with severity and
+  a plain-language explanation, plus a Benford first-digit analysis. Tarazu
+  flags items for review; it never claims to detect fraud.
 - **Keeps humans in charge.** Every item requires an explicit approve or reject.
   There is no auto-approval path anywhere in the codebase.
 - **Records everything.** A case-wide, append-only audit trail of every upload,
-  extraction, flag, and decision, filterable by actor and action.
-- **Answers questions.** An assistant that explains flags and matches in English
-  or Urdu, by typing or voice, citing the documents behind every claim and
-  refusing what it cannot ground.
+  extraction, flag, decision, question, and report, filterable by actor and action.
+- **Answers questions.** Ask Tarazu understands the question, runs the query
+  in deterministic code, and words the answer in English or Urdu with the
+  documents cited and the computed facts shown. A model may rephrase; it never
+  computes, and it refuses what the documents cannot answer.
+- **Delivers the report.** PDF and Excel, built from decided items with the
+  provenance of every figure and the full audit trail. Every generation is an
+  immutable record with its digest.
 - **Works as a team.** Multi-tenant workspaces, member invitations with
   single-use join codes and roles, and scoped API keys for n8n, Zapier, or your
   own scripts.
@@ -41,8 +50,9 @@ ever produces a number, a match, or a verdict.
    invoices (PDFs or phone photos). That opens a case.
 2. **Tarazu reads and reconciles** in one pass: extraction with confidence and
    provenance, deterministic matching, red-flag rules, Benford analysis.
-3. **The auditor decides.** Approve or reject each item with the evidence side
-   by side, then export the report. Every step is on the record.
+3. **The auditor decides.** Approve or reject each item with the real source
+   page and its highlighted evidence side by side, ask the assistant anything
+   about the case, then generate the report. Every step is on the record.
 
 ## Product principles
 
@@ -71,7 +81,7 @@ These are enforced in code and tests, not just stated:
 |---|---|
 | [frontend/](frontend/) | The web app: landing, upload, review, documents, assistant, dashboard, audit trail, settings |
 | [backend/](backend/) | The API: `core/`, `shared/`, and the bounded modules (extraction, matching, rules, assistant, reports) |
-| [docs/](docs/) | [API contracts](docs/api-contracts.md), architecture, decision records |
+| [docs/](docs/) | [Product plan](docs/product-plan.md), [API contracts](docs/api-contracts.md), architecture, decision records |
 | [infra/supabase/](infra/supabase/) | Postgres schema and migrations, numbered and idempotent |
 | [scripts/](scripts/) | Seeding and demo tooling |
 | [sample-data/](sample-data/fixtures/) | The synthetic demo case |
@@ -140,9 +150,18 @@ key action as `api-key:<prefix>` so automated decisions stay attributable.
 
 ## Roadmap
 
-- Deterministic matching and rules engines (the pipeline currently parks live
-  uploads at `awaiting_matching`; the demo case carries full review data)
-- Report generation (PDF and Excel) with an immutable report history
-- The assistant backend (responses are composed client-side today)
-- Original document serving in the evidence viewer
-- Notifications and webhooks
+The full plan, with acceptance criteria and delivery status, is
+[docs/product-plan.md](docs/product-plan.md).
+
+- **Phase 0 — finish the core: delivered 29 August 2026.** Deterministic
+  matching and rules on every upload, PDF and Excel reports with an immutable
+  history, the assistant on the backend with citations, and original pages in
+  the evidence viewer.
+- **Phase 1 — recurring clients and the Business view.** A firm adds a client
+  once and runs a period every month; the owner sees a plain-language summary
+  with a read-only role.
+- **Phase 2 — Ask Tarazu, completed.** The remaining question types (sales,
+  profit) once transactions carry direction.
+- **Phase 3 — automation.** Webhooks, n8n templates, scheduled monthly reports.
+- **Phase 4 — growth.** QuickBooks and Xero import, Pakistani bank-statement
+  formats, sales-tax reconciliation, billing.

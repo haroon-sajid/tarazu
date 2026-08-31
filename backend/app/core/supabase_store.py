@@ -21,9 +21,9 @@ service role included.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from app.core.repository import StoredDocument
+from app.core.repository import CaseDocument, StoredDocument
 from app.core.supabase_client import SupabaseRest
 from app.shared.schemas import (
     ApiKeyRecord,
@@ -36,6 +36,7 @@ from app.shared.schemas import (
     OrganizationMember,
     OrgInvitation,
     OrgRole,
+    ReportRecord,
     ReviewItem,
     UserProfile,
 )
@@ -268,6 +269,47 @@ class SupabaseCaseRepository:
         rows = self._rest.select("cases", params)
         return rows[0]["case_id"] if rows else None
 
+    def update_case(
+        self,
+        org_id: str,
+        case_id: str,
+        *,
+        client_name: str,
+        period_start: date | None,
+        period_end: date | None,
+    ) -> CaseRecord | None:
+        if self.get_case(org_id, case_id) is None:
+            return None
+        self._rest.update(
+            "cases",
+            {"case_id": f"eq.{case_id}", "org_id": f"eq.{org_id}"},
+            {
+                "client_name": client_name,
+                "period_start": period_start.isoformat() if period_start else None,
+                "period_end": period_end.isoformat() if period_end else None,
+            },
+        )
+        return self.get_case(org_id, case_id)
+
+    def delete_case(self, org_id: str, case_id: str) -> bool:
+        if self.get_case(org_id, case_id) is None:
+            return False
+        # The working tables go with the case (the Postgres schema cascades on
+        # the case row; the explicit deletes keep the two stores identical in
+        # behaviour). The audit trail and any reports are not touched: they are
+        # append-only evidence, and there is no delete path for them in this
+        # class or in the database privileges.
+        for table in (
+            "flags",
+            "review_items",
+            "extractions",
+            "documents",
+            "benford_results",
+        ):
+            self._rest.delete(table, {"org_id": f"eq.{org_id}", "case_id": f"eq.{case_id}"})
+        self._rest.delete("cases", {"case_id": f"eq.{case_id}", "org_id": f"eq.{org_id}"})
+        return True
+
     # -- documents and extractions ------------------------------------------ #
 
     def add_documents(
@@ -311,6 +353,23 @@ class SupabaseCaseRepository:
                 },
             )
         ]
+
+    def get_document(self, org_id: str, document_id: str) -> CaseDocument | None:
+        rows = self._rest.select(
+            "documents",
+            {"document_id": f"eq.{document_id}", "org_id": f"eq.{org_id}", "limit": "1"},
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        return CaseDocument(
+            document_id=row["document_id"],
+            document_type=row["document_type"],
+            filename=row["filename"],
+            size_bytes=row["size_bytes"],
+            storage_path=row["storage_path"],
+            case_id=row["case_id"],
+        )
 
     def save_extraction(self, org_id: str, case_id: str, result: ExtractionResult) -> None:
         self._rest.insert(
@@ -450,6 +509,74 @@ class SupabaseCaseRepository:
             {"case_id": f"eq.{case_id}", "org_id": f"eq.{org_id}", "limit": "1"},
         )
         return BenfordResult.model_validate(rows[0]["payload"]) if rows else None
+
+    # -- reports ------------------------------------------------------------ #
+    # Table from infra/supabase/0006-reports-and-assistant.sql. Insert only:
+    # the migration revokes UPDATE and DELETE from every role, service role
+    # included, so there is nothing an `update_report` here could do.
+
+    def save_report(self, org_id: str, record: ReportRecord) -> None:
+        self._rest.insert(
+            "reports",
+            [
+                {
+                    "report_id": record.report_id,
+                    "org_id": org_id,
+                    "case_id": record.case_id,
+                    "generated_by": record.generated_by,
+                    "generated_at": record.generated_at.astimezone(timezone.utc).isoformat(),
+                    "pdf_path": record.pdf_path,
+                    "excel_path": record.excel_path,
+                    "pdf_sha256": record.pdf_sha256,
+                    "excel_sha256": record.excel_sha256,
+                    "item_count": record.item_count,
+                    "approved_count": record.approved_count,
+                    "rejected_count": record.rejected_count,
+                    "pending_count": record.pending_count,
+                    "flag_count": record.flag_count,
+                    "audit_record_count": record.audit_record_count,
+                }
+            ],
+        )
+
+    def list_reports(self, org_id: str, case_id: str) -> list[ReportRecord]:
+        return [
+            self._report(row)
+            for row in self._rest.select(
+                "reports",
+                {
+                    "case_id": f"eq.{case_id}",
+                    "org_id": f"eq.{org_id}",
+                    "order": "generated_at.desc,report_id.desc",
+                },
+            )
+        ]
+
+    def get_report(self, org_id: str, report_id: str) -> ReportRecord | None:
+        rows = self._rest.select(
+            "reports",
+            {"report_id": f"eq.{report_id}", "org_id": f"eq.{org_id}", "limit": "1"},
+        )
+        return self._report(rows[0]) if rows else None
+
+    @staticmethod
+    def _report(row: dict) -> ReportRecord:
+        return ReportRecord(
+            report_id=row["report_id"],
+            case_id=row["case_id"],
+            generated_by=row["generated_by"],
+            generated_at=row["generated_at"],
+            pdf_path=row["pdf_path"],
+            excel_path=row["excel_path"],
+            pdf_sha256=row["pdf_sha256"],
+            excel_sha256=row["excel_sha256"],
+            item_count=row["item_count"],
+            approved_count=row["approved_count"],
+            rejected_count=row["rejected_count"],
+            pending_count=row["pending_count"],
+            flag_count=row["flag_count"],
+            audit_record_count=row["audit_record_count"],
+        )
 
     # -- api keys ----------------------------------------------------------- #
 

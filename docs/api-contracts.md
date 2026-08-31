@@ -115,7 +115,7 @@ way every time.
 
 | Scope | Grants |
 |---|---|
-| `read` | `GET /v1/review-items`, `GET /v1/dashboard`, `GET /v1/review-items/{id}/audit` |
+| `read` | Every `GET`: the review queue, the dashboard, an item's audit trail, the case list, the case trail, documents and their pages, reports and their files. Also `POST /v1/reports` and `POST /v1/assistant/chat` — both *derive* from decided data and change nothing about the case, and the monthly-report automation should not need a credential that can approve items. Each still lands in the trail under the key's name. |
 | `write` | `POST /v1/upload`, `POST /v1/review-items/{id}/approve`, `.../reject` |
 
 Scopes are fixed for a key's lifetime: to change them, revoke and create
@@ -373,6 +373,12 @@ a `note` saying which workflow did it. Read the note on rule 1 above before you
 build that one — every such approval lands in the trail as
 `api-key:<prefix>`, and it should.
 
+A third, for the monthly deliverable: **Schedule Trigger** on the first of the
+month → **HTTP Request** `POST /v1/reports` with `{}` (a `read` key is enough)
+→ **HTTP Request** `GET {{ $json.downloads.pdf }}` with *Response Format:
+File* → **Email** node with the file attached. Every run is a new immutable
+report and a `report_generated` entry under the key's name.
+
 **Do not** put the key in a workflow's URL, a query parameter, or a node's
 plain-text field. Query strings end up in access logs and browser history; the
 credential store exists so the key does not.
@@ -425,6 +431,8 @@ highlights the matching text instead.
 | `POST` | `/v1/api-keys` | Create an API key (returned once) | Live |
 | `GET` | `/v1/api-keys` | List this organization's API keys | Live |
 | `GET` | `/v1/cases` | List this organization's cases with working counts | Live |
+| `PATCH` | `/v1/cases/{case_id}` | Rename a case or correct its period (name, `period_start`, `period_end`; omitted fields keep their values) | Live |
+| `DELETE` | `/v1/cases/{case_id}` | Delete a case and its working data; reports and the audit trail outlive it | Live |
 | `GET` | `/v1/audit-trail` | One case's full audit trail (`?case_id=`, defaults to latest) | Live |
 | `GET` | `/v1/profile` | The signed-in person's profile | Live |
 | `PUT` | `/v1/profile` | Replace the signed-in person's profile | Live |
@@ -441,9 +449,13 @@ highlights the matching text instead.
 | `POST` | `/v1/review-items/{id}/reject` | Record a human rejection | Live |
 | `GET` | `/v1/review-items/{id}/audit` | The audit trail for one item | Live |
 | `GET` | `/v1/dashboard` | Case summary and Benford distribution | Live |
-| `GET` | `/v1/extractions/{document_id}` | One document's extraction output | To be defined |
-| `POST` | `/v1/reports` | Generate the PDF and Excel report | To be defined |
-| `POST` | `/v1/assistant` | Grounded chat | Cut from hackathon scope |
+| `GET` | `/v1/documents` | The case's uploaded documents, with page counts | Live |
+| `GET` | `/v1/documents/{id}/file` | The original uploaded file | Live |
+| `GET` | `/v1/documents/{id}/pages/{page}` | One page rendered as PNG (or the photo itself) | Live |
+| `POST` | `/v1/reports` | Generate the PDF and Excel report; an immutable record | Live |
+| `GET` | `/v1/reports` | Every report generated for a case, newest first | Live |
+| `GET` | `/v1/reports/{id}/download` | Download a report file (`?format=pdf\|excel`) | Live |
+| `POST` | `/v1/assistant/chat` | Ask Tarazu: a grounded answer with citations and facts | Live |
 
 All of these read and write real persisted data. `SUPABASE_URL` selects the
 store: set it and the app uses Supabase Postgres and Storage; leave it unset and
@@ -451,11 +463,13 @@ it runs on local SQLite and the filesystem, with the same behaviour either side.
 
 ### Which case?
 
-`/v1/review-items` and `/v1/dashboard` are always about one case. Pass
-`?case_id=CASE-...`, or omit it and the backend uses **your organization's** most
-recent case. With no cases in your organization, both return `404` telling you to
-upload first — including when another firm's database rows are sitting right
-beside yours.
+`/v1/review-items`, `/v1/dashboard`, `/v1/documents`, `/v1/reports`,
+`/v1/audit-trail`, and `/v1/assistant/chat` are always about one case. Pass
+`?case_id=CASE-...` (or `case_id` in the JSON body of the two `POST`s), or
+omit it and the backend uses **your organization's** most recent case. With no
+cases in your organization, all of them return `404` telling you to upload
+first — including when another firm's database rows are sitting right beside
+yours. One function, `resolve_case_id`, applies the rule for every route.
 
 ---
 
@@ -614,9 +628,10 @@ An optional `client_name` form field names the audited client.
 
 This endpoint runs the whole pipeline synchronously: store the bytes, extract
 with Qwen VL (or from cache when `DEMO_MODE=true`), read the ledger with pandas,
-call `matching.service.run_matching`, call `rules.service.evaluate_flags`, and
-save the review queue. On a real statement that takes tens of seconds; moving it
-to a background job is a later change behind this same response.
+call `matching.service.run_matching`, call `rules.service.evaluate_flags` and
+`rules.service.benford_analysis`, and save the review queue. On a real
+statement that takes tens of seconds; moving it to a background job is the
+period entity's change (ADR 0005), behind this same response.
 
 **Response `201 Created`**
 
@@ -639,14 +654,13 @@ to a background job is a later change behind this same response.
 }
 ```
 
-`status` is the case status: `uploaded`, `extracting`, `awaiting_matching`,
-`ready_for_review`, or `failed`. `needs_human_review_count` is how many
-documents had the two extraction passes disagree.
-
-> **`awaiting_matching`** means extraction finished and the documents are saved,
-> but `matching/` and `rules/` are not implemented yet, so there is no review
-> queue. The response says so rather than inventing results. See "Internal
-> module interfaces" below.
+`status` is the case status. A successful upload always answers
+`ready_for_review`; the other values are `uploaded` and `extracting` (in
+flight), `failed` (a deterministic step raised — `status_detail` on the case
+says why, and nothing half-built is saved as a queue), and `awaiting_matching`,
+a legacy value from before `matching/` and `rules/` existed that the pipeline
+no longer produces. `needs_human_review_count` is how many documents had the
+two extraction passes disagree.
 
 **Errors**
 
@@ -657,6 +671,7 @@ documents had the two extraction passes disagree.
 | `413` | A file is larger than 25 MB |
 | `415` | A file's extension is not accepted for its slot |
 | `422` | A required slot is missing, `invoices` is empty, a file is empty, or the ledger could not be read |
+| `500` | A deterministic step failed after extraction; the case is marked `failed` with the reason |
 | `502` | Qwen was unreachable. Set `DEMO_MODE=true` to run on cached extractions. |
 
 ---
@@ -978,55 +993,278 @@ layer has not heard of, and an unknown rule must degrade rather than disappear.
 
 ---
 
+### `GET /v1/documents`
+
+The case's uploaded files, so the viewer can name them and page through them.
+
+**Response `200`**
+
+```json
+{
+  "case_id": "CASE-4f2a9c1b03",
+  "total": 3,
+  "documents": [
+    {
+      "document_id": "DOC-BNK-7a1c9e02",
+      "document_type": "bank_statement",
+      "filename": "hbl-statement-june-2026.pdf",
+      "size_bytes": 418233,
+      "page_count": 3,
+      "needs_human_review": false,
+      "file_url": "/v1/documents/DOC-BNK-7a1c9e02/file",
+      "page_url_template": "/v1/documents/DOC-BNK-7a1c9e02/pages/{page}"
+    },
+    {
+      "document_id": "DOC-LED-0c41d9aa",
+      "document_type": "ledger",
+      "filename": "ledger-june-2026.xlsx",
+      "size_bytes": 18211,
+      "page_count": null,
+      "needs_human_review": false,
+      "file_url": "/v1/documents/DOC-LED-0c41d9aa/file",
+      "page_url_template": null
+    }
+  ]
+}
+```
+
+`page_count` is what extraction saw; it is `null` for the ledger, which has
+rows rather than pages. `needs_human_review` is the document's second-opinion
+escalation.
+
+### `GET /v1/documents/{id}/file`
+
+The original bytes, with their content type and an inline
+`Content-Disposition`. Served through the backend — the storage bucket is
+private and stays that way.
+
+### `GET /v1/documents/{id}/pages/{page}`
+
+One page as `image/png` (rendered with PyMuPDF at 110 dpi, the same renderer
+the model's page images came from, so provenance coordinates line up), or the
+photographed invoice itself. Pages are 1-based, matching `Provenance.page`.
+`Cache-Control: private, max-age=3600`.
+
+**Errors, all three** — `401`, `403` (no organization), `404` for an unknown
+document **or another firm's**, a page out of range, page `0`, or a page of
+the ledger ("The ledger is a spreadsheet: it has rows, not pages").
+
+---
+
+### `POST /v1/reports`
+
+Render the PDF and the Excel workbook from the case as it stands, store both,
+record the generation, and append `report_generated` to the trail. Both files
+are always produced together; pick one at download. `read` scope suffices —
+a report changes nothing about the case — and the trail still names the key.
+
+**Request** — optional; `{}` means the most recent case.
+
+```json
+{ "case_id": "CASE-4f2a9c1b03" }
+```
+
+**Response `201`**
+
+```json
+{
+  "report_id": "RPT-3b9d1e7f20",
+  "case_id": "CASE-4f2a9c1b03",
+  "generated_by": "8f3a2c19-4d5e-4b7a-9c11-2e6f8a0d4b33",
+  "generated_at": "2026-08-29T10:14:02.118Z",
+  "item_count": 10,
+  "approved_count": 1,
+  "rejected_count": 1,
+  "pending_count": 8,
+  "flag_count": 8,
+  "audit_record_count": 47,
+  "pdf_sha256": "9f2c…",
+  "excel_sha256": "41ab…",
+  "downloads": {
+    "pdf": "/v1/reports/RPT-3b9d1e7f20/download?format=pdf",
+    "excel": "/v1/reports/RPT-3b9d1e7f20/download?format=excel"
+  }
+}
+```
+
+**What the report contains:** a summary; every item carrying an explicit human
+decision, with its match result and the decision; the flags on those items;
+the provenance of every figure behind them (document, page or row, characters
+as printed); the Benford table; and the full audit trail as it stood at
+generation. **Pending items are counted and named as pending, never listed as
+findings.** The `report_generated` entry this call appends is, necessarily,
+the first thing not in the file.
+
+**Reports are immutable.** The `reports` table refuses `UPDATE` and `DELETE`
+in both stores (SQLite triggers; Postgres REVOKE, RLS with no update or delete
+policy, and triggers — `infra/supabase/0006-reports-and-assistant.sql`).
+Regenerating after more decisions is a new record; the old file stays
+downloadable and its digest stays on record. The Excel workbook is
+byte-reproducible from the same content (its timestamps are the report's own),
+so the digest is a property of the report, not of the second it was rendered in.
+
+### `GET /v1/reports`
+
+Every report generated for the case, newest first — the same summaries as
+above under `{ "case_id", "total", "reports": [...] }`.
+
+### `GET /v1/reports/{id}/download?format=pdf|excel`
+
+The bytes exactly as generated, as `application/pdf` or the `.xlsx` MIME type,
+with `Content-Disposition: attachment; filename="tarazu-<case>-<report>.<ext>"`.
+
+**Errors** — `404` for an unknown report **or another firm's**, and `404` if
+the file is no longer in storage ("Generate it again").
+
+---
+
+### `POST /v1/assistant/chat`
+
+Ask Tarazu one question about one case. The answer is produced by the
+five-step pipeline of ADR 0006: intent (deterministic keyword routing, English
+and Urdu) → one deterministic query → the calculation in code → the wording →
+the sources. A model, when `ASSISTANT_QWEN_API_KEY` is set and `DEMO_MODE` is
+off, may do two things and nothing else: for a question the keywords could
+not place, choose *which* fixed query runs (every parameter it names is
+checked against the question and the case — see the module README); and
+rephrase the wording, checked for introducing a number. It never computes
+and never sees a document. Two trail entries per call:
+`assistant_question_asked` (the caller) and `assistant_answered` (the composer).
+
+**Request**
+
+```json
+{ "question": "Which items are unmatched?", "case_id": null, "language": null }
+```
+
+`question` is 1–2000 characters and not blank. `language` forces `"en"` or
+`"ur"`; omitted, it is detected from the question (Urdu script, or "urdu").
+
+**Response `200`**
+
+```json
+{
+  "case_id": "CASE-2026-06-STX",
+  "answer": {
+    "question": "Which items are unmatched?",
+    "language": "en",
+    "intent": "unmatched",
+    "text": "1 ledger entry matched nothing in the bank statement or invoices, totalling PKR 187,500.00:\n\n• Shalimar Trading Co, PKR 187,500.00 on 2026-06-18 (RI-0010): No bank payment and no invoice found for this ledger entry anywhere in the uploaded documents.\n\nAn entry with no payment and no invoice behind it is the classic fictitious-vendor pattern, worth tracing first.",
+    "answer_confidence": "high",
+    "grounded": true,
+    "citations": [
+      { "document_id": "DOC-LED-001", "page": null, "row_number": 33,
+        "text_snippet": null, "review_item_id": "RI-0010" }
+    ],
+    "facts": [
+      { "label": "Unmatched items", "value": "1" },
+      { "label": "Total of unmatched items", "value": "PKR 187,500.00" },
+      { "label": "Shalimar Trading Co", "value": "PKR 187,500.00 on 2026-06-18 (RI-0010)" }
+    ],
+    "composed_by": "assistant.deterministic"
+  },
+  "audit_record": { "audit_id": "AUD-…", "action": "assistant_answered", "actor_type": "system",
+                    "actor_id": "assistant.deterministic", "…": "…" }
+}
+```
+
+**Structural guarantees**
+
+- `answer_confidence` is always present (rule 4). It is `high` for a direct
+  readout, `medium` where interpretation is involved (Benford on a small
+  sample, a single-month "comparison", or the model rather than the keywords
+  chose which query to run), `low` for a refusal. The field is deliberately
+  not named `confidence`.
+- `grounded: false` means the question could not be answered from the case:
+  either it was not understood (`intent: "unknown"` — the text says whether
+  it read as a question about the audit, and lists what can be asked) or it
+  asks for a figure the ledger does not carry (`intent: "unsupported"` —
+  sales, revenue, income, profit). `citations` is empty, and the schema
+  refuses a citation on an ungrounded answer. A lookup that finds nothing
+  (`intent: "item"` for an identifier the case lacks, a date nothing is dated)
+  is grounded: "not found" is a fact about the data.
+- `facts` are what the text was written from, each counted or summed by code.
+  Every number in a model-phrased answer already appears in them. When the
+  model chose the query, the facts carry `Question understood by: <model>`.
+- `composed_by` is `"assistant.deterministic"` or the model name.
+
+**Intents:** `summary`, `matches`, `unmatched`, `missing_evidence`, `flags`,
+`rule`, `duplicates`, `party`, `item`, `invoices`, `bank`, `ledger`,
+`confidence`, `totals`, `top_vendors`, `largest`, `compare_months`,
+`search_amount`, `search_date`, `benford`, `case_info`, `cases`, `documents`,
+`extractions`, `decisions`, `reports`, `history`, `concept`, `help`,
+`unsupported`, `unknown`.
+
+**Errors** — `401`, `403` (no organization), `404` for no case or another
+firm's case, `422` for a blank or over-long question or an unknown language.
+
+---
+
+## Audit actions
+
+`audit_trail.action` is one of: `case_created`, `document_uploaded`,
+`extraction_completed`, `second_opinion_completed`, `matching_completed`,
+`flag_raised`, `item_approved`, `item_rejected`, `report_generated`,
+`assistant_question_asked`, `assistant_answered`. The authoritative list is
+`AuditAction` in `backend/app/shared/schemas.py`; the Postgres check
+constraint is re-stated in `0006-reports-and-assistant.sql`.
+
+---
+
 ## Internal module interfaces
 
 Modules talk only through `service.py`, passing `app/shared/` schema objects.
+All five are pure functions of their arguments: no FastAPI, no Supabase, no
+file I/O. The three deterministic ones never touch the network either.
+
+#### matching — never imports an AI client
 
 ```python
-# app/modules/matching/service.py   — owned by Dev-D. Never imports an AI client.
+# app/modules/matching/service.py
 def run_matching(
     ledger: list[LedgerEntry],
     bank: list[BankTransaction],
     invoices: list[Invoice],
+    *,
+    date_tolerance_days: int = 3,
 ) -> list[MatchResult]: ...
+```
 
-# app/modules/rules/service.py      — owned by Dev-D. Never imports an AI client.
+One `MatchResult` per ledger row, in ledger order, whatever order the rows
+arrived in. Bank matching is one-to-one, best pairs first; invoice matching is
+not exclusive (a duplicate payment is two rows sharing one invoice). Rule ids:
+`exact-amount-exact-date`, `exact-amount-date-within-3-days`,
+`amount-within-1pct-party-similar`, `same-party-same-date-amount-mismatch`,
+`invoice-only-no-bank-payment`, `invoice-only-amount-mismatch`,
+`no-candidate-found`. Party similarity is `rapidfuzz` over names normalised by
+`app.shared.text.normalise_party_name`.
+
+#### rules — never imports an AI client
+
+```python
+# app/modules/rules/service.py
 def evaluate_flags(
     ledger: list[LedgerEntry],
     matches: list[MatchResult],
-    config: dict[str, Any],
+    config: dict[str, Any] | None = None,
+    *,
+    invoices: list[Invoice] | None = None,
+    bank: list[BankTransaction] | None = None,
 ) -> list[Flag]: ...
-```
 
-Both are pure functions: DataFrames and schema objects in, schema objects out.
-No FastAPI, no Supabase, no file I/O, no network. The same inputs always produce
-the same outputs, which is what makes the test suite meaningful evidence that
-the matching is deterministic.
-
-**Neither is implemented yet.** `app/pipeline.py` calls them for real. When they
-raise `NotImplementedError` the case is parked at `awaiting_matching` with its
-documents and extractions saved, and `POST /v1/upload` says so. The moment those
-two functions land, the same code path completes with no change to the pipeline.
-
-#### Benford, and the one interface still to be agreed
-
-`GET /v1/dashboard` returns the Benford first-digit distribution so the frontend
-can chart it. First-digit analysis is deterministic arithmetic over ledger
-amounts, so it belongs in `rules/` beside every other deterministic test — not
-in the app layer, and not duplicated.
-
-The pipeline calls it through an optional interface: if `rules.service` exposes
-`benford_analysis`, the result is computed and stored per case. Until it does,
-the dashboard reports `"benford": null` rather than computing it elsewhere.
-
-```python
-# app/modules/rules/service.py — to be added by its owner
 def benford_analysis(ledger: list[LedgerEntry]) -> BenfordResult: ...
+
+def default_config() -> dict[str, Any]: ...   # DEFAULT_CONFIG + RULES_* overrides
 ```
 
-`BenfordResult` carries `sample_size`, `chi_square`, `degrees_of_freedom`,
-`deviates_significantly`, and nine `digits` entries — each with
-`observed_count`, `observed_frequency`, `expected_frequency`, and `deviation`.
+Rule ids, in emission order: `round-number` (low), `weekend-entry` (medium),
+`duplicate-invoice` (high), `duplicate-payment` (high), `near-limit` (high),
+`structuring` (high), `invoice-sequence-gap` (medium). Flags are numbered
+`FLG-0001…` within the case. `config` keys: `approval_limits`,
+`round_number_floor`, `duplicate_window_days`, `near_limit_tolerance`,
+`weekend_days`; any omitted key falls back to its default. `benford_analysis`
+reports chi-square on 8 degrees of freedom and calls a deviation significant
+only above the p = 0.05 critical value **and** with at least 25 amounts.
 
 #### extraction
 
@@ -1036,10 +1274,52 @@ def extract_document(document_id, document_type, filename, content) -> Extractio
 def read_ledger(document_id, filename, content)                     -> list[LedgerEntry]
 def invoices_from(result: ExtractionResult)                         -> list[Invoice]
 def bank_transactions_from(result: ExtractionResult)                -> list[BankTransaction]
+def render_document_page(content, filename, page, *, dpi=110)        -> PageImage
+def document_page_count(content, filename)                          -> int
 ```
 
-The last two turn readings into the typed rows `run_matching` takes. They live
-in `extraction/` because that is the only module that knows how a reading maps
-onto a column; they perform no arithmetic.
+`invoices_from` and `bank_transactions_from` turn readings into the typed rows
+`run_matching` takes; they perform no arithmetic. `render_document_page`
+serves the evidence viewer from the same renderer the model's pages came from.
 
-`assistant/` and `reports/` interfaces are defined as those modules land.
+#### reports — never imports an AI client
+
+```python
+# app/modules/reports/service.py
+def generate_report(
+    case: CaseRecord,
+    items: list[ReviewItem],
+    audit: list[AuditRecord],
+    benford: BenfordResult | None,
+    *,
+    report_id: str,
+    generated_by: str,
+    generated_at: datetime,
+) -> ReportFiles   # .pdf: bytes, .excel: bytes, .record: ReportRecord, .content
+```
+
+The caller stores the bytes at `record.pdf_path` / `record.excel_path` and
+saves the record. `report_content(...)` returns the tables before rendering.
+
+#### assistant
+
+```python
+# app/modules/assistant/service.py
+def answer_question(
+    question: str,
+    *,
+    case: CaseRecord,
+    items: list[ReviewItem],
+    benford: BenfordResult | None,
+    context: WorkspaceContext | None = None,
+    language: AssistantLanguage | None = None,
+) -> AssistantAnswer: ...
+```
+
+`WorkspaceContext` carries every case, document, extraction, decision, report,
+and audit-trail record in the organization — the workspace intents (`cases`,
+`documents`, `extractions`, `decisions`, `reports`, `history`) read from it;
+the case-level intents (`summary`, `unmatched`, `flags`, …) read from `case`,
+`items`, and `benford` as before. `concept` reads from neither — it is a
+static bilingual glossary. Never raises for a question it cannot answer —
+that is an answer with `grounded=False`. Receives results, never documents.

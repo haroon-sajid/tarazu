@@ -60,6 +60,7 @@ __all__ = [
     "require_read",
     "require_write",
     "reset_backends",
+    "resolve_case_id",
 ]
 
 logger = logging.getLogger(__name__)
@@ -308,12 +309,8 @@ def human_only(principal: Principal = Depends(get_principal)) -> Principal:
     return principal
 
 
-def get_case_id(
-    case_id: str | None = Query(
-        default=None, description="Defaults to your most recent case."
-    ),
-    principal: Principal = Depends(get_principal),
-    repository: CaseRepository = Depends(get_repository),
+def resolve_case_id(
+    repository: CaseRepository, principal: Principal, case_id: str | None
 ) -> str:
     """Resolve which case a request is about, within the caller's organization.
 
@@ -329,6 +326,10 @@ def get_case_id(
     the person whose key it is, falling back to the organization's. That keeps a
     key polling `GET /v1/review-items` pointed at the same place a person would
     see, rather than at whichever colleague uploaded last.
+
+    Plain function rather than only a dependency, so a route that receives the
+    case id in a JSON body (`POST /v1/reports`, `POST /v1/assistant/chat`)
+    resolves it by exactly the same rules as one that takes `?case_id=`.
     """
     resolved = case_id or repository.latest_case_id(principal.org_id, principal.user_id)
     if not resolved:
@@ -341,3 +342,14 @@ def get_case_id(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"No case with id {resolved!r}."
         )
     return resolved
+
+
+def get_case_id(
+    case_id: str | None = Query(
+        default=None, description="Defaults to your most recent case."
+    ),
+    principal: Principal = Depends(get_principal),
+    repository: CaseRepository = Depends(get_repository),
+) -> str:
+    """`?case_id=` as a dependency. See `resolve_case_id` for the rules."""
+    return resolve_case_id(repository, principal, case_id)

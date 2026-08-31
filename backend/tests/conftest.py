@@ -230,12 +230,12 @@ def anonymous_client(
 
 
 # --------------------------------------------------------------------------- #
-# Standing in for the parts that are not built yet
+# Keeping the network out of the suite
 #
-# `matching/` and `rules/` are owned by Dev-D and still raise
-# `NotImplementedError`. These two fixtures let a test drive the whole pipeline
-# anyway. **The monkeypatching happens here in the tests, never in the
-# application** — `matching/service.py` and `rules/service.py` are untouched.
+# Extraction is the one step that would call a model. `demo_mode` replays the
+# cached fixture instead, through the same schema and the same downstream code.
+# `matching/`, `rules/`, and `reports/` are the real modules — they never had a
+# network to keep out.
 # --------------------------------------------------------------------------- #
 
 
@@ -248,53 +248,3 @@ def demo_mode(monkeypatch: pytest.MonkeyPatch):
     extraction_settings.reset_settings_cache()
     yield
     extraction_settings.reset_settings_cache()
-
-
-@pytest.fixture()
-def implemented_modules(monkeypatch: pytest.MonkeyPatch):
-    """Stand-ins for Dev-D's two functions, so the whole flow can be exercised.
-
-    Deliberately trivial: this is not a matching implementation and makes no
-    claim to be one. It exists to prove the wiring either side of those two
-    calls.
-    """
-    from app.modules.matching import service as matching
-    from app.modules.rules import service as rules
-    from app.shared.schemas import (
-        Flag,
-        MatchResult,
-        MatchStatus,
-        MatchStrength,
-        Severity,
-    )
-
-    def fake_matching(ledger, bank, invoices):
-        return [
-            MatchResult(
-                ledger_row_id=entry.ledger_row_id,
-                bank_row_id=None,
-                invoice_id=None,
-                status=MatchStatus.UNMATCHED,
-                match_strength=MatchStrength.LOW,
-                reason="Stand-in used in tests; no real matching was performed.",
-                rule_id="test-stub",
-            )
-            for entry in ledger
-        ]
-
-    def fake_rules(ledger, matches, config):
-        return [
-            Flag(
-                flag_id=f"FLG-{index:04d}",
-                rule_id="round-number",
-                severity=Severity.LOW,
-                explanation=f"{entry.amount} is a round figure.",
-                source_row_id=entry.ledger_row_id,
-            )
-            for index, entry in enumerate(ledger)
-            if entry.amount % 1000 == 0
-        ]
-
-    monkeypatch.setattr(matching, "run_matching", fake_matching)
-    monkeypatch.setattr(rules, "evaluate_flags", fake_rules)
-    return fake_matching, fake_rules

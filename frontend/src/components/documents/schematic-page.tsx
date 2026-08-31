@@ -1,18 +1,19 @@
 "use client";
 
 /**
- * A schematic rendering of one source-document page, with every extracted
- * value drawn at its real provenance coordinates. The backend does not serve
- * document files yet (`GET /v1/extractions/...` is "to be defined" in
- * docs/api-contracts.md), so the page is an outline at true A4 aspect ratio;
- * when a document URL exists this is where react-pdf slots in — the
- * highlights are already bbox-shaped and stay valid on a real render.
+ * One source-document page with every extracted value drawn at its real
+ * provenance coordinates — over the actual page image when the backend
+ * serves it (`GET /v1/documents/{id}/pages/{page}`), and over a schematic
+ * outline at true A4 aspect ratio when it cannot (fixture mode, or a page the
+ * backend could not render). The highlights are bbox-shaped in normalised
+ * 0..1 page space either way, so they stay valid on both renders.
  *
  * Nothing here computes anything: every rectangle comes from the provenance
  * the extraction produced, and the active highlight is presentation state.
  */
 
 import * as React from "react";
+import { getDocumentPageUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { BoundingBox } from "@/lib/types";
 
@@ -23,7 +24,7 @@ export interface PageHighlight {
   label: string;
 }
 
-export function SchematicPage({
+function Highlights({
   highlights,
   activeId,
   onSelect,
@@ -33,18 +34,7 @@ export function SchematicPage({
   onSelect?: (id: string) => void;
 }) {
   return (
-    <div
-      className="relative w-full overflow-hidden rounded-md border border-slate-300 bg-white shadow-inner"
-      style={{ aspectRatio: "1 / 1.414" }}
-    >
-      {/* Faint ruled lines to suggest the document body. */}
-      {Array.from({ length: 18 }).map((_, index) => (
-        <div
-          key={index}
-          className="absolute left-[8%] right-[8%] h-px bg-slate-100"
-          style={{ top: `${8 + index * 5}%` }}
-        />
-      ))}
+    <>
       {highlights.map((highlight) => {
         const active = highlight.id === activeId;
         if (highlight.bbox && highlight.bbox.length === 4) {
@@ -84,6 +74,104 @@ export function SchematicPage({
           </button>
         );
       })}
+    </>
+  );
+}
+
+/** The outline-only render: ruled lines at A4 proportions. */
+export function SchematicPage({
+  highlights,
+  activeId,
+  onSelect,
+}: {
+  highlights: PageHighlight[];
+  activeId: string | null;
+  onSelect?: (id: string) => void;
+}) {
+  return (
+    <div
+      className="relative w-full overflow-hidden rounded-md border border-slate-300 bg-white shadow-inner"
+      style={{ aspectRatio: "1 / 1.414" }}
+    >
+      {Array.from({ length: 18 }).map((_, index) => (
+        <div
+          key={index}
+          className="absolute left-[8%] right-[8%] h-px bg-slate-100"
+          style={{ top: `${8 + index * 5}%` }}
+        />
+      ))}
+      <Highlights highlights={highlights} activeId={activeId} onSelect={onSelect} />
+    </div>
+  );
+}
+
+/**
+ * The real page when the backend serves it, the schematic when it cannot.
+ * Reports which it managed through `onRendered`, so a caption can say so.
+ */
+export function DocumentPage({
+  documentId,
+  page,
+  highlights,
+  activeId,
+  onSelect,
+  onRendered,
+}: {
+  documentId: string;
+  page: number;
+  highlights: PageHighlight[];
+  activeId: string | null;
+  onSelect?: (id: string) => void;
+  onRendered?: (mode: "image" | "schematic") => void;
+}) {
+  // undefined: loading; null: the backend has no image for this page.
+  const [src, setSrc] = React.useState<string | null | undefined>(undefined);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setSrc(undefined);
+    getDocumentPageUrl(documentId, page)
+      .then((url) => {
+        if (cancelled) return;
+        setSrc(url);
+        onRendered?.(url ? "image" : "schematic");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSrc(null);
+        onRendered?.("schematic");
+      });
+    return () => {
+      cancelled = true;
+    };
+    // onRendered is a reporting callback; re-fetching on its identity would loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentId, page]);
+
+  if (src === undefined) {
+    return (
+      <div
+        className="w-full animate-pulse rounded-md border border-slate-200 bg-slate-100"
+        style={{ aspectRatio: "1 / 1.414" }}
+        aria-busy
+        aria-label="Loading the page"
+      />
+    );
+  }
+  if (src === null) {
+    return <SchematicPage highlights={highlights} activeId={activeId} onSelect={onSelect} />;
+  }
+  return (
+    <div className="relative w-full overflow-hidden rounded-md border border-slate-300 bg-white shadow-inner">
+      {/* The image sets the box; the highlights are percentages of it. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={`${documentId}, page ${page}`}
+        className="block h-auto w-full select-none"
+        draggable={false}
+      />
+      <Highlights highlights={highlights} activeId={activeId} onSelect={onSelect} />
     </div>
   );
 }

@@ -1,17 +1,13 @@
 "use client";
 
 /**
- * The evidence viewer: the trust moment of the demo. Left panel — the ledger
- * entry beside what the documents say, differing fields highlighted. Right
- * panel — where each value physically sits on its source page, drawn from the
- * provenance the extraction produced (page + normalised bbox, or a text
- * snippet when the model returned no usable box).
- *
- * The backend does not serve document files yet (`GET /v1/extractions/...` is
- * still "to be defined" in docs/api-contracts.md), so the page is rendered
- * schematically: a page outline at true aspect ratio with the highlight
- * rectangle at its real coordinates. When a document URL exists, this pane is
- * where react-pdf slots in — the props are already documentUrl-shaped.
+ * The evidence viewer: the trust moment of the product. Left panel — the
+ * ledger entry beside what the documents say, differing fields highlighted.
+ * Right panel — where each value physically sits on its source page, drawn
+ * from the provenance the extraction produced (page + normalised bbox, or a
+ * text snippet when the model returned no usable box), over the real page
+ * image the backend renders (`GET /v1/documents/{id}/pages/{page}`), or over
+ * a schematic outline when it cannot serve one.
  *
  * Nothing here computes anything: every value, match, and flag on screen came
  * from the backend. Highlighting which displayed values differ is presentation
@@ -20,28 +16,22 @@
  */
 
 import * as React from "react";
-import { FileText, History, Loader2, X } from "lucide-react";
+import Link from "next/link";
+import { ExternalLink, FileText, History, Loader2, X } from "lucide-react";
 import { getReviewItemAudit } from "@/lib/api";
 import type { AuditRecord, ExtractedField, Provenance, ReviewItem } from "@/lib/types";
 import { formatDate, formatMoney, formatTimestamp } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ConfidenceBadge, SeverityBadge, StatusBadge, MatchStrengthBadge } from "@/components/ui/badge";
+import { DocumentPage } from "@/components/documents/schematic-page";
 
 // ---------------------------------------------------------------------------
-// Right panel: schematic page with the provenance highlight
+// Right panel: the source page with the provenance highlight
 // ---------------------------------------------------------------------------
 
-function DocumentPane({
-  provenance,
-  documentUrl,
-}: {
-  provenance: Provenance;
-  documentUrl?: string;
-}) {
-  // documentUrl is reserved for the react-pdf integration once the backend
-  // serves files; today it is always undefined and the schematic renders.
-  void documentUrl;
+function DocumentPane({ provenance }: { provenance: Provenance }) {
   const { bbox, text_snippet, page, row_number, document_id } = provenance;
+  const [mode, setMode] = React.useState<"image" | "schematic" | null>(null);
 
   if (row_number != null) {
     // Spreadsheet provenance: the ledger, read by pandas with no AI involved.
@@ -59,42 +49,37 @@ function DocumentPane({
     );
   }
 
+  const pageNumber = page ?? 1;
   return (
     <div className="flex h-full flex-col">
-      <p className="mb-2 text-xs font-medium text-ink-600">
-        {document_id} · page {page ?? "?"}
-      </p>
-      {/* A4 aspect page outline; bbox is [x0,y0,x1,y1] normalised 0..1, origin top-left. */}
-      <div className="relative w-full overflow-hidden rounded-md border border-slate-300 bg-white shadow-inner" style={{ aspectRatio: "1 / 1.414" }}>
-        {/* Faint ruled lines to suggest the document body. */}
-        {Array.from({ length: 18 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute left-[8%] right-[8%] h-px bg-slate-100"
-            style={{ top: `${8 + i * 5}%` }}
-          />
-        ))}
-        {bbox && bbox.length === 4 ? (
-          <div
-            className="absolute rounded-sm border-2 border-amber-500 bg-amber-300/30"
-            style={{
-              left: `${bbox[0] * 100}%`,
-              top: `${bbox[1] * 100}%`,
-              width: `${(bbox[2] - bbox[0]) * 100}%`,
-              height: `${(bbox[3] - bbox[1]) * 100}%`,
-            }}
-            title={text_snippet ?? undefined}
-          />
-        ) : text_snippet ? (
-          // No usable box from the vision model — highlight the snippet instead.
-          <div className="absolute inset-x-[10%] top-[40%] rounded-sm bg-amber-300/40 px-2 py-1 text-center text-xs font-medium text-ink-900">
-            {text_snippet}
-          </div>
-        ) : null}
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-ink-600">
+          {document_id} · page {pageNumber}
+        </p>
+        <Link
+          href={`/documents?doc=${encodeURIComponent(document_id)}&page=${pageNumber}`}
+          className="flex items-center gap-1 text-[11px] font-medium text-brand-700 hover:underline"
+        >
+          Open in Documents <ExternalLink className="h-3 w-3" aria-hidden />
+        </Link>
       </div>
+      {/* bbox is [x0,y0,x1,y1] normalised 0..1, origin top-left, on the real page. */}
+      <DocumentPage
+        documentId={document_id}
+        page={pageNumber}
+        highlights={[{ id: "evidence", bbox, snippet: text_snippet, label: "evidence" }]}
+        activeId="evidence"
+        onRendered={setMode}
+      />
       {text_snippet && bbox && (
         <p className="mt-2 text-xs text-ink-600">
           Highlighted text: <span className="rounded bg-amber-100 px-1 py-0.5 font-medium">{text_snippet}</span>
+        </p>
+      )}
+      {mode === "schematic" && (
+        <p className="mt-1 text-[11px] text-ink-400">
+          Schematic render: the page image is not available from the backend for
+          this document, so the highlight is drawn at its coordinates on an outline.
         </p>
       )}
     </div>

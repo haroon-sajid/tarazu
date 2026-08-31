@@ -35,6 +35,11 @@ __all__ = [
     "ActorType",
     "ApiKeyRecord",
     "ApiKeyScope",
+    "AssistantAnswer",
+    "AssistantCitation",
+    "AssistantFact",
+    "AssistantIntent",
+    "AssistantLanguage",
     "AuditAction",
     "AuditReadiness",
     "AuditRecord",
@@ -67,6 +72,8 @@ __all__ = [
     "OrgInvitation",
     "Provenance",
     "ReadinessComponent",
+    "ReportFormat",
+    "ReportRecord",
     "ReviewDecision",
     "ReviewItem",
     "SecondOpinion",
@@ -154,7 +161,9 @@ class CaseStatus(str, Enum):
 
     UPLOADED = "uploaded"
     EXTRACTING = "extracting"
-    #: Extraction finished, but `matching/` is not implemented yet.
+    #: Legacy. Cases uploaded before `matching/` and `rules/` existed were
+    #: parked here; the pipeline no longer produces it, and the value stays so
+    #: those rows still read. Re-upload such a case to process it.
     AWAITING_MATCHING = "awaiting_matching"
     READY_FOR_REVIEW = "ready_for_review"
     FAILED = "failed"
@@ -162,6 +171,12 @@ class CaseStatus(str, Enum):
 
 class AuditAction(str, Enum):
     CASE_CREATED = "case_created"
+    #: A person corrected the engagement's editable facts (name, period).
+    #: `detail` lists exactly what changed.
+    CASE_UPDATED = "case_updated"
+    #: A person removed the engagement. The working data went with it; this
+    #: trail is append-only and outlives the case — including this record.
+    CASE_DELETED = "case_deleted"
     DOCUMENT_UPLOADED = "document_uploaded"
     EXTRACTION_COMPLETED = "extraction_completed"
     SECOND_OPINION_COMPLETED = "second_opinion_completed"
@@ -170,6 +185,73 @@ class AuditAction(str, Enum):
     ITEM_APPROVED = "item_approved"
     ITEM_REJECTED = "item_rejected"
     REPORT_GENERATED = "report_generated"
+    #: A person asked the assistant something. `detail` carries the question.
+    ASSISTANT_QUESTION_ASKED = "assistant_question_asked"
+    #: The assistant answered. `actor_id` names what composed the answer —
+    #: the deterministic composer, or the model that phrased it.
+    ASSISTANT_ANSWERED = "assistant_answered"
+
+
+class ReportFormat(str, Enum):
+    PDF = "pdf"
+    EXCEL = "excel"
+
+
+class AssistantLanguage(str, Enum):
+    ENGLISH = "en"
+    URDU = "ur"
+
+
+class AssistantIntent(str, Enum):
+    """What the assistant understood the question to be asking for.
+
+    The intent is decided by the module's deterministic planner and drives
+    which deterministic query runs. It is recorded on the answer so a reader
+    can see *how* the answer was produced, not only what it says.
+
+    The first block reads the case's review queue — its results as a whole
+    (`matches`, `flags`, `totals`…), one thing in it (`item`: a review item,
+    ledger row, bank line, invoice, or flag named by its identifier), or one
+    source of evidence (`invoices`, `bank`, `ledger`). The second block reads
+    the rest of the engagement's persisted record — documents, extractions,
+    decisions, reports, the trail, the case itself, and every case in the
+    organization — read-only, through the same org-scoped repository the
+    routes use. The last block neither reads nor computes: `concept` is
+    answered from the reviewed glossary shipped in `concepts.py`, the same
+    standing `help` has.
+    """
+
+    SUMMARY = "summary"
+    MATCHES = "matches"
+    UNMATCHED = "unmatched"
+    MISSING_EVIDENCE = "missing_evidence"
+    FLAGS = "flags"
+    RULE = "rule"
+    DUPLICATES = "duplicates"
+    PARTY = "party"
+    ITEM = "item"
+    INVOICES = "invoices"
+    BANK = "bank"
+    LEDGER = "ledger"
+    CONFIDENCE = "confidence"
+    TOTALS = "totals"
+    TOP_VENDORS = "top_vendors"
+    LARGEST = "largest"
+    COMPARE_MONTHS = "compare_months"
+    SEARCH_AMOUNT = "search_amount"
+    SEARCH_DATE = "search_date"
+    BENFORD = "benford"
+    CASE_INFO = "case_info"
+    CASES = "cases"
+    DOCUMENTS = "documents"
+    EXTRACTIONS = "extractions"
+    DECISIONS = "decisions"
+    REPORTS = "reports"
+    HISTORY = "history"
+    CONCEPT = "concept"
+    HELP = "help"
+    UNSUPPORTED = "unsupported"
+    UNKNOWN = "unknown"
 
 
 # --------------------------------------------------------------------------- #
@@ -578,6 +660,106 @@ class ReviewItem(TarazuModel):
             raise ValueError("a rejected item must record a rejection reason")
         if self.decision is not ReviewDecision.REJECTED and self.rejection_reason:
             raise ValueError("only a rejected item may carry a rejection reason")
+        return self
+
+
+# --------------------------------------------------------------------------- #
+# Reports
+# --------------------------------------------------------------------------- #
+
+
+class ReportRecord(TarazuModel):
+    """One generated report: the deliverable, and the record that it was made.
+
+    Immutable once written, like the audit trail: a report is evidence of what
+    the firm delivered on a date, and the stores refuse UPDATE and DELETE on
+    the table. Regenerating produces a new record; it never rewrites one. The
+    bytes live in document storage at the two paths, and their digests are
+    kept here so a file handed to a client can be shown to be the one made.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    report_id: str = Field(min_length=1)
+    case_id: str = Field(min_length=1)
+    generated_by: str = Field(min_length=1)
+    generated_at: datetime
+    pdf_path: str = Field(min_length=1)
+    excel_path: str = Field(min_length=1)
+    pdf_sha256: str = Field(min_length=64, max_length=64)
+    excel_sha256: str = Field(min_length=64, max_length=64)
+    #: Counts at the moment of generation, so the history reads on its own.
+    item_count: int = Field(ge=0)
+    approved_count: int = Field(ge=0)
+    rejected_count: int = Field(ge=0)
+    pending_count: int = Field(ge=0)
+    flag_count: int = Field(ge=0)
+    audit_record_count: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _decisions_add_up(self) -> ReportRecord:
+        if self.approved_count + self.rejected_count + self.pending_count != self.item_count:
+            raise ValueError("approved + rejected + pending must equal item_count")
+        return self
+
+
+# --------------------------------------------------------------------------- #
+# The assistant
+# --------------------------------------------------------------------------- #
+
+
+class AssistantCitation(TarazuModel):
+    """One place in the uploaded documents that an answer rests on."""
+
+    document_id: str = Field(min_length=1)
+    page: int | None = Field(default=None, ge=1)
+    row_number: int | None = Field(default=None, ge=1)
+    text_snippet: str | None = None
+    #: The review item the citation belongs to, so the UI can link to it.
+    review_item_id: str | None = None
+
+
+class AssistantFact(TarazuModel):
+    """One computed figure the answer was written from, shown beside it.
+
+    Every number in an answer comes from one of these, and each of these was
+    counted or summed by deterministic code over persisted results. The list
+    is what lets a reader check the prose against the arithmetic.
+    """
+
+    label: str = Field(min_length=1)
+    value: str = Field(min_length=1)
+
+
+class AssistantAnswer(TarazuModel):
+    """An answer from the assistant. Reliability rules 4 and 7, structurally.
+
+    `answer_confidence` is the module's own confidence that the answer is a
+    faithful readout of the case data — `high` for a direct readout, `medium`
+    where interpretation was involved (a fuzzy party match, a small Benford
+    sample), `low` for a refusal. It is deliberately not called `confidence`;
+    see the module docstring for why that name is reserved.
+
+    `grounded` is false when the question could not be answered from the
+    uploaded documents. The text then says so, and cites nothing.
+    """
+
+    question: str = Field(min_length=1)
+    language: AssistantLanguage
+    intent: AssistantIntent
+    text: str = Field(min_length=1)
+    answer_confidence: Confidence
+    grounded: bool
+    citations: list[AssistantCitation] = Field(default_factory=list)
+    facts: list[AssistantFact] = Field(default_factory=list)
+    #: What produced the wording: "deterministic" or the model that phrased
+    #: the computed facts. Never the thing that produced a number.
+    composed_by: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _ungrounded_answers_cite_nothing(self) -> AssistantAnswer:
+        if not self.grounded and self.citations:
+            raise ValueError("an answer that is not grounded must not cite a document")
         return self
 
 

@@ -203,7 +203,6 @@ def test_an_upload_by_one_firm_is_invisible_to_the_other(
     demo_org: str,
     other_org: str,
     demo_mode,
-    implemented_modules,
 ) -> None:
     """A uploads and gets a queue. B lists, and sees nothing at all."""
     case_id = upload(client, "Haroon Textiles")
@@ -227,7 +226,6 @@ def test_two_firms_uploads_do_not_mix(
     demo_org: str,
     other_org: str,
     demo_mode,
-    implemented_modules,
 ) -> None:
     """Each firm's dashboard counts its own queue and no one else's."""
     a_case = upload(client, "Haroon Textiles")
@@ -258,7 +256,6 @@ def test_the_default_case_is_never_another_firms_most_recent(
     demo_org: str,
     other_org: str,
     demo_mode,
-    implemented_modules,
 ) -> None:
     """`latest_case_id` is per-organization, so "my most recent" cannot drift."""
     upload(client, "Haroon Textiles")
@@ -276,7 +273,6 @@ def test_each_firm_decides_only_its_own_items(
     demo_org: str,
     other_org: str,
     demo_mode,
-    implemented_modules,
 ) -> None:
     a_case = upload(client, "Haroon Textiles")
     upload(other_client, "Karachi Metals Ltd")
@@ -455,7 +451,7 @@ def test_the_seeded_demo_auditor_still_works(
 
 
 def test_the_demo_auditor_is_joined_to_the_default_org_on_first_use(
-    client: TestClient, repository: SqliteCaseRepository, demo_mode, implemented_modules
+    client: TestClient, repository: SqliteCaseRepository, demo_mode
 ) -> None:
     """Even in a store where nothing has created that membership yet."""
     assert repository.get_membership("00000000-0000-4000-8000-000000000001") is None

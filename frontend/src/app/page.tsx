@@ -644,8 +644,8 @@ export default function LandingPage() {
                 with your firm
               </h1>
               <p className="mb-8 max-w-[52ch] text-[19px]">
-                Tarazu (ترازو) ingests bank statements, invoices, and ledgers — matches, flags,
-                and presents a clean review queue with an immutable audit trail.
+                Tarazu reconciles your books, flags what needs attention, and explains it in
+                plain language. The AI assists, the human decides.
               </p>
               <div className="mb-4 flex flex-wrap gap-3.5">
                 <Link href="/signup" className={BTN_PRIMARY}>
@@ -755,9 +755,9 @@ export default function LandingPage() {
                 All reconciliation and math run in Python — every number traceable to source rows
                 and audit rules.
               </FeatureCard>
-              <FeatureCard icon={Flag} title="Risk rules engine">
-                Flag fraud, duplicates, and anomalies with custom rules. Each flag links to
-                evidence and supports override.
+              <FeatureCard icon={Flag} title="Rules that flag what needs attention">
+                Duplicates, round numbers, weekend entries, near-limit amounts, and split
+                payments, each linked to its evidence. Tarazu flags; you decide.
               </FeatureCard>
               <FeatureCard icon={UserCheck} title="Human-in-the-loop">
                 Approve or reject every item. The system never decides alone — you stay in

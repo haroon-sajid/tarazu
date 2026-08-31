@@ -1,24 +1,27 @@
 "use client";
 
 /**
- * Assistant — chat with the case. The auditor asks in plain language (English
- * or Urdu); answers are grounded in the uploaded documents only, carry a
- * confidence level, and cite the document and page behind every claim.
- * Questions that cannot be grounded are refused, not guessed at — that is
- * reliability rule 7 rendered as UI.
+ * Assistant — Ask Tarazu, about this case. The auditor asks in plain language
+ * (English or Urdu); the backend understands the intent, runs the query in
+ * deterministic code, words the result, and shows its sources. Answers carry
+ * a confidence level, cite the document and page behind every claim, and
+ * list the computed facts they were written from. Questions that cannot be
+ * grounded are refused, not guessed at — reliability rule 7 rendered as UI.
  *
- * The composer takes more than typing: documents can be attached (paperclip),
- * and questions can be spoken — the mic streams live transcription into the
- * input via the browser's own speech engine (lib/speech.ts; English or Urdu,
- * nothing leaves the browser until Send).
+ * The composer takes more than typing: documents can be attached (paperclip)
+ * and are acknowledged, never read — the assistant answers only from the
+ * uploaded case; and questions can be spoken — the mic streams live
+ * transcription into the input via the browser's own speech engine
+ * (lib/speech.ts; English or Urdu, nothing leaves the browser until Send).
  *
- * Responses are currently composed in the frontend from real case data (see
- * lib/assistant.ts); the module `backend/app/modules/assistant/` replaces
- * that with a real grounded model call without changing this screen.
+ * Live mode calls `POST /v1/assistant/chat`; fixture mode composes from the
+ * fixture items client-side (lib/assistant.ts). The screen renders both alike.
  */
 
 import * as React from "react";
+import Link from "next/link";
 import {
+  Calculator,
   FileText,
   Loader2,
   MessageSquare,
@@ -28,15 +31,20 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { ApiError, getDashboard, getReviewItems } from "@/lib/api";
 import {
-  answerFromCase,
+  ApiError,
+  askAssistant,
+  FIXTURE_MODE,
+  getDashboard,
+  getReviewItems,
+} from "@/lib/api";
+import {
   attachmentKind,
+  describeAttachments,
   type AssistantAttachment,
-  type AssistantReply,
 } from "@/lib/assistant";
 import { isSpeechSupported, startRecognition, type Recognizer } from "@/lib/speech";
-import type { DashboardSummary, ReviewItem } from "@/lib/types";
+import type { AssistantAnswer, DashboardSummary, ReviewItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ConfidenceBadge } from "@/components/ui/badge";
 import { EmptyState, ErrorState } from "@/components/ui/states";
@@ -46,7 +54,7 @@ interface ChatMessage {
   id: number;
   role: "user" | "assistant";
   text: string;
-  reply?: AssistantReply;
+  reply?: AssistantAnswer;
   attachments?: AssistantAttachment[];
 }
 
@@ -66,15 +74,31 @@ function formatChipSize(bytes: number): string {
 }
 
 const SUGGESTIONS = [
+  "Match results",
+  "Which invoices are in this case?",
+  "What is in the bank statement?",
   "Which items are unmatched?",
-  "Explain the structuring flag in plain language",
-  "Why is the Sunday payment flagged?",
-  "Benford analysis summary",
+  "What have we decided so far?",
+  "What did the model read?",
+  "What happened in this case?",
+  "What is reconciliation?",
   "اردو میں خلاصہ دیں",
 ];
 
-/** Typing latency so the exchange reads honestly as request → response. */
-const REPLY_DELAY_MS = 900;
+/** An answer built locally — for attachments-only turns and transport errors. */
+function localAnswer(question: string, text: string, grounded: boolean): AssistantAnswer {
+  return {
+    question,
+    language: "en",
+    intent: grounded ? "help" : "unknown",
+    text,
+    answer_confidence: grounded ? "high" : "low",
+    grounded,
+    citations: [],
+    facts: [],
+    composed_by: "frontend",
+  };
+}
 
 export default function AssistantPage() {
   const [items, setItems] = React.useState<ReviewItem[] | null>(null);
@@ -171,7 +195,7 @@ export default function AssistantPage() {
     );
   };
 
-  const ask = (question: string) => {
+  const ask = async (question: string) => {
     const trimmed = question.trim();
     const files = attachments;
     if ((!trimmed && files.length === 0) || thinking || !items) return;
@@ -188,14 +212,32 @@ export default function AssistantPage() {
       },
     ]);
     setThinking(true);
-    window.setTimeout(() => {
-      const reply = answerFromCase(trimmed, items, dashboard, files);
-      setMessages((current) => [
-        ...current,
-        { id: nextId.current++, role: "assistant", text: reply.text, reply },
-      ]);
-      setThinking(false);
-    }, REPLY_DELAY_MS);
+
+    const acknowledgement = files.length > 0 ? describeAttachments(files) : null;
+    let reply: AssistantAnswer;
+    if (!trimmed && acknowledgement) {
+      reply = localAnswer("", acknowledgement, true);
+    } else {
+      try {
+        reply = await askAssistant(trimmed, { fixture: { items, dashboard } });
+      } catch (caught) {
+        reply = localAnswer(
+          trimmed,
+          caught instanceof ApiError
+            ? `The assistant could not answer: ${caught.message}`
+            : "The assistant could not answer. Try again.",
+          false,
+        );
+      }
+      if (acknowledgement) {
+        reply = { ...reply, text: `${acknowledgement}\n\n---\n\n${reply.text}` };
+      }
+    }
+    setMessages((current) => [
+      ...current,
+      { id: nextId.current++, role: "assistant", text: reply.text, reply },
+    ]);
+    setThinking(false);
   };
 
   if (loadError) return <ErrorState message={loadError} onRetry={load} />;
@@ -214,16 +256,26 @@ export default function AssistantPage() {
         <div>
           <h1 className="text-xl font-bold text-ink-900">Assistant</h1>
           <p className="mt-1 text-sm text-ink-600">
-            Ask about this case in plain language, English or Urdu. Answers
-            come only from the uploaded documents, with the source cited on
-            every claim.
+            Ask about this audit in plain language, English or Urdu.
+            Answers are computed in code from the uploaded documents, the
+            audit trail, and every case in the organization — with the source
+            cited on every claim.
           </p>
         </div>
         <span
-          className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-sky-700 ring-1 ring-sky-200"
-          title="Responses are composed in the frontend from real case data until the assistant module ships. Every number and citation is real."
+          className={cn(
+            "rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-wide ring-1",
+            FIXTURE_MODE
+              ? "bg-sky-50 text-sky-700 ring-sky-200"
+              : "bg-emerald-50 text-emerald-700 ring-emerald-200",
+          )}
+          title={
+            FIXTURE_MODE
+              ? "Fixture mode: answers are composed in the browser from the fixture case."
+              : "Every answer is computed by the backend from this case's persisted results and recorded in the audit trail."
+          }
         >
-          PREVIEW
+          {FIXTURE_MODE ? "FIXTURE" : "GROUNDED"}
         </span>
       </div>
 
@@ -245,9 +297,11 @@ export default function AssistantPage() {
                 Ask anything about this case
               </p>
               <p className="mt-1 max-w-md text-xs text-ink-400">
-                The assistant explains flags, matches, and the Benford analysis
-                in plain language, and refuses questions it cannot ground in
-                the documents.
+                The assistant explains flags, matches, totals, and the
+                Benford analysis. It also reads the engagement's own record
+                — documents, extractions, decisions, reports, and history —
+                and keeps a plain-language glossary for first-time auditors,
+                in English and Urdu.
               </p>
               <div className="mt-5 flex max-w-xl flex-wrap justify-center gap-2">
                 {SUGGESTIONS.map((suggestion) => (
@@ -291,44 +345,7 @@ export default function AssistantPage() {
                     </div>
                   </div>
                 ) : (
-                  <div key={message.id} className="flex justify-start">
-                    <div
-                      className={cn(
-                        "max-w-[85%] rounded-2xl rounded-bl-sm border px-4 py-3",
-                        message.reply?.grounded === false
-                          ? "border-amber-200 bg-amber-50"
-                          : "border-slate-200 bg-slate-50",
-                      )}
-                    >
-                      <div className="mb-1.5 flex items-center gap-2">
-                        <Sparkles className="h-3.5 w-3.5 text-brand-700" aria-hidden />
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-                          Assistant
-                        </span>
-                        {message.reply && (
-                          <ConfidenceBadge confidence={message.reply.confidence} />
-                        )}
-                      </div>
-                      <p className="whitespace-pre-line text-sm leading-relaxed text-ink-900">
-                        {message.text}
-                      </p>
-                      {message.reply && message.reply.citations.length > 0 && (
-                        <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-slate-200 pt-2">
-                          {message.reply.citations.map((citation, index) => (
-                            <span
-                              key={index}
-                              title={citation.snippet ?? undefined}
-                              className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 font-mono text-[10px] text-ink-600 ring-1 ring-slate-200"
-                            >
-                              <FileText className="h-3 w-3 text-ink-400" aria-hidden />
-                              {citation.document_id}
-                              {citation.page != null && ` · p.${citation.page}`}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <AssistantBubble key={message.id} message={message} />
                 ),
               )}
               {thinking && (
@@ -347,7 +364,7 @@ export default function AssistantPage() {
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            ask(draft);
+            void ask(draft);
           }}
           className="border-t border-slate-200 p-3"
         >
@@ -412,7 +429,7 @@ export default function AssistantPage() {
               placeholder={
                 recording
                   ? "Listening… speak your question"
-                  : "Ask about flags, matches, Benford, or a party by name…"
+                  : "Ask about flags, matches, totals, documents, decisions, history, a concept, or Benford…"
               }
               aria-label="Ask the assistant"
               disabled={items === null}
@@ -484,10 +501,109 @@ export default function AssistantPage() {
       </div>
 
       <p className="mt-2 text-center text-[10px] text-ink-400">
-        The assistant explains; it never decides. Voice is transcribed by your
-        browser and sent as text; approvals and rejections happen only on the
-        review screen, by you.
+        The assistant explains; it never decides. Every question and answer is
+        recorded in the audit trail. Voice is transcribed by your browser and
+        sent as text; approvals and rejections happen only on the review screen,
+        by you.
       </p>
+    </div>
+  );
+}
+
+function AssistantBubble({ message }: { message: ChatMessage }) {
+  const reply = message.reply;
+  const [showFacts, setShowFacts] = React.useState(false);
+  const urdu = reply?.language === "ur";
+  return (
+    <div className="flex justify-start">
+      <div
+        className={cn(
+          "max-w-[85%] rounded-2xl rounded-bl-sm border px-4 py-3",
+          reply?.grounded === false
+            ? "border-amber-200 bg-amber-50"
+            : "border-slate-200 bg-slate-50",
+        )}
+      >
+        <div className="mb-1.5 flex items-center gap-2">
+          <Sparkles className="h-3.5 w-3.5 text-brand-700" aria-hidden />
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+            Assistant
+          </span>
+          {reply && <ConfidenceBadge confidence={reply.answer_confidence} />}
+          {reply && reply.grounded === false && (
+            <span className="text-[10px] font-medium text-amber-700">not answerable from the documents</span>
+          )}
+        </div>
+        <p
+          className={cn(
+            "whitespace-pre-line text-sm leading-relaxed text-ink-900",
+            urdu && "text-right",
+          )}
+          dir={urdu ? "rtl" : "ltr"}
+          lang={urdu ? "ur" : "en"}
+        >
+          {message.text}
+        </p>
+        {reply && reply.citations.length > 0 && (
+          <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-slate-200 pt-2">
+            {reply.citations.map((citation, index) => {
+              const label = `${citation.document_id}${
+                citation.page != null
+                  ? ` · p.${citation.page}`
+                  : citation.row_number != null
+                    ? ` · row ${citation.row_number}`
+                    : ""
+              }`;
+              const chip = (
+                <span
+                  title={citation.text_snippet ?? undefined}
+                  className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 font-mono text-[10px] text-ink-600 ring-1 ring-slate-200 transition-colors hover:border-brand-600 hover:text-brand-800"
+                >
+                  <FileText className="h-3 w-3 text-ink-400" aria-hidden />
+                  {label}
+                </span>
+              );
+              const href = citation.review_item_id
+                ? `/review?item=${encodeURIComponent(citation.review_item_id)}`
+                : `/documents?doc=${encodeURIComponent(citation.document_id)}${
+                    citation.page != null ? `&page=${citation.page}` : ""
+                  }`;
+              return (
+                <Link key={index} href={href}>
+                  {chip}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+        {reply && (reply.facts.length > 0 || reply.composed_by !== "frontend") && (
+          <div className="mt-2 border-t border-slate-200 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowFacts((current) => !current)}
+              className="flex items-center gap-1 text-[10px] font-medium text-ink-400 hover:text-brand-800"
+            >
+              <Calculator className="h-3 w-3" aria-hidden />
+              {reply.facts.length > 0
+                ? `${showFacts ? "Hide" : "Show"} the ${reply.facts.length} computed fact${reply.facts.length === 1 ? "" : "s"} behind this answer`
+                : "How this was produced"}
+            </button>
+            {showFacts && (
+              <dl className="mt-1.5 space-y-0.5">
+                {reply.facts.map((fact, index) => (
+                  <div key={index} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-2 text-[11px]">
+                    <dt className="truncate text-ink-400">{fact.label}</dt>
+                    <dd className="text-ink-900 tabular-nums">{fact.value}</dd>
+                  </div>
+                ))}
+                <div className="pt-1 text-[10px] text-ink-400">
+                  Intent: {reply.intent} · computed in code · worded by {reply.composed_by}
+                </div>
+              </dl>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,14 +1,8 @@
 """The pipeline: upload → extract → match → flag → persisted review queue.
 
-`matching/` and `rules/` are owned by Dev-D and raise `NotImplementedError`
-today. These tests cover both worlds:
-
-- With the real stubs, the pipeline parks the case at `awaiting_matching` with
-  everything it managed to do already saved, and says so.
-- With the two functions monkeypatched to stand-ins, the whole flow runs end to
-  end and produces a persisted review queue. **The monkeypatching happens here
-  in the test, never in the application** — `matching/service.py` and
-  `rules/service.py` are untouched.
+These tests drive the real `matching/` and `rules/` modules over the real local
+store. Extraction runs in `DEMO_MODE`, so nothing here touches the network, and
+the only stand-in is the cached extraction fixture.
 """
 
 from __future__ import annotations
@@ -23,9 +17,9 @@ import pytest
 
 from app.core.audit import Actor
 from app.core.config import DEFAULT_ORG_ID as ORG
+from app.core.repository import StoredDocument
 from app.core.sqlite_store import LocalDocumentStore, SqliteCaseRepository
 from app.modules.matching import service as matching
-from app.modules.rules import service as rules
 from app.pipeline import build_review_items, run_pipeline
 from app.shared.schemas import (
     AuditAction,
@@ -41,7 +35,6 @@ from app.shared.schemas import (
     Provenance,
     Severity,
 )
-from app.core.repository import StoredDocument
 
 USER_ID = "00000000-0000-4000-8000-000000000001"
 #: The auditor, signed in and acting as themselves. `test_api_keys.py` covers
@@ -67,10 +60,14 @@ def a_ledger() -> bytes:
     buffer = io.BytesIO()
     pd.DataFrame(
         {
-            "Date": ["02/06/2026", "10/06/2026"],
-            "Party Name": ["Gulberg Traders (Pvt) Ltd", "Al-Habib Stationers"],
-            "Amount": [284000, 45900],
-            "Particulars": ["Yarn purchase", "Office supplies"],
+            "Date": ["02/06/2026", "10/06/2026", "14/06/2026"],
+            "Party Name": [
+                "Gulberg Traders (Pvt) Ltd",
+                "Al-Habib Stationers",
+                "Indus Power Solutions",
+            ],
+            "Amount": [284000, 45900, 1500000],
+            "Particulars": ["Yarn purchase", "Office supplies", "Generator advance"],
         }
     ).to_excel(buffer, index=False)
     return buffer.getvalue()
@@ -111,49 +108,31 @@ def documents(case_id: str) -> list[tuple[StoredDocument, bytes]]:
     ]
 
 
-# The `demo_mode` and `implemented_modules` fixtures live in `conftest.py`, so
-# the tenancy tests can drive the same full pipeline. They are still test-side
-# stand-ins: `matching/service.py` and `rules/service.py` stay exactly as their
-# owner left them.
-
-
 # --------------------------------------------------------------------------- #
-# The gap: matching and rules are not implemented yet
+# The full flow, over the real deterministic modules
 # --------------------------------------------------------------------------- #
 
 
-def test_the_pipeline_parks_when_matching_is_not_implemented(
+def test_the_full_flow_produces_a_persisted_review_queue(
     repository: SqliteCaseRepository, storage: LocalDocumentStore, demo_mode
 ) -> None:
     outcome = run_pipeline(
-        ORG, "CASE-A", "Haroon Textiles", documents("CASE-A"), AUDITOR,
+        ORG, "CASE-C", "Haroon Textiles", documents("CASE-C"), AUDITOR,
         repository, storage,
     )
 
-    assert outcome.status is CaseStatus.AWAITING_MATCHING
-    assert outcome.review_items == []
-    assert "not implemented" in (outcome.detail or "")
-    assert repository.get_case(ORG, "CASE-A").status is CaseStatus.AWAITING_MATCHING
+    assert outcome.status is CaseStatus.READY_FOR_REVIEW
+    assert len(outcome.review_items) == 3, "one review item per ledger row"
+
+    persisted = repository.list_review_items(ORG, "CASE-C")
+    assert len(persisted) == len(outcome.review_items)
+    assert repository.get_case(ORG, "CASE-C").status is CaseStatus.READY_FOR_REVIEW
 
 
-def test_everything_before_matching_is_still_saved(
-    repository: SqliteCaseRepository, storage: LocalDocumentStore, demo_mode
-) -> None:
-    """A parked case keeps its documents, its extractions, and its trail."""
-    run_pipeline(ORG, "CASE-B", "Client", documents("CASE-B"), AUDITOR, repository, storage)
-
-    assert len(repository.list_documents(ORG, "CASE-B")) == 3
-    assert repository.list_extractions(ORG, "CASE-B"), "extractions should be persisted"
-    actions = [record.action for record in repository.list_audit(ORG, "CASE-B")]
-    assert AuditAction.CASE_CREATED in actions
-    assert actions.count(AuditAction.DOCUMENT_UPLOADED) == 3
-    assert AuditAction.EXTRACTION_COMPLETED in actions
-    assert AuditAction.MATCHING_COMPLETED not in actions
-
-
-def test_the_upload_endpoint_reports_the_gap_honestly(
+def test_live_uploads_no_longer_park(
     client, repository: SqliteCaseRepository, demo_mode
 ) -> None:
+    """The acceptance criterion for finishing the core: nothing waits on a module."""
     response = client.post(
         "/v1/upload",
         files=[
@@ -164,62 +143,61 @@ def test_the_upload_endpoint_reports_the_gap_honestly(
     )
     assert response.status_code == 201
     body = response.json()
-    assert body["status"] == "awaiting_matching"
-    assert body["review_item_count"] == 0
-    assert "not implemented" in body["message"]
-
-
-# --------------------------------------------------------------------------- #
-# The full flow, with stand-ins for the two unimplemented functions
-# --------------------------------------------------------------------------- #
-
-
-def test_the_full_flow_produces_a_persisted_review_queue(
-    repository: SqliteCaseRepository,
-    storage: LocalDocumentStore,
-    demo_mode,
-    implemented_modules,
-) -> None:
-    outcome = run_pipeline(
-        ORG, "CASE-C", "Haroon Textiles", documents("CASE-C"), AUDITOR,
-        repository, storage,
-    )
-
-    assert outcome.status is CaseStatus.READY_FOR_REVIEW
-    assert outcome.review_items, "the pipeline should have produced review items"
-
-    persisted = repository.list_review_items(ORG, "CASE-C")
-    assert len(persisted) == len(outcome.review_items)
-    assert repository.get_case(ORG, "CASE-C").status is CaseStatus.READY_FOR_REVIEW
+    assert body["status"] == "ready_for_review"
+    assert body["review_item_count"] == 3
+    assert body["message"] == "3 items are ready for review."
 
 
 def test_the_full_flow_records_every_stage_in_the_trail(
-    repository: SqliteCaseRepository,
-    storage: LocalDocumentStore,
-    demo_mode,
-    implemented_modules,
+    repository: SqliteCaseRepository, storage: LocalDocumentStore, demo_mode
 ) -> None:
     run_pipeline(ORG, "CASE-D", "Client", documents("CASE-D"), AUDITOR, repository, storage)
 
-    actions = [record.action for record in repository.list_audit(ORG, "CASE-D")]
+    records = repository.list_audit(ORG, "CASE-D")
+    actions = [record.action for record in records]
     assert AuditAction.CASE_CREATED in actions
-    assert AuditAction.DOCUMENT_UPLOADED in actions
+    assert actions.count(AuditAction.DOCUMENT_UPLOADED) == 3
     assert AuditAction.EXTRACTION_COMPLETED in actions
     assert AuditAction.MATCHING_COMPLETED in actions
+    # The round 1,500,000 posted on Sunday 14 June fires two rules.
+    raised = [record for record in records if record.action is AuditAction.FLAG_RAISED]
+    assert {record.detail.split(" ")[0] for record in raised} >= {
+        "round-number", "weekend-entry"
+    }
+    assert all(record.actor_id == "rules.service" for record in raised)
+
+
+def test_the_flags_on_the_queue_are_the_rules_output(
+    repository: SqliteCaseRepository, storage: LocalDocumentStore, demo_mode
+) -> None:
+    outcome = run_pipeline(
+        ORG, "CASE-G", "Client", documents("CASE-G"), AUDITOR, repository, storage
+    )
+    by_party = {item.ledger_entry.party_name: item for item in outcome.review_items}
+    indus = by_party["Indus Power Solutions"]
+    assert {flag.rule_id for flag in indus.flags} == {"round-number", "weekend-entry"}
+    assert all(flag.source_row_id == indus.ledger_entry.ledger_row_id for flag in indus.flags)
+
+
+def test_benford_is_computed_and_stored_for_a_new_case(
+    repository: SqliteCaseRepository, storage: LocalDocumentStore, demo_mode
+) -> None:
+    run_pipeline(ORG, "CASE-H", "Client", documents("CASE-H"), AUDITOR, repository, storage)
+    benford = repository.get_benford(ORG, "CASE-H")
+    assert benford is not None
+    assert benford.sample_size == 3
+    assert [d.observed_count for d in benford.digits] == [1, 1, 0, 1, 0, 0, 0, 0, 0]
 
 
 def test_the_ledger_is_read_by_pandas_and_recorded_as_such(
-    repository: SqliteCaseRepository,
-    storage: LocalDocumentStore,
-    demo_mode,
-    implemented_modules,
+    repository: SqliteCaseRepository, storage: LocalDocumentStore, demo_mode
 ) -> None:
     """The trail should show plainly that no model touched the ledger."""
     outcome = run_pipeline(
         ORG, "CASE-E", "Client", documents("CASE-E"), AUDITOR, repository, storage
     )
 
-    assert len(outcome.ledger_entries) == 2
+    assert len(outcome.ledger_entries) == 3
     assert outcome.ledger_entries[0].party_name == "Gulberg Traders (Pvt) Ltd"
     assert outcome.ledger_entries[0].source.row_number == 2
     assert outcome.ledger_entries[0].source.page is None
@@ -234,10 +212,7 @@ def test_the_ledger_is_read_by_pandas_and_recorded_as_such(
 
 
 def test_documents_are_stored(
-    repository: SqliteCaseRepository,
-    storage: LocalDocumentStore,
-    demo_mode,
-    implemented_modules,
+    repository: SqliteCaseRepository, storage: LocalDocumentStore, demo_mode
 ) -> None:
     run_pipeline(ORG, "CASE-F", "Client", documents("CASE-F"), AUDITOR, repository, storage)
     stored = storage.get("CASE-F/DOC-LED-001/ledger.xlsx")
@@ -245,7 +220,7 @@ def test_documents_are_stored(
 
 
 def test_an_approve_after_a_real_pipeline_run_lands_in_the_trail(
-    client, repository: SqliteCaseRepository, demo_mode, implemented_modules
+    client, repository: SqliteCaseRepository, demo_mode
 ) -> None:
     """The acceptance criterion, over the real pipeline rather than a seed."""
     upload = client.post(
@@ -272,6 +247,27 @@ def test_an_approve_after_a_real_pipeline_run_lands_in_the_trail(
     assert len(trail) == before + 1
     assert trail[-1].action is AuditAction.ITEM_APPROVED
     assert trail[-1].actor_id == USER_ID
+
+
+def test_a_failing_deterministic_step_marks_the_case_failed(
+    repository: SqliteCaseRepository,
+    storage: LocalDocumentStore,
+    demo_mode,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Nothing half-done is saved as if it were whole."""
+
+    def explode(*_args, **_kwargs):
+        raise RuntimeError("simulated matcher fault")
+
+    monkeypatch.setattr(matching, "run_matching", explode)
+    with pytest.raises(RuntimeError, match="simulated matcher fault"):
+        run_pipeline(ORG, "CASE-X", "Client", documents("CASE-X"), AUDITOR, repository, storage)
+
+    case = repository.get_case(ORG, "CASE-X")
+    assert case.status is CaseStatus.FAILED
+    assert "simulated matcher fault" in (case.status_detail or "")
+    assert repository.list_review_items(ORG, "CASE-X") == []
 
 
 # --------------------------------------------------------------------------- #

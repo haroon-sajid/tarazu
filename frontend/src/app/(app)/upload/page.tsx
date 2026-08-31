@@ -3,7 +3,7 @@
 /**
  * Upload — three inputs open a case, and the analysis is visible while it
  * runs: upload → AI extraction → deterministic matching → red-flag rules →
- * Benford. The step panel is presentation (the backend pipeline runs
+ * Benford. The step panel is presentation (the backend pipeline runs all five
  * synchronously inside one request); the counts on the result screen are the
  * backend's own numbers.
  */

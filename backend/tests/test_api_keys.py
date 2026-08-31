@@ -429,7 +429,6 @@ def test_an_upload_by_key_is_recorded_as_the_key(
     repository: SqliteCaseRepository,
     demo_org: str,
     demo_mode,
-    implemented_modules,
 ) -> None:
     raw, summary = issue(client, name="nightly drop", scopes=("read", "write"))
 

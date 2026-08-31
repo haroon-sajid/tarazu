@@ -26,9 +26,14 @@ openpyxl>=3.1,<4.0
 rapidfuzz>=3.9,<4.0
 
 # --- Documents ---------------------------------------------------------------
-# PDF page -> image for the vision model. PyMuPDF ships its own renderer, so
-# there is no poppler system dependency to install on the deploy box.
+# PDF page -> image for the vision model and the evidence viewer. PyMuPDF ships
+# its own renderer, so there is no poppler system dependency on the deploy box.
 pymupdf>=1.24,<2.0
+
+# --- Reports (reports/) ------------------------------------------------------
+# Deterministic templating of the PDF report. Excel comes from openpyxl above.
+# No AI library appears here either.
+reportlab>=4.2,<5.0
 
 # --- HTTP client (Qwen via Model Studio) + test client ------------------------
 httpx>=0.27,<1.0

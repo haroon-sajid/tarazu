@@ -142,6 +142,13 @@ async def upload_documents(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
         ) from error
+    except Exception as error:  # noqa: BLE001 - a deterministic step failed
+        # The pipeline has already marked the case `failed` with the reason and
+        # logged the traceback; the caller gets a plain statement of it.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"The case could not be processed: {error}",
+        ) from error
 
     return UploadResponse(
         case_id=outcome.case_id,
@@ -155,10 +162,7 @@ async def upload_documents(
 
 def _message(status_: CaseStatus, detail: str | None, item_count: int) -> str:
     if status_ is CaseStatus.READY_FOR_REVIEW:
-        return f"{item_count} items are ready for review."
-    if status_ is CaseStatus.AWAITING_MATCHING:
-        return (
-            "Documents were stored and extracted, but the matching and rules modules "
-            f"are not implemented yet, so there is no review queue. ({detail})"
-        )
+        return f"{item_count} item{'s are' if item_count != 1 else ' is'} ready for review."
+    if detail:
+        return f"Case is {status_.value}: {detail}"
     return f"Case is {status_.value}."

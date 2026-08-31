@@ -12,6 +12,7 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { Workspace } from "@/components/layout/workspace";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { session } = useAuth();
@@ -34,7 +35,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header />
-        <main className="flex-1 overflow-y-auto px-6 py-6">{children}</main>
+        <main className="flex-1 overflow-y-auto px-6 py-6">
+          <Workspace>{children}</Workspace>
+        </main>
       </div>
     </div>
   );

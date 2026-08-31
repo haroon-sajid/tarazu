@@ -21,11 +21,15 @@
 
 import dashboardFixture from "./fixtures/dashboard.json";
 import reviewItemsFixture from "./fixtures/review-items.json";
+import { answerFromCase, toAssistantAnswer } from "./assistant";
 import { clearSession, getStoredSession } from "./auth-storage";
 import type {
   ApiKeyListResponse,
   ApiKeyScope,
   ApiKeySummary,
+  AssistantAnswer,
+  AssistantLanguage,
+  AssistantChatResponse,
   AuditRecord,
   AuditTrailResponse,
   CaseListResponse,
@@ -34,15 +38,21 @@ import type {
   DashboardSummary,
   DecisionResponse,
   DeletedApiKeyResponse,
+  DeletedCaseResponse,
+  DocumentListResponse,
   InvitationListResponse,
   InvitationSummary,
   MembersResponse,
   OrgRole,
   LoginResponse,
+  ReportFormat,
+  ReportListResponse,
+  ReportSummary,
   ReviewItem,
   ReviewItemFilters,
   ReviewItemsResponse,
   SignupResponse,
+  UpdateCaseRequest,
   UpdateProfileRequest,
   UploadFiles,
   UploadResponse,
@@ -113,6 +123,42 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** A binary GET — a rendered page, a report file — with the same auth. */
+async function requestBlob(path: string): Promise<Blob> {
+  const token = authToken();
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new ApiError(0, "Could not reach the Tarazu backend. Is it running?");
+  }
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      const body = await response.json();
+      if (typeof body?.detail === "string") detail = body.detail;
+    } catch {
+      // keep statusText
+    }
+    throw new ApiError(response.status, detail);
+  }
+  return response.blob();
+}
+
+/** Hand a blob to the browser as a download. */
+function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
 // --------------------------------------------------------------------------
 // Fixture mode plumbing
 // --------------------------------------------------------------------------
@@ -178,6 +224,15 @@ function applyFilters(items: ReviewItem[], filters?: ReviewItemFilters): ReviewI
 const ACTIVE_CASE_KEY = "tarazu.active-case";
 
 /**
+ * Fired on `window` whenever the active case changes — or is refreshed — so
+ * mounted screens can pick up the new selection without a page reload. The
+ * header's case switcher and the (app) layout's workspace wrapper are the
+ * listeners that matter: one re-reads the selection, the other remounts the
+ * current page, which refetches against it.
+ */
+export const ACTIVE_CASE_CHANGED_EVENT = "tarazu:active-case-changed";
+
+/**
  * The case the user selected on the Cases screen, or null for "the most
  * recent" (the backend's default). Per browser; the backend never trusts it
  * beyond its own tenancy check on the id.
@@ -192,11 +247,25 @@ export function getActiveCaseId(): string | null {
 
 export function setActiveCaseId(caseId: string | null): void {
   try {
+    const previous = window.localStorage.getItem(ACTIVE_CASE_KEY);
     if (caseId === null) window.localStorage.removeItem(ACTIVE_CASE_KEY);
     else window.localStorage.setItem(ACTIVE_CASE_KEY, caseId);
+    if (previous !== caseId) {
+      window.dispatchEvent(new Event(ACTIVE_CASE_CHANGED_EVENT));
+    }
   } catch {
     // Storage unavailable: every screen falls back to the latest case.
   }
+}
+
+/**
+ * Ask every mounted screen to refetch: the active case's facts changed (a
+ * rename, a corrected period) or the case it was following is gone. Same
+ * mechanism a case switch uses — one event, and the workspace remounts
+ * against fresh data.
+ */
+export function refreshWorkspace(): void {
+  window.dispatchEvent(new Event(ACTIVE_CASE_CHANGED_EVENT));
 }
 
 /** True when a 404 came from the *saved* selection rather than the caller's
@@ -346,15 +415,29 @@ export async function getReviewItemAudit(reviewItemId: string): Promise<AuditRec
   return clone(fixtureStore.audit.filter((r) => r.item_id === reviewItemId));
 }
 
-/** GET /v1/cases — the organization's engagements, newest first. */
-export async function listCases(): Promise<CaseListResponse> {
-  if (!FIXTURE_MODE) return request<CaseListResponse>("/v1/cases");
-  await sleep(FIXTURE_LATENCY_MS);
-  const summary: CaseSummary = {
+/**
+ * The fixture case's editable facts, so rename, delete, and re-upload work
+ * offline exactly as they do against the backend.
+ */
+const fixtureCase: {
+  client_name: string;
+  period_start: string | null;
+  period_end: string | null;
+  deleted: boolean;
+} = {
+  client_name: (dashboardFixture as { client_name: string }).client_name,
+  period_start: (dashboardFixture as { period_start: string | null }).period_start,
+  period_end: (dashboardFixture as { period_end: string | null }).period_end,
+  deleted: false,
+};
+
+function fixtureCaseSummary(): CaseSummary | null {
+  if (fixtureCase.deleted) return null;
+  return {
     case_id: reviewItemsFixture.case_id,
-    client_name: (dashboardFixture as { client_name: string }).client_name,
-    period_start: (dashboardFixture as { period_start: string | null }).period_start,
-    period_end: (dashboardFixture as { period_end: string | null }).period_end,
+    client_name: fixtureCase.client_name,
+    period_start: fixtureCase.period_start,
+    period_end: fixtureCase.period_end,
     status: "ready_for_review",
     status_detail: null,
     created_by: DEMO_USER_ID,
@@ -363,7 +446,63 @@ export async function listCases(): Promise<CaseListResponse> {
     pending_items: fixtureStore.items.filter((i) => i.decision === "pending").length,
     flagged_items: fixtureStore.items.filter((i) => i.flags.length > 0).length,
   };
-  return { total: 1, cases: [summary] };
+}
+
+/** GET /v1/cases — the organization's engagements, newest first. */
+export async function listCases(): Promise<CaseListResponse> {
+  if (!FIXTURE_MODE) return request<CaseListResponse>("/v1/cases");
+  await sleep(FIXTURE_LATENCY_MS);
+  const summary = fixtureCaseSummary();
+  return { total: summary ? 1 : 0, cases: summary ? [summary] : [] };
+}
+
+/**
+ * PATCH /v1/cases/{case_id} — rename the engagement or correct its period.
+ * Send only what changes; `null` for a period clears it.
+ */
+export async function updateCase(
+  caseId: string,
+  update: UpdateCaseRequest,
+): Promise<CaseSummary> {
+  if (!FIXTURE_MODE) {
+    return request<CaseSummary>(`/v1/cases/${encodeURIComponent(caseId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(update),
+    });
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  if (fixtureCase.deleted || caseId !== reviewItemsFixture.case_id) {
+    throw new ApiError(404, `No case ${caseId}`);
+  }
+  if (update.client_name !== undefined) {
+    const name = update.client_name.trim();
+    if (!name) throw new ApiError(422, "The case needs a client name.");
+    fixtureCase.client_name = name;
+  }
+  if (update.period_start !== undefined) fixtureCase.period_start = update.period_start;
+  if (update.period_end !== undefined) fixtureCase.period_end = update.period_end;
+  const summary = fixtureCaseSummary();
+  if (!summary) throw new ApiError(404, `No case ${caseId}`); // unreachable
+  return summary;
+}
+
+/**
+ * DELETE /v1/cases/{case_id} — remove the engagement and its working data.
+ * The audit trail and any generated reports are append-only evidence and
+ * outlive the case; the deletion itself is the trail's last entry.
+ */
+export async function deleteCase(caseId: string): Promise<DeletedCaseResponse> {
+  if (!FIXTURE_MODE) {
+    return request<DeletedCaseResponse>(`/v1/cases/${encodeURIComponent(caseId)}`, {
+      method: "DELETE",
+    });
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  if (fixtureCase.deleted || caseId !== reviewItemsFixture.case_id) {
+    throw new ApiError(404, `No case ${caseId}`);
+  }
+  fixtureCase.deleted = true;
+  return { case_id: caseId, deleted: true };
 }
 
 /** GET /v1/audit-trail — the whole case's immutable trail, oldest first. */
@@ -427,6 +566,9 @@ export async function uploadDocuments(files: UploadFiles): Promise<UploadRespons
   // simulated wait is deliberately noticeable.
   await sleep(2600);
   fixtureStore.uploaded = true;
+  // A fresh upload re-opens the engagement in fixture mode, exactly as a
+  // fresh upload creates a new one against the backend.
+  fixtureCase.deleted = false;
   return {
     case_id: reviewItemsFixture.case_id,
     documents: [
@@ -459,23 +601,159 @@ export async function uploadDocuments(files: UploadFiles): Promise<UploadRespons
   };
 }
 
+// --------------------------------------------------------------------------
+// Reports — generate, list the immutable history, download
+// --------------------------------------------------------------------------
+
 /**
- * POST /v1/reports — not defined in the contract yet (`docs/api-contracts.md`
- * lists it "To be defined"). The report page calls this and renders the error
- * state honestly rather than faking a download.
+ * POST /v1/reports — render the PDF and the Excel workbook from the case as it
+ * stands, store both, and record the generation. Every call is a new,
+ * immutable report; nothing is ever overwritten.
  */
-export async function generateReport(kind: "pdf" | "excel"): Promise<never> {
+export async function generateReport(): Promise<ReportSummary> {
   if (!FIXTURE_MODE) {
-    return request<never>(`/v1/reports`, {
+    const caseId = getActiveCaseId();
+    return request<ReportSummary>("/v1/reports", {
       method: "POST",
-      body: JSON.stringify({ format: kind }),
+      body: JSON.stringify(caseId ? { case_id: caseId } : {}),
     });
   }
   await sleep(600);
   throw new ApiError(
     501,
-    "Report generation needs the live backend. POST /v1/reports is not implemented yet.",
+    "Report generation needs the live backend. Set NEXT_PUBLIC_TARAZU_API_URL and sign in to generate a report.",
   );
+}
+
+/** GET /v1/reports — every report generated for the case, newest first. */
+export async function listReports(): Promise<ReportListResponse> {
+  if (!FIXTURE_MODE) {
+    const caseId = getActiveCaseId();
+    const query = caseId ? `?case_id=${encodeURIComponent(caseId)}` : "";
+    try {
+      return await request<ReportListResponse>(`/v1/reports${query}`);
+    } catch (caught) {
+      if (staleActiveCase(caught, undefined, caseId)) {
+        return request<ReportListResponse>("/v1/reports");
+      }
+      throw caught;
+    }
+  }
+  await sleep(FIXTURE_LATENCY_MS / 3);
+  return { case_id: reviewItemsFixture.case_id, total: 0, reports: [] };
+}
+
+/** GET /v1/reports/{id}/download — fetch one file and hand it to the browser. */
+export async function downloadReport(
+  report: ReportSummary,
+  format: ReportFormat,
+): Promise<void> {
+  if (FIXTURE_MODE) {
+    throw new ApiError(501, "Report downloads need the live backend.");
+  }
+  const blob = await requestBlob(report.downloads[format]);
+  const extension = format === "pdf" ? "pdf" : "xlsx";
+  saveBlob(blob, `tarazu-${report.case_id}-${report.report_id}.${extension}`);
+}
+
+// --------------------------------------------------------------------------
+// Documents — the uploaded files, and their pages as images
+// --------------------------------------------------------------------------
+
+/** GET /v1/documents — the case's uploaded files. Empty in fixture mode. */
+export async function listDocuments(): Promise<DocumentListResponse> {
+  if (!FIXTURE_MODE) {
+    const caseId = getActiveCaseId();
+    const query = caseId ? `?case_id=${encodeURIComponent(caseId)}` : "";
+    try {
+      return await request<DocumentListResponse>(`/v1/documents${query}`);
+    } catch (caught) {
+      if (staleActiveCase(caught, undefined, caseId)) {
+        return request<DocumentListResponse>("/v1/documents");
+      }
+      throw caught;
+    }
+  }
+  await sleep(FIXTURE_LATENCY_MS / 3);
+  return { case_id: reviewItemsFixture.case_id, total: 0, documents: [] };
+}
+
+/** Rendered pages, cached per (document, page) as object URLs for this visit. */
+const pageUrlCache = new Map<string, Promise<string | null>>();
+
+/**
+ * GET /v1/documents/{id}/pages/{page} — the real page as an image, or null when
+ * the backend cannot serve it (fixture mode, a ledger, a page out of range).
+ * Callers fall back to the schematic render on null.
+ */
+export function getDocumentPageUrl(documentId: string, page: number): Promise<string | null> {
+  if (FIXTURE_MODE) return Promise.resolve(null);
+  const key = `${documentId}#${page}`;
+  const cached = pageUrlCache.get(key);
+  if (cached) return cached;
+  const pending = requestBlob(
+    `/v1/documents/${encodeURIComponent(documentId)}/pages/${page}`,
+  )
+    .then((blob) => URL.createObjectURL(blob))
+    .catch((caught) => {
+      pageUrlCache.delete(key);
+      if (caught instanceof ApiError && caught.status === 404) return null;
+      throw caught;
+    });
+  pageUrlCache.set(key, pending);
+  return pending;
+}
+
+// --------------------------------------------------------------------------
+// The assistant — Ask Tarazu
+// --------------------------------------------------------------------------
+
+/**
+ * POST /v1/assistant/chat — one question about the active case, answered only
+ * from its persisted results. In fixture mode the answer is composed
+ * client-side from the same review items (`lib/assistant.ts`), which the
+ * caller passes in.
+ */
+export async function askAssistant(
+  question: string,
+  options: {
+    language?: AssistantLanguage;
+    fixture?: { items: ReviewItem[]; dashboard: DashboardSummary | null };
+  } = {},
+): Promise<AssistantAnswer> {
+  if (!FIXTURE_MODE) {
+    const caseId = getActiveCaseId();
+    const body = {
+      question,
+      ...(caseId ? { case_id: caseId } : {}),
+      ...(options.language ? { language: options.language } : {}),
+    };
+    try {
+      const response = await request<AssistantChatResponse>("/v1/assistant/chat", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      return response.answer;
+    } catch (caught) {
+      if (staleActiveCase(caught, undefined, caseId)) {
+        const { case_id: _dropped, ...rest } = body;
+        void _dropped;
+        const response = await request<AssistantChatResponse>("/v1/assistant/chat", {
+          method: "POST",
+          body: JSON.stringify(rest),
+        });
+        return response.answer;
+      }
+      throw caught;
+    }
+  }
+  await sleep(900);
+  const reply = answerFromCase(
+    question,
+    options.fixture?.items ?? [],
+    options.fixture?.dashboard ?? null,
+  );
+  return toAssistantAnswer(question, reply, options.language);
 }
 
 // --------------------------------------------------------------------------

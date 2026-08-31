@@ -30,12 +30,18 @@ Supabase: Postgres (data and immutable audit trail), Auth (JWT), Storage (docume
 
 ## Core Flow
 
-1. **Upload.** The auditor uploads a bank statement (PDF), invoices (PDF or images), and a ledger (Excel or CSV) to Supabase Storage.
+1. **Upload.** The auditor uploads a bank statement (PDF), invoices (PDF or images), and a ledger (Excel or CSV). The bytes go to document storage; the ledger is read by pandas.
 2. **Extract.** `extraction/` reads the documents with Qwen VL. Every value carries source document and page provenance plus a confidence level, and an AI second-opinion pass cross-checks low-confidence extractions.
-3. **Match.** `matching/` reconciles the statement, invoices, and ledger with deterministic pandas logic.
-4. **Flag.** `rules/` applies deterministic fraud-risk rules: round numbers, duplicates, weekend entries, and near-limit amounts.
-5. **Review.** A human approves or rejects every matched and flagged item in the frontend review screen. Nothing is finalized without an explicit human decision.
-6. **Report.** `reports/` generates PDF and Excel output with the full audit trail.
+3. **Match.** `matching/` reconciles the statement, invoices, and ledger with deterministic pandas logic: one-to-one bank assignment, best pairs first; invoices shared where a duplicate payment demands it.
+4. **Flag.** `rules/` applies deterministic red-flag rules — round numbers, weekend entries, duplicate invoices and payments, near-limit amounts, structuring, invoice-sequence gaps — and the Benford first-digit analysis.
+5. **Review.** A human approves or rejects every item in the review screen, with the real source page and its provenance box beside the figures (`/v1/documents`). Nothing is finalized without an explicit human decision.
+6. **Ask.** `assistant/` answers questions about the case from its persisted results: intent → deterministic query → worded answer with citations and the computed facts. A model, when configured, only rephrases (ADR 0006).
+7. **Report.** `reports/` renders the PDF and Excel deliverable from decided items, with provenance and the full audit trail; every generation is an immutable record.
+
+The product boundary — an audit layer over records the client already has,
+never a system of record — is ADR 0004; the move from one-off cases to
+recurring clients and periods is ADR 0005. The plan they come from is
+[product-plan.md](product-plan.md).
 
 ## Principles
 
@@ -51,7 +57,10 @@ Supabase: Postgres (data and immutable audit trail), Auth (JWT), Storage (docume
 
 To be documented as decisions are made:
 
-- Async processing and background jobs for long extractions
-- Inviting a colleague into your organization, and belonging to more than one
-- Module-boundary enforcement tooling (for example, an import linter)
+- Async processing and background jobs for long extractions (planned with the
+  period entity, ADR 0005)
+- Belonging to more than one organization (invitations exist; switching does not)
+- Webhooks and the finer API scopes of the product plan, section 7
+- Module-boundary enforcement tooling (the matching and rules tests check
+  imports by hand; an import linter would generalise it)
 - Deployment topology (see `infra/`)

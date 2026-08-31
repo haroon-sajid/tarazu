@@ -22,13 +22,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import __version__
 from app.api import (
     api_keys,
+    assistant,
     audit_trail,
     auth,
     cases,
     dashboard,
+    documents,
     health,
     members,
     profile,
+    reports,
     review,
     upload,
 )
@@ -81,8 +84,6 @@ app.include_router(review.router, prefix="/v1")
 app.include_router(dashboard.router, prefix="/v1")
 app.include_router(cases.router, prefix="/v1")
 app.include_router(audit_trail.router, prefix="/v1")
-
-# Routers still to come, as their modules land:
-#   extraction -> /v1/extractions   (owned by the Lead)
-#   assistant  -> /v1/assistant     (cut from the hackathon scope)
-#   reports    -> /v1/reports       (owned by the Lead, step 5)
+app.include_router(documents.router, prefix="/v1")
+app.include_router(reports.router, prefix="/v1")
+app.include_router(assistant.router, prefix="/v1")

@@ -29,12 +29,12 @@ import json
 import secrets
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
 from app.core.config import DEFAULT_ORG_ID
-from app.core.repository import StoredDocument
+from app.core.repository import CaseDocument, StoredDocument
 from app.shared.schemas import (
     ApiKeyRecord,
     AuditRecord,
@@ -46,6 +46,7 @@ from app.shared.schemas import (
     Organization,
     OrgInvitation,
     OrgRole,
+    ReportRecord,
     ReviewItem,
     UserProfile,
 )
@@ -53,6 +54,7 @@ from app.shared.schemas import (
 __all__ = [
     "AuditTrailImmutable",
     "LocalDocumentStore",
+    "ReportImmutable",
     "SqliteCaseRepository",
     "hash_password",
     "verify_password_hash",
@@ -61,6 +63,10 @@ __all__ = [
 
 class AuditTrailImmutable(RuntimeError):
     """Something tried to change or remove an audit record. It was refused."""
+
+
+class ReportImmutable(RuntimeError):
+    """Something tried to change or remove a generated report's record. Refused."""
 
 
 #: Every tenant-owned table, and the audit trail. Used by the migration below.
@@ -258,6 +264,43 @@ create table if not exists audit_trail (
   detail      text,
   occurred_at text not null
 );
+
+-- Generated reports: what the firm delivered, and when. Append-only for the
+-- same reason the trail is — a report is evidence — and enforced the same way,
+-- by triggers below. No foreign key to `cases`: a report must outlive what it
+-- describes. The bytes live in the document store at the two paths.
+create table if not exists reports (
+  report_id          text primary key,
+  org_id             text not null,
+  case_id            text not null,
+  generated_by       text not null,
+  generated_at       text not null,
+  pdf_path           text not null,
+  excel_path         text not null,
+  pdf_sha256         text not null,
+  excel_sha256       text not null,
+  item_count         integer not null,
+  approved_count     integer not null,
+  rejected_count     integer not null,
+  pending_count      integer not null,
+  flag_count         integer not null,
+  audit_record_count integer not null
+);
+
+create index if not exists reports_org_case_idx
+  on reports (org_id, case_id, generated_at);
+
+create trigger if not exists reports_no_update
+  before update on reports
+begin
+  select raise(abort, 'reports are append-only: UPDATE is not permitted');
+end;
+
+create trigger if not exists reports_no_delete
+  before delete on reports
+begin
+  select raise(abort, 'reports are append-only: DELETE is not permitted');
+end;
 
 -- Named for the columns they lead with, so a database migrated from the
 -- single-tenant schema gains them rather than keeping the narrower ones under
@@ -484,8 +527,11 @@ class SqliteCaseRepository:
                 self._connection.commit()
             except sqlite3.IntegrityError as error:
                 self._connection.rollback()
-                if "append-only" in str(error):
-                    raise AuditTrailImmutable(str(error)) from error
+                message = str(error)
+                if message.startswith("reports are append-only"):
+                    raise ReportImmutable(message) from error
+                if "append-only" in message:
+                    raise AuditTrailImmutable(message) from error
                 raise
 
     def _rows(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
@@ -762,6 +808,67 @@ class SqliteCaseRepository:
         )
         return rows[0]["case_id"] if rows else None
 
+    def update_case(
+        self,
+        org_id: str,
+        case_id: str,
+        *,
+        client_name: str,
+        period_start: date | None,
+        period_end: date | None,
+    ) -> CaseRecord | None:
+        if self.get_case(org_id, case_id) is None:
+            return None
+        self._write(
+            [
+                (
+                    "update cases set client_name = ?, period_start = ?, period_end = ? "
+                    "where case_id = ? and org_id = ?",
+                    (
+                        client_name,
+                        period_start.isoformat() if period_start else None,
+                        period_end.isoformat() if period_end else None,
+                        case_id,
+                        org_id,
+                    ),
+                )
+            ]
+        )
+        return self.get_case(org_id, case_id)
+
+    def delete_case(self, org_id: str, case_id: str) -> bool:
+        if self.get_case(org_id, case_id) is None:
+            return False
+        # The working tables are deleted by name rather than trusting the
+        # foreign-key cascades to exist on a database created before they did;
+        # all six statements run in one transaction, so a case is either fully
+        # gone or fully intact. The audit trail and any reports are not named
+        # at all — they are append-only evidence and outlive the case (their
+        # triggers would refuse a delete here anyway).
+        self._write(
+            [
+                ("delete from flags where org_id = ? and case_id = ?", (org_id, case_id)),
+                (
+                    "delete from review_items where org_id = ? and case_id = ?",
+                    (org_id, case_id),
+                ),
+                (
+                    "delete from extractions where org_id = ? and case_id = ?",
+                    (org_id, case_id),
+                ),
+                (
+                    "delete from documents where org_id = ? and case_id = ?",
+                    (org_id, case_id),
+                ),
+                (
+                    "delete from benford_results where org_id = ? and case_id = ?",
+                    (org_id, case_id),
+                ),
+                ("delete from cases where case_id = ? and org_id = ?", (case_id, org_id)),
+            ]
+        )
+        return True
+
     # -- documents and extractions ------------------------------------------ #
 
     def add_documents(
@@ -804,6 +911,23 @@ class SqliteCaseRepository:
                 (org_id, case_id),
             )
         ]
+
+    def get_document(self, org_id: str, document_id: str) -> CaseDocument | None:
+        rows = self._rows(
+            "select * from documents where document_id = ? and org_id = ?",
+            (document_id, org_id),
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        return CaseDocument(
+            document_id=row["document_id"],
+            document_type=row["document_type"],
+            filename=row["filename"],
+            size_bytes=row["size_bytes"],
+            storage_path=row["storage_path"],
+            case_id=row["case_id"],
+        )
 
     def save_extraction(self, org_id: str, case_id: str, result: ExtractionResult) -> None:
         self._write(
@@ -941,6 +1065,75 @@ class SqliteCaseRepository:
             (case_id, org_id),
         )
         return BenfordResult.model_validate_json(rows[0]["payload"]) if rows else None
+
+    # -- reports ------------------------------------------------------------ #
+
+    def save_report(self, org_id: str, record: ReportRecord) -> None:
+        # A plain insert: the triggers refuse an update, and `insert or replace`
+        # would be a delete in disguise. A duplicate id is an error, correctly.
+        self._write(
+            [
+                (
+                    "insert into reports (report_id, org_id, case_id, generated_by, "
+                    "generated_at, pdf_path, excel_path, pdf_sha256, excel_sha256, "
+                    "item_count, approved_count, rejected_count, pending_count, "
+                    "flag_count, audit_record_count) "
+                    "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        record.report_id,
+                        org_id,
+                        record.case_id,
+                        record.generated_by,
+                        record.generated_at.isoformat(),
+                        record.pdf_path,
+                        record.excel_path,
+                        record.pdf_sha256,
+                        record.excel_sha256,
+                        record.item_count,
+                        record.approved_count,
+                        record.rejected_count,
+                        record.pending_count,
+                        record.flag_count,
+                        record.audit_record_count,
+                    ),
+                )
+            ]
+        )
+
+    def list_reports(self, org_id: str, case_id: str) -> list[ReportRecord]:
+        return [
+            self._report(row)
+            for row in self._rows(
+                "select * from reports where org_id = ? and case_id = ? "
+                "order by generated_at desc, report_id desc",
+                (org_id, case_id),
+            )
+        ]
+
+    def get_report(self, org_id: str, report_id: str) -> ReportRecord | None:
+        rows = self._rows(
+            "select * from reports where report_id = ? and org_id = ?", (report_id, org_id)
+        )
+        return self._report(rows[0]) if rows else None
+
+    @staticmethod
+    def _report(row: sqlite3.Row) -> ReportRecord:
+        return ReportRecord(
+            report_id=row["report_id"],
+            case_id=row["case_id"],
+            generated_by=row["generated_by"],
+            generated_at=row["generated_at"],
+            pdf_path=row["pdf_path"],
+            excel_path=row["excel_path"],
+            pdf_sha256=row["pdf_sha256"],
+            excel_sha256=row["excel_sha256"],
+            item_count=row["item_count"],
+            approved_count=row["approved_count"],
+            rejected_count=row["rejected_count"],
+            pending_count=row["pending_count"],
+            flag_count=row["flag_count"],
+            audit_record_count=row["audit_record_count"],
+        )
 
     # -- api keys ----------------------------------------------------------- #
 

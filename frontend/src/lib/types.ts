@@ -33,6 +33,8 @@ export type CaseStatus =
 
 export type AuditAction =
   | "case_created"
+  | "case_updated"
+  | "case_deleted"
   | "document_uploaded"
   | "extraction_completed"
   | "second_opinion_completed"
@@ -40,7 +42,9 @@ export type AuditAction =
   | "flag_raised"
   | "item_approved"
   | "item_rejected"
-  | "report_generated";
+  | "report_generated"
+  | "assistant_question_asked"
+  | "assistant_answered";
 
 /** Normalised [x0, y0, x1, y1] in 0..1 page space, origin top-left. */
 export type BoundingBox = [number, number, number, number];
@@ -278,11 +282,167 @@ export interface CaseListResponse {
   cases: CaseSummary[];
 }
 
+/**
+ * PATCH /v1/cases/{case_id} — send only what changes. A field left out keeps
+ * its current value; `null` for a period clears it; the client name cannot
+ * be cleared.
+ */
+export interface UpdateCaseRequest {
+  client_name?: string;
+  period_start?: string | null;
+  period_end?: string | null;
+}
+
+/**
+ * DELETE /v1/cases/{case_id} — the engagement's working data is gone.
+ * Generated reports and the audit trail are append-only evidence and outlive
+ * the case; the deletion itself is the trail's last entry naming it.
+ */
+export interface DeletedCaseResponse {
+  case_id: string;
+  deleted: boolean;
+}
+
 /** GET /v1/audit-trail — one case's full immutable trail, oldest first. */
 export interface AuditTrailResponse {
   case_id: string;
   total: number;
   records: AuditRecord[];
+}
+
+// --------------------------------------------------------------------------
+// Reports — the deliverable, and the append-only history of generating it
+// --------------------------------------------------------------------------
+
+export type ReportFormat = "pdf" | "excel";
+
+export interface ReportDownloads {
+  pdf: string;
+  excel: string;
+}
+
+/** One generated report. Immutable: regenerating adds a new one. */
+export interface ReportSummary {
+  report_id: string;
+  case_id: string;
+  generated_by: string;
+  generated_at: string;
+  item_count: number;
+  approved_count: number;
+  rejected_count: number;
+  /** Counted and named as pending in the report; never listed as findings. */
+  pending_count: number;
+  flag_count: number;
+  audit_record_count: number;
+  pdf_sha256: string;
+  excel_sha256: string;
+  downloads: ReportDownloads;
+}
+
+export interface ReportListResponse {
+  case_id: string;
+  total: number;
+  reports: ReportSummary[];
+}
+
+// --------------------------------------------------------------------------
+// Documents — the uploaded files, and their pages as images
+// --------------------------------------------------------------------------
+
+export interface DocumentSummary {
+  document_id: string;
+  document_type: DocumentType;
+  filename: string;
+  size_bytes: number;
+  /** null for the ledger, which has rows rather than pages. */
+  page_count: number | null;
+  needs_human_review: boolean;
+  file_url: string;
+  /** `{page}` is 1-based; null for the ledger. */
+  page_url_template: string | null;
+}
+
+export interface DocumentListResponse {
+  case_id: string;
+  total: number;
+  documents: DocumentSummary[];
+}
+
+// --------------------------------------------------------------------------
+// The assistant — Ask Tarazu
+// --------------------------------------------------------------------------
+
+export type AssistantLanguage = "en" | "ur";
+
+export type AssistantIntent =
+  | "summary"
+  | "matches"
+  | "unmatched"
+  | "missing_evidence"
+  | "flags"
+  | "rule"
+  | "duplicates"
+  | "party"
+  | "item"
+  | "invoices"
+  | "bank"
+  | "ledger"
+  | "confidence"
+  | "totals"
+  | "top_vendors"
+  | "largest"
+  | "compare_months"
+  | "search_amount"
+  | "search_date"
+  | "benford"
+  | "case_info"
+  | "cases"
+  | "documents"
+  | "extractions"
+  | "decisions"
+  | "reports"
+  | "history"
+  | "concept"
+  | "help"
+  | "unsupported"
+  | "unknown";
+
+export interface AssistantCitation {
+  document_id: string;
+  page?: number | null;
+  row_number?: number | null;
+  text_snippet?: string | null;
+  review_item_id?: string | null;
+}
+
+/** One computed figure the answer was written from. */
+export interface AssistantFact {
+  label: string;
+  value: string;
+}
+
+/**
+ * An answer. `answer_confidence` is the module's confidence that the text is
+ * a faithful readout of the case data; it is deliberately not named
+ * `confidence` (see types.ts header). `grounded: false` is a refusal.
+ */
+export interface AssistantAnswer {
+  question: string;
+  language: AssistantLanguage;
+  intent: AssistantIntent;
+  text: string;
+  answer_confidence: Confidence;
+  grounded: boolean;
+  citations: AssistantCitation[];
+  facts: AssistantFact[];
+  /** "assistant.deterministic", or the model that rephrased the facts. */
+  composed_by: string;
+}
+
+export interface AssistantChatResponse {
+  case_id: string;
+  answer: AssistantAnswer;
+  audit_record: AuditRecord;
 }
 
 // --------------------------------------------------------------------------

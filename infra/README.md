@@ -22,12 +22,16 @@ scripts (`scripts/`).
 | `0002-organizations.sql` | Adds `organizations`, `organization_members`, and `org_id` everywhere; backfills existing rows into the default organization; replaces those policies with membership-scoped ones. Idempotent. |
 | `0003-api-keys.sql` | Adds `api_keys`, so a firm can connect n8n, Zapier, or its own software. Column privileges keep `key_hash` unreadable to every browser-facing role. Idempotent. |
 | `0004-revoke-truncate.sql` | Revokes TRUNCATE, which RLS does not cover. Without it `anon` could empty every table, `audit_trail` included. Idempotent. |
+| `0004-user-profiles.sql` | Adds `user_profiles`: display name, picture, contact details. Backend-only. Idempotent. |
 | `0005-audit-id-is-text.sql` | Makes `audit_trail.audit_id` text, matching the `AUD-…` ids the application mints. Idempotent. |
+| `0005-org-invitations.sql` | Adds `org_invitations`: single-use join codes an owner cuts for colleagues. Backend-only. Idempotent. |
+| `0006-reports-and-assistant.sql` | Adds the append-only `reports` table (REVOKE + RLS + triggers, like the trail) and the two assistant audit actions. Idempotent. |
 | `verify-audit-immutability.sql` | Proves the trail cannot be rewritten. Every UPDATE, DELETE, and TRUNCATE in it must fail. |
 
-**Run all five, in order** — or `python scripts/apply_supabase_schema.py`, which
-does it for you and reports which have landed. A project with only `schema.sql`
-applied is one in which any authenticated user can read any firm's cases.
+**Run all eight, in order** — or `python scripts/apply_supabase_schema.py`,
+which does it for you and reports which have landed. A project with only
+`schema.sql` applied is one in which any authenticated user can read any firm's
+cases.
 
 ### Setting up a project
 
@@ -35,8 +39,9 @@ applied is one in which any authenticated user can read any firm's cases.
 2. Put `SUPABASE_DB_URL` in `.env` and run `python scripts/apply_supabase_schema.py`,
    which applies every file above in order. To do it by hand instead, paste
    `schema.sql`, `0002-organizations.sql`, `0003-api-keys.sql`,
-   `0004-revoke-truncate.sql`, and `0005-audit-id-is-text.sql` into the SQL
-   editor, in that order.
+   `0004-revoke-truncate.sql`, `0004-user-profiles.sql`,
+   `0005-audit-id-is-text.sql`, `0005-org-invitations.sql`, and
+   `0006-reports-and-assistant.sql` into the SQL editor, in that order.
 3. Storage → New bucket → `tarazu-documents`. **Leave "Public bucket" off.**
    Client documents must never be world-readable; the backend hands the frontend
    short-lived signed URLs instead.

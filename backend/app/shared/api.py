@@ -21,12 +21,15 @@ from datetime import date, datetime
 from app.shared.schemas import (
     ApiKeyRecord,
     ApiKeyScope,
+    AssistantAnswer,
+    AssistantLanguage,
     AuditRecord,
     CaseStatus,
     DashboardSummary,
     DocumentType,
     OrgInvitation,
     OrgRole,
+    ReportRecord,
     ReviewItem,
     TarazuModel,
     UserProfile,
@@ -36,6 +39,8 @@ __all__ = [
     "ApiKeyListResponse",
     "ApiKeySummary",
     "ApproveRequest",
+    "AssistantChatRequest",
+    "AssistantChatResponse",
     "AuditTrailResponse",
     "CaseListResponse",
     "CaseSummary",
@@ -44,7 +49,11 @@ __all__ = [
     "DashboardResponse",
     "DecisionResponse",
     "DeletedApiKeyResponse",
+    "DeletedCaseResponse",
+    "DocumentListResponse",
+    "DocumentSummary",
     "ErrorResponse",
+    "GenerateReportRequest",
     "HealthResponse",
     "InvitationListResponse",
     "InvitationSummary",
@@ -53,7 +62,11 @@ __all__ = [
     "MembersResponse",
     "RejectRequest",
     "RenameApiKeyRequest",
+    "ReportDownloads",
+    "ReportListResponse",
+    "ReportSummary",
     "ReviewItemsResponse",
+    "UpdateCaseRequest",
     "UpdateProfileRequest",
     "UploadResponse",
     "UploadedDocument",
@@ -298,6 +311,34 @@ class CaseListResponse(TarazuModel):
     cases: list[CaseSummary]
 
 
+class UpdateCaseRequest(TarazuModel):
+    """`PATCH /v1/cases/{case_id}`. The engagement's editable facts.
+
+    PATCH semantics: a field the request leaves out keeps its current value;
+    sending `null` for a period clears it. The client name cannot be cleared —
+    an engagement is always about somebody — and the status, creator, and
+    timestamps are facts about the case's life rather than settings, so they
+    are not on this model at all.
+    """
+
+    client_name: str | None = Field(default=None, min_length=1, max_length=200)
+    period_start: date | None = None
+    period_end: date | None = None
+
+
+class DeletedCaseResponse(TarazuModel):
+    """`DELETE /v1/cases/{case_id}`. The engagement's working data is gone.
+
+    Documents, extractions, the review queue, flags, and the Benford result
+    went with it. Generated reports and the audit trail are append-only
+    evidence and outlive the case — the trail's own record of this deletion is
+    the last word on it.
+    """
+
+    case_id: str
+    deleted: bool = True
+
+
 class AuditTrailResponse(TarazuModel):
     """`GET /v1/audit-trail`. One case's full immutable trail, oldest first."""
 
@@ -420,3 +461,130 @@ class DeletedApiKeyResponse(TarazuModel):
 
     key_id: str
     deleted: bool = True
+
+
+# --------------------------------------------------------------------------- #
+# Reports
+# --------------------------------------------------------------------------- #
+
+
+class GenerateReportRequest(TarazuModel):
+    """`POST /v1/reports`. Which case; defaults to the caller's most recent.
+
+    Both formats are always produced together — one generation, one record,
+    two files — so there is no format to choose here. Pick one at download.
+    """
+
+    case_id: str | None = None
+
+
+class ReportDownloads(TarazuModel):
+    """Relative URLs for the two files, so the UI never has to build them."""
+
+    pdf: str
+    excel: str
+
+
+class ReportSummary(TarazuModel):
+    """One report as the history screen lists it, and as `POST` returns it."""
+
+    report_id: str
+    case_id: str
+    generated_by: str
+    generated_at: datetime
+    item_count: int = Field(ge=0)
+    approved_count: int = Field(ge=0)
+    rejected_count: int = Field(ge=0)
+    pending_count: int = Field(ge=0)
+    flag_count: int = Field(ge=0)
+    audit_record_count: int = Field(ge=0)
+    pdf_sha256: str
+    excel_sha256: str
+    downloads: ReportDownloads
+
+    @classmethod
+    def of(cls, record: ReportRecord) -> "ReportSummary":
+        base = f"/v1/reports/{record.report_id}/download"
+        return cls(
+            report_id=record.report_id,
+            case_id=record.case_id,
+            generated_by=record.generated_by,
+            generated_at=record.generated_at,
+            item_count=record.item_count,
+            approved_count=record.approved_count,
+            rejected_count=record.rejected_count,
+            pending_count=record.pending_count,
+            flag_count=record.flag_count,
+            audit_record_count=record.audit_record_count,
+            pdf_sha256=record.pdf_sha256,
+            excel_sha256=record.excel_sha256,
+            downloads=ReportDownloads(pdf=f"{base}?format=pdf", excel=f"{base}?format=excel"),
+        )
+
+
+class ReportListResponse(TarazuModel):
+    """`GET /v1/reports`. Every report ever generated for the case, newest first."""
+
+    case_id: str
+    total: int = Field(ge=0)
+    reports: list[ReportSummary]
+
+
+# --------------------------------------------------------------------------- #
+# Documents
+# --------------------------------------------------------------------------- #
+
+
+class DocumentSummary(TarazuModel):
+    """`GET /v1/documents` — one uploaded file and how to view it.
+
+    `page_count` is what extraction saw; it is `null` for the ledger, which
+    has rows rather than pages and is never rendered as an image.
+    """
+
+    document_id: str
+    document_type: DocumentType
+    filename: str
+    size_bytes: int = Field(ge=0)
+    page_count: int | None = Field(default=None, ge=1)
+    needs_human_review: bool = False
+    #: Relative URL of the original bytes.
+    file_url: str
+    #: Relative URL template for a rendered page; `{page}` is 1-based.
+    page_url_template: str | None = None
+
+
+class DocumentListResponse(TarazuModel):
+    case_id: str
+    total: int = Field(ge=0)
+    documents: list[DocumentSummary]
+
+
+# --------------------------------------------------------------------------- #
+# The assistant
+# --------------------------------------------------------------------------- #
+
+
+class AssistantChatRequest(TarazuModel):
+    """`POST /v1/assistant/chat`. One question about one case."""
+
+    question: str = Field(min_length=1, max_length=2000)
+    case_id: str | None = None
+    #: Force the answer language. Detected from the question when omitted.
+    language: AssistantLanguage | None = None
+
+    @field_validator("question")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("question must not be blank")
+        return stripped
+
+
+class AssistantChatResponse(TarazuModel):
+    """The answer, and the trail entry that records it was given."""
+
+    case_id: str
+    answer: AssistantAnswer
+    audit_record: AuditRecord

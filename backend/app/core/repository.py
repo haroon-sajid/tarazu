@@ -23,7 +23,7 @@ adds a filter to reads and a column to inserts; it takes nothing away.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Protocol, runtime_checkable
 
 from app.shared.schemas import (
@@ -36,12 +36,14 @@ from app.shared.schemas import (
     Organization,
     OrganizationMember,
     OrgInvitation,
+    ReportRecord,
     ReviewItem,
     UserProfile,
 )
 from app.shared.api import UploadedDocument
 
 __all__ = [
+    "CaseDocument",
     "CaseRepository",
     "DocumentStore",
     "IdentityStore",
@@ -52,6 +54,17 @@ __all__ = [
 
 class StoredDocument(UploadedDocument):
     """An uploaded document, once its bytes are actually somewhere."""
+
+
+class CaseDocument(StoredDocument):
+    """A stored document together with the case it belongs to.
+
+    What `get_document` returns: a route that was handed only a document id
+    needs the case to find the extraction behind it, and the org-scoped lookup
+    is the only place that knows which case that is.
+    """
+
+    case_id: str
 
 
 @runtime_checkable
@@ -133,6 +146,35 @@ class CaseRepository(Protocol):
     def latest_case_id(self, org_id: str, created_by: str | None = None) -> str | None:
         """The most recently created case *in this org*, for a frontend that has none."""
 
+    def update_case(
+        self,
+        org_id: str,
+        case_id: str,
+        *,
+        client_name: str,
+        period_start: date | None,
+        period_end: date | None,
+    ) -> CaseRecord | None:
+        """Replace the case's editable facts. None if no such case in this org.
+
+        The client name and the period are the engagement's settings; the
+        status, creator, and timestamps are facts about its life and move only
+        when the pipeline moves them. A caller that wants "keep the current
+        value" sends the current value — the store does not guess, so there is
+        no third state to get wrong.
+        """
+
+    def delete_case(self, org_id: str, case_id: str) -> bool:
+        """Remove the case and its working data for good. False if absent.
+
+        Documents, extractions, review items, flags, and the Benford result
+        follow the case — both stores cascade on the case row. Generated
+        reports and the audit trail are evidence and deliberately outlive the
+        engagement: both are append-only in the database itself, so there is no
+        deletion path for them here, and the trail's own record of this
+        deletion keeps working after this returns.
+        """
+
     # -- documents and extractions ------------------------------------------ #
 
     def add_documents(
@@ -140,6 +182,9 @@ class CaseRepository(Protocol):
     ) -> None: ...
 
     def list_documents(self, org_id: str, case_id: str) -> list[StoredDocument]: ...
+
+    def get_document(self, org_id: str, document_id: str) -> CaseDocument | None:
+        """The document, or None if it does not exist *or* belongs to another org."""
 
     def save_extraction(self, org_id: str, case_id: str, result: ExtractionResult) -> None: ...
 
@@ -163,6 +208,21 @@ class CaseRepository(Protocol):
     def save_benford(self, org_id: str, case_id: str, result: BenfordResult) -> None: ...
 
     def get_benford(self, org_id: str, case_id: str) -> BenfordResult | None: ...
+
+    # -- reports ------------------------------------------------------------ #
+    #
+    # Append-only, like the audit trail, and for the same reason: a report is
+    # evidence of what was delivered. There is no `update_report` and no
+    # `delete_report` here, and the stores refuse both underneath.
+
+    def save_report(self, org_id: str, record: ReportRecord) -> None:
+        """Record one generated report. Never replaces an existing one."""
+
+    def list_reports(self, org_id: str, case_id: str) -> list[ReportRecord]:
+        """Every report generated for the case, newest first."""
+
+    def get_report(self, org_id: str, report_id: str) -> ReportRecord | None:
+        """The report, or None if it does not exist *or* belongs to another org."""
 
     # -- api keys ----------------------------------------------------------- #
 

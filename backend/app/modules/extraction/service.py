@@ -36,7 +36,9 @@ from app.modules.extraction.ledger_reader import LedgerReadError, read_ledger
 from app.modules.extraction.page_images import (
     PageImage,
     image_bytes_to_page_image,
+    pdf_page_count,
     pdf_to_page_images,
+    render_pdf_page,
 )
 from app.modules.extraction.prompts import (
     EXTRACTION_FIELDS,
@@ -79,9 +81,11 @@ __all__ = [
     "extract_document",
     "extract_page",
     "extract_statement_page",
+    "document_page_count",
     "invoices_from",
     "pdf_to_page_images",
     "read_ledger",
+    "render_document_page",
     "verify_page",
 ]
 
@@ -107,11 +111,46 @@ _VERIFY_SETS: dict[str, frozenset[Confidence]] = {
 # `pdf_to_page_images(content, dpi)` is re-exported from `page_images` above.
 
 
+def _is_pdf(content: bytes, filename: str) -> bool:
+    return filename.lower().endswith(".pdf") or content[:5] == b"%PDF-"
+
+
 def _pages_for(content: bytes, filename: str, dpi: int) -> list[PageImage]:
     """Render whatever arrived — PDF or photo — into page images."""
-    if filename.lower().endswith(".pdf") or content[:5] == b"%PDF-":
+    if _is_pdf(content, filename):
         return pdf_to_page_images(content, dpi=dpi)
     return [image_bytes_to_page_image(content)]
+
+
+def document_page_count(content: bytes, filename: str) -> int:
+    """How many pages a stored document has: a PDF's count, or 1 for a photo.
+
+    Raises:
+        ValueError: The bytes are neither a readable PDF nor a supported image.
+    """
+    if _is_pdf(content, filename):
+        return pdf_page_count(content)
+    image_bytes_to_page_image(content)  # validates the format
+    return 1
+
+
+def render_document_page(
+    content: bytes, filename: str, page: int, *, dpi: int = 110
+) -> PageImage:
+    """One page of a stored document as an image, for the evidence viewer.
+
+    The same renderer the model's pages come from, so the page a human sees
+    is the page the provenance coordinates were measured on. A photographed
+    invoice has exactly one page and is returned as-is.
+
+    Raises:
+        ValueError: Unreadable bytes, or `page` out of range.
+    """
+    if _is_pdf(content, filename):
+        return render_pdf_page(content, page, dpi=dpi)
+    if page != 1:
+        raise ValueError("an image document has exactly one page")
+    return image_bytes_to_page_image(content)
 
 
 # --------------------------------------------------------------------------- #

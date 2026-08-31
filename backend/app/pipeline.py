@@ -5,17 +5,12 @@ It calls each module's `service.py` and nothing else, and it contains no
 matching, no rule logic, and no arithmetic over amounts. Composing three
 modules is all it does.
 
-**`matching/` and `rules/` are owned by Dev-D and are not implemented yet.**
-This module calls them for real. When they raise `NotImplementedError` the case
-is parked at `awaiting_matching` with its extractions saved, and the API says so
-plainly rather than inventing results. The moment those two functions land, the
-same code path completes with no change here.
-
-Benford comes from `rules/` too, through an optional interface: if
-`rules.service` exposes `benford_analysis(ledger)`, the pipeline calls it and
-stores the result for the dashboard. Until it does, the dashboard reports no
-Benford rather than computing it here — first-digit analysis is deterministic
-arithmetic over ledger amounts, and that belongs in `rules/`.
+The three deterministic steps — `matching.run_matching`, `rules.evaluate_flags`,
+and `rules.benford_analysis` — run on every upload. A case that gets past
+extraction always ends `ready_for_review`; if one of those steps fails the case
+is marked `failed` with the reason, and the error is raised so the caller can
+report it, rather than a half-built review queue being saved as if it were
+whole.
 """
 
 from __future__ import annotations
@@ -34,7 +29,6 @@ from app.shared.schemas import (
     ActorType,
     AuditAction,
     BankTransaction,
-    BenfordResult,
     CaseRecord,
     CaseStatus,
     Confidence,
@@ -47,20 +41,15 @@ from app.shared.schemas import (
     ReviewItem,
 )
 
-__all__ = ["PipelineOutcome", "RULES_CONFIG", "run_pipeline"]
+__all__ = ["PipelineOutcome", "RULES_CONFIG", "content_type_for", "run_pipeline"]
 
 logger = logging.getLogger(__name__)
 
-#: Rule configuration handed to `rules.service.evaluate_flags`. The approval
-#: limits are the ones a Pakistani SME audit typically works to; they belong in
-#: per-client config once there is more than one client.
-RULES_CONFIG: dict[str, Any] = {
-    "approval_limits": [50_000, 100_000, 500_000],
-    "round_number_floor": 10_000,
-    "date_tolerance_days": 3,
-    "duplicate_window_days": 3,
-    "near_limit_tolerance": 0.02,
-}
+#: The rule configuration handed to `rules.service.evaluate_flags`: the module's
+#: defaults, with any `RULES_*` environment overrides. Kept as a module-level
+#: name because the API contract documents it; read once at import, like every
+#: other setting in this process.
+RULES_CONFIG: dict[str, Any] = rules.default_config()
 
 
 @dataclass
@@ -107,8 +96,9 @@ def run_pipeline(
         storage: Where document bytes are persisted.
 
     Returns:
-        A `PipelineOutcome` describing how far it got. The caller turns that
-        into an HTTP response; it never raises for an expected stopping point.
+        A `PipelineOutcome` describing what was produced. Extraction errors
+        propagate to the caller, which turns them into HTTP responses; a
+        failure in a deterministic step marks the case `failed` and re-raises.
     """
     created_at = datetime.now(timezone.utc)
     repository.create_case(
@@ -129,7 +119,7 @@ def run_pipeline(
     # -- 1. Store the bytes ------------------------------------------------- #
     stored: list[StoredDocument] = []
     for document, content in documents:
-        storage.put(document.storage_path, content, _content_type(document.filename))
+        storage.put(document.storage_path, content, content_type_for(document.filename))
         stored.append(document)
         record_actor_action(
             repository, org_id, case_id, actor, AuditAction.DOCUMENT_UPLOADED,
@@ -185,81 +175,48 @@ def run_pipeline(
 
     outcome.ledger_entries = ledger
 
-    # -- 3. Match, deterministically ---------------------------------------- #
+    # -- 3-5. Match, flag, and assemble — all deterministic ------------------ #
     try:
         matches = matching.run_matching(ledger, bank, invoices)
-    except NotImplementedError as error:
-        return _park(repository, org_id, outcome, CaseStatus.AWAITING_MATCHING, str(error))
-
-    record_action(
-        repository, org_id, case_id, ActorType.SYSTEM, "matching.service",
-        AuditAction.MATCHING_COMPLETED,
-        detail=f"{len(matches)} results over {len(ledger)} ledger rows",
-    )
-
-    # -- 4. Flag, deterministically ----------------------------------------- #
-    try:
-        flags = rules.evaluate_flags(ledger, matches, RULES_CONFIG)
-    except NotImplementedError as error:
-        return _park(repository, org_id, outcome, CaseStatus.AWAITING_MATCHING, str(error))
-
-    for flag in flags:
         record_action(
-            repository, org_id, case_id, ActorType.SYSTEM, "rules.service",
-            AuditAction.FLAG_RAISED, item_id=flag.source_row_id,
-            detail=f"{flag.rule_id} ({flag.severity.value}): {flag.explanation}",
+            repository, org_id, case_id, ActorType.SYSTEM, "matching.service",
+            AuditAction.MATCHING_COMPLETED,
+            detail=(
+                f"{len(matches)} results over {len(ledger)} ledger rows, "
+                f"{len(bank)} bank transactions, {len(invoices)} invoices"
+            ),
         )
 
-    benford = _benford(ledger)
-    if benford is not None:
-        repository.save_benford(org_id, case_id, benford)
+        flags = rules.evaluate_flags(
+            ledger, matches, RULES_CONFIG, invoices=invoices, bank=bank
+        )
+        for flag in flags:
+            record_action(
+                repository, org_id, case_id, ActorType.SYSTEM, "rules.service",
+                AuditAction.FLAG_RAISED, item_id=flag.source_row_id,
+                detail=f"{flag.rule_id} ({flag.severity.value}): {flag.explanation}",
+            )
 
-    # -- 5. Assemble and persist the review queue --------------------------- #
-    items = build_review_items(case_id, ledger, bank, invoices, matches, flags,
-                               outcome.extractions)
-    repository.save_review_items(org_id, case_id, items)
+        repository.save_benford(org_id, case_id, rules.benford_analysis(ledger))
+
+        items = build_review_items(case_id, ledger, bank, invoices, matches, flags,
+                                   outcome.extractions)
+        repository.save_review_items(org_id, case_id, items)
+    except Exception as error:
+        # Nothing half-done is left looking whole: the case says it failed and
+        # why, and the caller gets the error. The trail above still records
+        # everything that did happen.
+        detail = f"{type(error).__name__}: {error}"
+        logger.exception("Case %s failed after extraction: %s", case_id, detail)
+        repository.set_case_status(org_id, case_id, CaseStatus.FAILED, detail)
+        outcome.status = CaseStatus.FAILED
+        outcome.detail = detail
+        raise
+
     repository.set_case_status(org_id, case_id, CaseStatus.READY_FOR_REVIEW)
-
     outcome.review_items = items
     outcome.status = CaseStatus.READY_FOR_REVIEW
     return outcome
-
-
-def _park(
-    repository: CaseRepository,
-    org_id: str,
-    outcome: PipelineOutcome,
-    status: CaseStatus,
-    detail: str,
-) -> PipelineOutcome:
-    """Stop cleanly at a known gap, keeping everything already done."""
-    logger.warning("Case %s parked at %s: %s", outcome.case_id, status.value, detail)
-    repository.set_case_status(org_id, outcome.case_id, status, detail)
-    outcome.status = status
-    outcome.detail = detail
-    return outcome
-
-
-def _benford(ledger: list[LedgerEntry]) -> BenfordResult | None:
-    """Ask `rules/` for the Benford analysis, if it offers one yet.
-
-    First-digit analysis is deterministic arithmetic over ledger amounts, so it
-    belongs in `rules/` beside every other deterministic test — not here. This
-    calls an optional public function rather than reimplementing it at the app
-    layer, and reports nothing until that function exists.
-
-    The agreed signature is::
-
-        def benford_analysis(ledger: list[LedgerEntry]) -> BenfordResult: ...
-    """
-    analyse = getattr(rules, "benford_analysis", None)
-    if analyse is None:
-        logger.info("rules.service has no benford_analysis yet; skipping Benford")
-        return None
-    try:
-        return analyse(ledger)
-    except NotImplementedError:
-        return None
 
 
 def build_review_items(
@@ -362,7 +319,8 @@ def _weakest(evidence: list) -> Confidence:
     return Confidence.HIGH
 
 
-def _content_type(filename: str) -> str:
+def content_type_for(filename: str) -> str:
+    """The MIME type a stored document is served with, from its extension."""
     lowered = filename.lower()
     for suffix, content_type in (
         (".pdf", "application/pdf"),
