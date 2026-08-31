@@ -9,14 +9,22 @@
 import * as React from "react";
 import Link from "next/link";
 import {
+  AlertCircle,
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
   Clock3,
+  DollarSign,
   Layers,
+  Package,
 } from "lucide-react";
 import { ApiError, getDashboard, listReports } from "@/lib/api";
-import type { DashboardSummary, ReadinessComponent } from "@/lib/types";
+import type {
+  DashboardSummary,
+  MonthlyRevenue,
+  ReadinessComponent,
+  SalesAnalyticsResult,
+} from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/states";
@@ -24,6 +32,182 @@ import { SeverityBadge } from "@/components/ui/badge";
 import { BenfordChart } from "@/components/dashboard/benford-chart";
 import { FirstRunChecklist } from "@/components/dashboard/first-run-checklist";
 import { formatDate } from "@/lib/format";
+
+/**
+ * Mini revenue trend chart: pure SVG bars, one per month. No chart library
+ * needed for six bars — the determinism guarantee means the same data always
+ * renders the same picture.
+ */
+function RevenueTrendChart({ monthly }: { monthly: MonthlyRevenue[] }) {
+  if (monthly.length === 0) return null;
+  const maxRevenue = Math.max(...monthly.map((m) => m.revenue), 1);
+  const barWidth = 32;
+  const gap = 8;
+  const chartHeight = 100;
+  const chartWidth = monthly.length * (barWidth + gap) - gap;
+
+  return (
+    <div className="overflow-x-auto" role="img" aria-label="Monthly revenue trend chart">
+      <svg
+        width={chartWidth + 40}
+        height={chartHeight + 36}
+        viewBox={`0 0 ${chartWidth + 40} ${chartHeight + 36}`}
+        className="min-w-0"
+      >
+        {monthly.map((entry, index) => {
+          const height = Math.max(2, (entry.revenue / maxRevenue) * chartHeight);
+          const x = index * (barWidth + gap) + 20;
+          const y = chartHeight - height + 4;
+          const label = entry.month.slice(5); // "MM" from "YYYY-MM"
+          return (
+            <g key={entry.month}>
+              <title>{`${entry.month}: ${formatCurrency(entry.revenue)}`}</title>
+              <rect
+                x={x}
+                y={y}
+                width={barWidth}
+                height={height}
+                rx={3}
+                className="fill-brand-600 transition-colors hover:fill-brand-800"
+              />
+              <text
+                x={x + barWidth / 2}
+                y={chartHeight + 18}
+                textAnchor="middle"
+                className="fill-ink-400 text-[10px]"
+              >
+                {label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * Format a number as PKR currency for display. No AI, just Intl.
+ */
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("en-PK", {
+    style: "decimal",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+/**
+ * The Sales Overview section: three summary cards and a revenue trend chart.
+ * Renders nothing when no sales analytics are available — the dashboard is
+ * complete without them.
+ */
+function SalesOverview({ analytics }: { analytics: SalesAnalyticsResult }) {
+  const topProduct = analytics.revenue_by_product[0];
+  const anomalyCount = analytics.anomalies.length;
+
+  return (
+    <>
+      {/* Sales summary cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Card className="hover-lift">
+          <CardContent className="flex items-start justify-between px-5 py-4">
+            <div>
+              <p className="text-xs font-medium text-ink-400">Total Revenue</p>
+              <p className="mt-1 text-2xl font-bold text-ink-900 tabular-nums">
+                {formatCurrency(analytics.total_revenue)}
+              </p>
+              <p className="mt-0.5 text-[11px] text-ink-400">
+                {analytics.record_count} transactions ·{" "}
+                {analytics.period_start && analytics.period_end
+                  ? `${analytics.period_start} to ${analytics.period_end}`
+                  : "no period"}
+              </p>
+            </div>
+            <span className="rounded-lg bg-gradient-to-br from-emerald-50 to-emerald-100 p-2.5 text-emerald-600 shadow-sm">
+              <DollarSign className="h-5 w-5" aria-hidden />
+            </span>
+          </CardContent>
+        </Card>
+
+        <Card className="hover-lift">
+          <CardContent className="flex items-start justify-between px-5 py-4">
+            <div>
+              <p className="text-xs font-medium text-ink-400">Top Product</p>
+              <p className="mt-1 text-2xl font-bold text-ink-900">
+                {topProduct ? topProduct.product : "—"}
+              </p>
+              {topProduct && (
+                <p className="mt-0.5 text-[11px] text-ink-400">
+                  {formatCurrency(topProduct.revenue)} · {topProduct.share.toFixed(1)}% of total
+                </p>
+              )}
+            </div>
+            <span className="rounded-lg bg-gradient-to-br from-brand-50 to-brand-100 p-2.5 text-brand-700 shadow-sm">
+              <Package className="h-5 w-5" aria-hidden />
+            </span>
+          </CardContent>
+        </Card>
+
+        <Card className="hover-lift">
+          <CardContent className="flex items-start justify-between px-5 py-4">
+            <div>
+              <p className="text-xs font-medium text-ink-400">Anomalies</p>
+              <p className="mt-1 text-2xl font-bold text-ink-900 tabular-nums">
+                {anomalyCount}
+              </p>
+              <p className="mt-0.5 text-[11px] text-ink-400">
+                {anomalyCount === 0
+                  ? "No anomalies detected"
+                  : `${anomalyCount} finding${anomalyCount > 1 ? "s" : ""} to review`}
+              </p>
+            </div>
+            <span
+              className={
+                anomalyCount > 0
+                  ? "rounded-lg bg-gradient-to-br from-amber-50 to-amber-100 p-2.5 text-amber-600 shadow-sm"
+                  : "rounded-lg bg-gradient-to-br from-slate-50 to-slate-100 p-2.5 text-slate-500 shadow-sm"
+              }
+            >
+              <AlertCircle className="h-5 w-5" aria-hidden />
+            </span>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Revenue trend chart */}
+      {analytics.monthly_revenue.length > 0 && (
+        <Card className="hover-lift">
+          <CardHeader>
+            <CardTitle>Revenue trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RevenueTrendChart monthly={analytics.monthly_revenue} />
+            {anomalyCount > 0 && (
+              <ul className="mt-4 space-y-1.5 border-t border-slate-100 pt-3">
+                {analytics.anomalies.map((anomaly) => (
+                  <li
+                    key={anomaly.anomaly_id}
+                    className="flex items-start gap-2 text-xs text-ink-600"
+                  >
+                    <AlertTriangle
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500"
+                      aria-hidden
+                    />
+                    <span>
+                      <span className="font-medium text-ink-900">{anomaly.kind}</span>{" "}
+                      — {anomaly.explanation}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </>
+  );
+}
 
 function StatCard({
   label,
@@ -285,6 +469,26 @@ export default function DashboardPage() {
           </Card>
         </div>
       </div>
+
+      {/* Sales Overview — shown only when sales analytics ran */}
+      {summary.sales_analytics && (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-base font-semibold text-ink-900">Sales Overview</h2>
+            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-ink-400">
+              deterministic · no AI
+            </span>
+            <Link
+              href="/analytics"
+              className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
+            >
+              Full analytics
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+            </Link>
+          </div>
+          <SalesOverview analytics={summary.sales_analytics} />
+        </>
+      )}
 
       {/* Next best actions */}
       <Card>

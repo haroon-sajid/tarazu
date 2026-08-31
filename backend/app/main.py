@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
 from app.api import (
+    analytics,
     api_keys,
     assistant,
     audit_trail,
@@ -95,6 +96,7 @@ app.include_router(audit_trail.router, prefix="/v1")
 app.include_router(documents.router, prefix="/v1")
 app.include_router(reports.router, prefix="/v1")
 app.include_router(assistant.router, prefix="/v1")
+app.include_router(analytics.router, prefix="/v1")
 app.include_router(clients.router, prefix="/v1")
 app.include_router(jobs.router, prefix="/v1")
 app.include_router(evidence_requests.router, prefix="/v1")

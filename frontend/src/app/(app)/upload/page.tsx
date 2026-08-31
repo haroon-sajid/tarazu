@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Upload — three inputs open a case, and the analysis is visible while it runs.
+ * Upload — three required inputs and an optional fourth open a case, and the
+ * analysis is visible while it runs.
  *
  * The progress on this screen is **real**. The upload is queued as a background
  * job (`?background=true`) and this page polls `GET /v1/jobs/{id}`: the bar and
@@ -14,6 +15,9 @@
  * 0005), and the red-flag thresholds become that client's own rather than the
  * firm-wide defaults.
  *
+ * The optional fourth input, a sales-data export (Excel or CSV), feeds the
+ * deterministic sales-analytics module — no AI on that path, same as the ledger.
+ *
  * Nothing here computes: every count on the result screen is the backend's.
  */
 
@@ -22,6 +26,7 @@ import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
+  BarChart3,
   Check,
   FileSearch,
   Files,
@@ -57,7 +62,8 @@ const PIPELINE_STEPS = [
   {
     icon: UploadCloud,
     label: "Storing documents",
-    detail: "Bank statement, ledger, and invoices stored against the new case.",
+    detail:
+      "Bank statement, ledger, invoices, and optionally sales data stored against the new case.",
     at: 5,
   },
   {
@@ -80,6 +86,13 @@ const PIPELINE_STEPS = [
     detail:
       "Round numbers · duplicates · weekend entries · near-limit amounts · structuring · sequence gaps, then the first-digit distribution.",
     at: 82,
+  },
+  {
+    icon: BarChart3,
+    label: "Sales analytics",
+    detail:
+      "Revenue by month, product, and region, top customers, and anomalies — deterministic pandas, run when a sales export was uploaded.",
+    at: 90,
   },
   {
     icon: Check,
@@ -149,6 +162,7 @@ export default function UploadPage() {
   const [ledger, setLedger] = React.useState<File[]>([]);
   const [bankStatement, setBankStatement] = React.useState<File[]>([]);
   const [invoices, setInvoices] = React.useState<File[]>([]);
+  const [salesData, setSalesData] = React.useState<File[]>([]);
   const [clients, setClients] = React.useState<ClientSummary[]>([]);
   const [clientId, setClientId] = React.useState("");
   const [phase, setPhase] = React.useState<Phase>("idle");
@@ -196,6 +210,7 @@ export default function UploadPage() {
         bankStatement: bankStatement[0],
         ledger: ledger[0],
         invoices,
+        ...(salesData.length === 1 ? { salesData: salesData[0] } : {}),
         clientId: clientId || undefined,
       });
 
@@ -246,9 +261,10 @@ export default function UploadPage() {
       <div className="mb-6">
         <h1 className="text-xl font-bold text-ink-900">Upload documents</h1>
         <p className="mt-1 text-sm text-ink-600">
-          Three inputs open a case: the client&apos;s ledger, the bank statement,
-          and the invoices. The AI reads them; deterministic code does every
-          match and every sum; you decide every item.
+          Three required inputs open a case: the client&apos;s ledger, the bank
+          statement, and the invoices. Optionally add a sales data export for
+          revenue analytics. The AI reads the unstructured files; deterministic
+          code does every match, sum, and anomaly; you decide every item.
         </p>
       </div>
 
@@ -336,7 +352,7 @@ export default function UploadPage() {
               </div>
             )}
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <DropZone
                 label="Ledger"
                 hint="Excel or CSV (.xlsx, .xls, .csv)"
@@ -360,6 +376,14 @@ export default function UploadPage() {
                 multiple
                 files={invoices}
                 onFiles={setInvoices}
+                disabled={phase === "working"}
+              />
+              <DropZone
+                label="Sales data"
+                hint="Optional — Excel or CSV (.xlsx, .xls, .csv)"
+                accept={[".xlsx", ".xls", ".csv"]}
+                files={salesData}
+                onFiles={setSalesData}
                 disabled={phase === "working"}
               />
             </div>
@@ -389,7 +413,7 @@ export default function UploadPage() {
               </Button>
               {!ready && phase === "idle" && (
                 <p className="text-xs text-ink-400">
-                  The button unlocks when all three slots are filled.
+                  The button unlocks when the three required slots are filled. Sales data is optional.
                 </p>
               )}
               {phase === "working" && (

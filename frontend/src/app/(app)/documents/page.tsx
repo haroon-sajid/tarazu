@@ -38,7 +38,7 @@ import {
   type PageHighlight,
 } from "@/components/documents/schematic-page";
 
-type DocumentKind = "bank_statement" | "invoice" | "ledger";
+type DocumentKind = "bank_statement" | "invoice" | "ledger" | "sales_data";
 
 interface DocField {
   id: string;
@@ -65,6 +65,7 @@ const KIND_LABEL: Record<DocumentKind, string> = {
   bank_statement: "Bank statement",
   invoice: "Invoice",
   ledger: "Ledger",
+  sales_data: "Sales data",
 };
 
 function formatValue(value: unknown): string {

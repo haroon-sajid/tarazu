@@ -43,6 +43,7 @@ from app.shared.schemas import (
     OrgProfile,
     ReportRecord,
     ReviewItem,
+    SalesAnalyticsResult,
     SignOff,
     UserProfile,
     ValueCorrection,
@@ -212,12 +213,12 @@ class CaseRepository(Protocol):
     def delete_case(self, org_id: str, case_id: str) -> bool:
         """Remove the case and its working data for good. False if absent.
 
-        Documents, extractions, review items, flags, and the Benford result
-        follow the case — both stores cascade on the case row. Generated
-        reports and the audit trail are evidence and deliberately outlive the
-        engagement: both are append-only in the database itself, so there is no
-        deletion path for them here, and the trail's own record of this
-        deletion keeps working after this returns.
+        Documents, extractions, review items, flags, the Benford result, and
+        the sales-analytics readout follow the case — both stores cascade on
+        the case row. Generated reports and the audit trail are evidence and
+        deliberately outlive the engagement: both are append-only in the
+        database itself, so there is no deletion path for them here, and the
+        trail's own record of this deletion keeps working after this returns.
         """
 
     # -- documents and extractions ------------------------------------------ #
@@ -253,6 +254,23 @@ class CaseRepository(Protocol):
     def save_benford(self, org_id: str, case_id: str, result: BenfordResult) -> None: ...
 
     def get_benford(self, org_id: str, case_id: str) -> BenfordResult | None: ...
+
+    # -- sales analytics ------------------------------------------------------ #
+
+    def save_sales_analytics(
+        self, org_id: str, case_id: str, result: SalesAnalyticsResult
+    ) -> None:
+        """Insert or replace the case's sales-analytics readout.
+
+        Like Benford, this is derived output: re-running the analysis replaces
+        what the previous run produced, and nothing about the trail is touched.
+        """
+
+    def get_sales_analytics(
+        self, org_id: str, case_id: str
+    ) -> SalesAnalyticsResult | None:
+        """The saved readout, or None if this case has none yet (or is another
+        firm's — the lookup is scoped by `org_id` like every other read)."""
 
     # -- reports ------------------------------------------------------------ #
     #

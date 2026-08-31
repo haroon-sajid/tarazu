@@ -115,8 +115,8 @@ way every time.
 
 | Scope | Grants |
 |---|---|
-| `read` | Every `GET`: the review queue, the dashboard, an item's audit trail, the case list, the case trail, documents and their pages, reports and their files. Also `POST /v1/reports` and `POST /v1/assistant/chat` — both *derive* from decided data and change nothing about the case, and the monthly-report automation should not need a credential that can approve items. Each still lands in the trail under the key's name. |
-| `write` | `POST /v1/upload`, `POST /v1/review-items/{id}/approve`, `.../reject` |
+| `read` | Every `GET`: the review queue, the dashboard, an item's audit trail, the case list, the case trail, documents and their pages, the saved sales-analytics readout, reports and their files. Also `POST /v1/reports` and `POST /v1/assistant/chat` — both *derive* from decided data and change nothing about the case, and the monthly-report automation should not need a credential that can approve items. Each still lands in the trail under the key's name. |
+| `write` | `POST /v1/upload`, `POST /v1/review-items/{id}/approve`, `.../reject`, `POST /v1/cases/{case_id}/analytics` |
 
 Scopes are fixed for a key's lifetime: to change them, revoke and create
 another. A key omitting `scopes` on creation gets `["read"]` — a key that can
@@ -407,7 +407,8 @@ Tarazu reads two kinds of source:
 { "document_id": "DOC-BNK-001", "page": 2, "bbox": [0.605, 0.289, 0.857, 0.312],
   "text_snippet": "49,500.00", "row_number": null }
 
-// A spreadsheet (the ledger, read by pandas with no AI involved): row number.
+// A spreadsheet (the ledger or a sales export, read by pandas with no AI
+// involved): row number.
 { "document_id": "DOC-LED-001", "row_number": 14, "page": null, "bbox": null,
   "text_snippet": null }
 ```
@@ -456,6 +457,8 @@ highlights the matching text instead.
 | `GET` | `/v1/reports` | Every report generated for a case, newest first | Live |
 | `GET` | `/v1/reports/{id}/download` | Download a report file (`?format=pdf\|excel`) | Live |
 | `POST` | `/v1/assistant/chat` | Ask Tarazu: a grounded answer with citations and facts | Live |
+| `POST` | `/v1/cases/{case_id}/analytics` | Run the deterministic sales analytics; replace the saved readout | Live |
+| `GET` | `/v1/cases/{case_id}/analytics` | The saved sales-analytics readout | Live |
 | `GET` | `/v1/clients` | The firm's recurring clients (`?include_archived=`) | Live |
 | `POST` | `/v1/clients` | Add a recurring client | Live |
 | `GET` | `/v1/clients/{client_id}` | One client and every period run for it | Live |
@@ -1310,22 +1313,107 @@ firm's case, `422` for a blank or over-long question or an unknown language.
 
 ---
 
+### `POST /v1/cases/{case_id}/analytics`
+
+Runs the deterministic sales analytics over the case's `sales_data` documents
+and saves the readout. Every sales export in the case is re-read from storage
+and concatenated — a month split across two files still sums whole — and the
+result replaces whatever an earlier run saved. `write` scope, unlike
+`POST /v1/reports`: a report appends an immutable record, this rewrites a
+persisted readout. The run lands in the trail as `sales_analytics_run` under
+the caller's name; one computed by the pipeline at upload time reads
+`system`/`analytics.service` instead.
+
+No model is on the path. A sales export is already structured, so pandas reads
+it and the arithmetic is sums and counts over `Decimal` money — the same no-AI
+decision the ledger reader makes. The breakdowns partition the records: the
+monthly and product entries each sum back to `total_revenue` and count back to
+`record_count`, the response is validated against that, and money never passes
+through a float.
+
+The case needs at least one `sales_data` document. `POST /v1/upload` has no
+sales slot yet, so today they reach a case through the pipeline — a seeding
+script or an integration calling it — which runs this same analysis at upload
+time.
+
+**Response `201`** (three sales rows from one export)
+
+```json
+{
+  "record_count": 3,
+  "period_start": "2026-06-02",
+  "period_end": "2026-07-15",
+  "total_revenue": 87900.0,
+  "monthly_revenue": [
+    { "month": "2026-06", "revenue": 57900.0, "transaction_count": 2 },
+    { "month": "2026-07", "revenue": 30000.0, "transaction_count": 1 }
+  ],
+  "revenue_by_product": [
+    { "product": "Yarn", "revenue": 45900.0, "transaction_count": 1, "share": 52.22 },
+    { "product": "Cloth", "revenue": 42000.0, "transaction_count": 2, "share": 47.78 }
+  ],
+  "top_customers": [
+    { "customer_name": "Gulberg Traders", "revenue": 75900.0, "transaction_count": 2, "share": 86.35 },
+    { "customer_name": "Al-Habib Stationers", "revenue": 12000.0, "transaction_count": 1, "share": 13.65 }
+  ],
+  "sales_by_region": [
+    { "region": "Punjab", "revenue": 45900.0, "transaction_count": 1, "share": 52.22 },
+    { "region": "Sindh", "revenue": 12000.0, "transaction_count": 1, "share": 13.65 }
+  ],
+  "anomalies": [],
+  "document_ids": ["DOC-SLS-001"],
+  "generated_at": "2026-08-31T09:14:02.118Z"
+}
+```
+
+`share` is percent of `total_revenue`, two decimals. The region shares sum to
+less than 100 here because one sale carries no region — only records that have
+one are counted. An `anomalies` entry is a finding, never a verdict, exactly
+like a flag: `kind` is one of `negative-amount`, `duplicate-transaction`,
+`revenue-spike`, `large-transaction`; row-level ones name their row in
+`source_row_id` (duplicates name the whole group in `related_row_ids`),
+month-level ones (`revenue-spike`) carry `month` instead, and `explanation` is
+a sentence a human can read.
+
+**Errors**
+
+| Status | When |
+|---|---|
+| `401` | No credential, or an unknown/revoked API key |
+| `403` | No organization; or the key lacks the `write` scope |
+| `404` | No case with that id **in your organization** — another firm's is indistinguishable from a nonexistent one; or the export file is no longer in storage |
+| `422` | The case has no `sales_data` document; or an export cannot be read — a missing column, a CSV whose rows are wider than its header (an amount like `Rs. 45,900` must be quoted), or no usable rows |
+
+---
+
+### `GET /v1/cases/{case_id}/analytics`
+
+The saved readout exactly as persisted: no recomputation, no file reads, no
+trail entry — a dashboard can poll it for free. `read` scope. `404` until the
+analysis has run, through the `POST` above or at upload time by the pipeline.
+
+**Errors** — `401`, `403` (no organization), `404` for another firm's case,
+or one with no saved readout yet.
+
+---
+
 ## Audit actions
 
-`audit_trail.action` is one of: `case_created`, `document_uploaded`,
-`extraction_completed`, `second_opinion_completed`, `matching_completed`,
-`flag_raised`, `item_approved`, `item_rejected`, `report_generated`,
-`assistant_question_asked`, `assistant_answered`. The authoritative list is
-`AuditAction` in `backend/app/shared/schemas.py`; the Postgres check
-constraint is re-stated in `0006-reports-and-assistant.sql`.
+`audit_trail.action` is one of: `case_created`, `case_updated`, `case_deleted`,
+`document_uploaded`, `extraction_completed`, `second_opinion_completed`,
+`matching_completed`, `flag_raised`, `item_approved`, `item_rejected`,
+`report_generated`, `assistant_question_asked`, `assistant_answered`,
+`sales_analytics_run`. The authoritative list is `AuditAction` in
+`backend/app/shared/schemas.py`; the Postgres check constraint is re-stated
+with the same full list in `0006-sales-analytics.sql`.
 
 ---
 
 ## Internal module interfaces
 
 Modules talk only through `service.py`, passing `app/shared/` schema objects.
-All five are pure functions of their arguments: no FastAPI, no Supabase, no
-file I/O. The three deterministic ones never touch the network either.
+All six are pure functions of their arguments: no FastAPI, no Supabase, no
+file I/O. The four deterministic ones never touch the network either.
 
 #### matching — never imports an AI client
 
@@ -1433,3 +1521,25 @@ the case-level intents (`summary`, `unmatched`, `flags`, …) read from `case`,
 `items`, and `benford` as before. `concept` reads from neither — it is a
 static bilingual glossary. Never raises for a question it cannot answer —
 that is an answer with `grounded=False`. Receives results, never documents.
+
+#### analytics — never imports an AI client
+
+```python
+# app/modules/analytics/service.py
+def read_sales_data(document_id, filename, content,
+                    *, dayfirst=True, currency="PKR") -> list[SalesRecord]
+def analyze_sales(records: list[SalesRecord]) -> SalesAnalyticsResult
+```
+
+Deterministic pandas over a `sales_data` export (`.xlsx`, `.xls`, `.csv`),
+mirroring the ledger reader: header aliases are resolved (`Sale Date`/`Txn
+Date`…, `Amount`/`Total`/`Line Total`…), money is parsed the same way
+(`Rs. 45,900/-`; accounting parentheses are negative), ambiguous dates are
+day-first, and a CSV whose rows are wider than its header is refused with
+instructions rather than mis-read. Rows missing the date, amount, customer, or
+product are skipped as blanks and counted in a log line. `analyze_sales`
+partitions the records by month, product, region, and customer (top five,
+ranked), keeps money `Decimal` end to end, and raises findings — never
+verdicts — for negative amounts, identical duplicate rows, months far from the
+median month, and sales far above the median sale. The schema rejects a result
+whose monthly or product breakdowns do not sum back to `total_revenue`.

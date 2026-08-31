@@ -22,6 +22,7 @@ backend (single FastAPI app)
     |-- extraction/  Qwen VL: documents to structured data with confidence   [AI]
     |-- matching/    pandas: deterministic matching, no AI
     |-- rules/       deterministic red-flag rules, no AI
+    |-- analytics/   pandas: sales-analytics readout, no AI
     |-- assistant/   grounded chat and explanations, English and Urdu        [AI]
     `-- reports/     PDF and Excel report generation
 
@@ -33,7 +34,7 @@ Supabase: Postgres (data and immutable audit trail), Auth (JWT), Storage (docume
 1. **Upload.** The auditor uploads a bank statement (PDF), invoices (PDF or images), and a ledger (Excel or CSV). The bytes go to document storage; the ledger is read by pandas.
 2. **Extract.** `extraction/` reads the documents with Qwen VL. Every value carries source document and page provenance plus a confidence level, and an AI second-opinion pass cross-checks low-confidence extractions.
 3. **Match.** `matching/` reconciles the statement, invoices, and ledger with deterministic pandas logic: one-to-one bank assignment, best pairs first; invoices shared where a duplicate payment demands it.
-4. **Flag.** `rules/` applies deterministic red-flag rules — round numbers, weekend entries, duplicate invoices and payments, near-limit amounts, structuring, invoice-sequence gaps — and the Benford first-digit analysis.
+4. **Flag.** `rules/` applies deterministic red-flag rules — round numbers, weekend entries, duplicate invoices and payments, near-limit amounts, structuring, invoice-sequence gaps — and the Benford first-digit analysis. When the upload includes a sales export, `analytics/` computes the sales readout — revenue by month, product, region, and top customers, with anomaly findings — on the same no-AI path.
 5. **Review.** A human approves or rejects every item in the review screen, with the real source page and its provenance box beside the figures (`/v1/documents`). Nothing is finalized without an explicit human decision.
 6. **Ask.** `assistant/` answers questions about the case from its persisted results: intent → deterministic query → worded answer with citations and the computed facts. A model, when configured, only rephrases (ADR 0006).
 7. **Report.** `reports/` renders the PDF and Excel deliverable from decided items, with provenance and the full audit trail; every generation is an immutable record.

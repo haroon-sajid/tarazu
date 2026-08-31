@@ -33,6 +33,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 __all__ = [
     "ActorType",
+    "Anomaly",
     "ApiKeyRecord",
     "ApiKeyScope",
     "AssistantAnswer",
@@ -53,6 +54,7 @@ __all__ = [
     "ClientRuleConfig",
     "Confidence",
     "ConfidenceBreakdown",
+    "CustomerSummary",
     "DashboardSummary",
     "DecisionBreakdown",
     "DocumentType",
@@ -72,18 +74,23 @@ __all__ = [
     "MONETARY_FIELD_NAMES",
     "MatchStatus",
     "MatchStrength",
+    "MonthlyRevenue",
     "NextBestAction",
     "OrgProfile",
     "OrgRole",
     "Organization",
     "OrganizationMember",
     "OrgInvitation",
+    "ProductRevenue",
     "Provenance",
     "ReadinessComponent",
+    "RegionSummary",
     "ReportFormat",
     "ReportRecord",
     "ReviewDecision",
     "ReviewItem",
+    "SalesAnalyticsResult",
+    "SalesRecord",
     "SecondOpinion",
     "SeverityBreakdown",
     "Severity",
@@ -152,6 +159,9 @@ class DocumentType(str, Enum):
     BANK_STATEMENT = "bank_statement"
     INVOICE = "invoice"
     LEDGER = "ledger"
+    #: A sales data export (Excel or CSV). Structured already, so it is read
+    #: by pandas — the same no-AI path as the ledger — and feeds `analytics/`.
+    SALES_DATA = "sales_data"
 
 
 class ReviewDecision(str, Enum):
@@ -238,6 +248,10 @@ class AuditAction(str, Enum):
     #: The assistant answered. `actor_id` names what composed the answer —
     #: the deterministic composer, or the model that phrased it.
     ASSISTANT_ANSWERED = "assistant_answered"
+    #: Deterministic sales analytics ran over one or more SALES_DATA documents.
+    #: `actor_id` names who ran it — a person, an integration, or
+    #: `analytics.service` when the pipeline ran it on upload.
+    SALES_ANALYTICS_RUN = "sales_analytics_run"
 
 
 class ReportFormat(str, Enum):
@@ -622,6 +636,215 @@ class Flag(TarazuModel):
         description="Other rows involved, for rules that span rows (duplicates, structuring).",
     )
     source: Provenance | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Sales analytics
+#
+# `modules/analytics/` is deterministic pandas, exactly like `matching/` and
+# `rules/`: a sales export is already structured, so no model reads it and no
+# model scores it. Every figure below is a sum or a count over the rows that
+# were read, and the anomalies are rule findings — suggestions a human weighs,
+# never verdicts.
+# --------------------------------------------------------------------------- #
+
+
+class SalesRecord(TarazuModel):
+    """One sale row read out of a SALES_DATA export (Excel or CSV).
+
+    Pandas reads it, the same no-AI path as the ledger, so its provenance is a
+    spreadsheet row. `region` is optional because sales exports vary in what
+    they carry; a record without one simply does not appear in
+    `SalesAnalyticsResult.sales_by_region`.
+    """
+
+    sales_row_id: str = Field(min_length=1)
+    date: Date
+    amount: Decimal
+    customer_name: str = Field(min_length=1)
+    product: str = Field(min_length=1)
+    region: str | None = None
+    currency: Currency = "PKR"
+    source: Provenance
+
+
+#: A calendar month, `YYYY-MM`, the grain of `MonthlyRevenue`.
+Month = Annotated[str, Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")]
+
+
+class MonthlyRevenue(TarazuModel):
+    """Revenue for one calendar month. Months are unique and ascending."""
+
+    month: Month
+    revenue: Decimal
+    transaction_count: int = Field(ge=0)
+
+
+class ProductRevenue(TarazuModel):
+    """One product's revenue over the whole period, highest revenue first.
+
+    `share` is percent of total revenue, rounded to two decimals. When total
+    revenue is zero or negative it is 0.0 rather than a meaningless ratio.
+    """
+
+    product: str = Field(min_length=1)
+    revenue: Decimal
+    transaction_count: int = Field(ge=0)
+    share: float
+
+
+class CustomerSummary(TarazuModel):
+    """One customer's revenue over the whole period. The top five, ranked."""
+
+    customer_name: str = Field(min_length=1)
+    revenue: Decimal
+    transaction_count: int = Field(ge=0)
+    share: float
+
+
+class RegionSummary(TarazuModel):
+    """One region's revenue over the whole period.
+
+    Only records that carry a region are counted, so the region shares sum to
+    less than the whole when some rows have none.
+    """
+
+    region: str = Field(min_length=1)
+    revenue: Decimal
+    transaction_count: int = Field(ge=0)
+    share: float
+
+
+class Anomaly(TarazuModel):
+    """A pattern in the sales data worth a human's attention.
+
+    Like a `Flag`, a suggestion and never a verdict. `kind` is one of the
+    module's rule ids: `negative-amount`, `duplicate-transaction`,
+    `revenue-spike`, `large-transaction`. Row-level anomalies name their row in
+    `source_row_id` (and, for duplicates, the whole group in
+    `related_row_ids`); month-level ones name the month instead.
+    """
+
+    anomaly_id: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    explanation: str = Field(min_length=1)
+    source_row_id: str | None = None
+    related_row_ids: list[str] = Field(default_factory=list)
+    #: Set for month-level anomalies (`revenue-spike`); None for row-level ones.
+    month: Month | None = None
+    source: Provenance | None = None
+
+
+class SalesAnalyticsResult(TarazuModel):
+    """The whole sales-analytics readout for one case. Pure arithmetic, no AI.
+
+    The breakdowns partition the records two ways — by month and by product —
+    so each of those sums back to `total_revenue` and `record_count`, and the
+    validators below hold the model to that. Regions cover only the records
+    that carry one. `top_customers` is at most five, ranked by revenue.
+    """
+
+    record_count: int = Field(ge=0)
+    period_start: Date | None = None
+    period_end: Date | None = None
+    total_revenue: Decimal
+    monthly_revenue: list[MonthlyRevenue] = Field(default_factory=list)
+    revenue_by_product: list[ProductRevenue] = Field(default_factory=list)
+    top_customers: list[CustomerSummary] = Field(default_factory=list, max_length=5)
+    sales_by_region: list[RegionSummary] = Field(default_factory=list)
+    anomalies: list[Anomaly] = Field(default_factory=list)
+    #: The documents the records were read from, so the readout names its
+    #: sources. Derived from the records' provenance, sorted for determinism.
+    document_ids: list[str] = Field(default_factory=list)
+    generated_at: datetime
+
+    @model_validator(mode="after")
+    def _period_is_sane(self) -> SalesAnalyticsResult:
+        if (
+            self.period_start is not None
+            and self.period_end is not None
+            and self.period_end < self.period_start
+        ):
+            raise ValueError("period_end cannot precede period_start")
+        return self
+
+    @model_validator(mode="after")
+    def _months_partition_the_records(self) -> SalesAnalyticsResult:
+        months = [entry.month for entry in self.monthly_revenue]
+        if months != sorted(set(months)):
+            raise ValueError(
+                "monthly_revenue must be one entry per month, ascending, no repeats"
+            )
+        revenue = sum((entry.revenue for entry in self.monthly_revenue), Decimal(0))
+        if revenue != self.total_revenue:
+            raise ValueError(
+                f"monthly_revenue sums to {revenue}, but total_revenue is "
+                f"{self.total_revenue}"
+            )
+        counted = sum(entry.transaction_count for entry in self.monthly_revenue)
+        if counted != self.record_count:
+            raise ValueError(
+                f"monthly_revenue counts {counted} transactions, but record_count "
+                f"is {self.record_count}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _products_partition_the_records(self) -> SalesAnalyticsResult:
+        products = [entry.product for entry in self.revenue_by_product]
+        if len(set(products)) != len(products):
+            raise ValueError("revenue_by_product must list each product once")
+        revenue = sum((entry.revenue for entry in self.revenue_by_product), Decimal(0))
+        if revenue != self.total_revenue:
+            raise ValueError(
+                f"revenue_by_product sums to {revenue}, but total_revenue is "
+                f"{self.total_revenue}"
+            )
+        counted = sum(entry.transaction_count for entry in self.revenue_by_product)
+        if counted != self.record_count:
+            raise ValueError(
+                f"revenue_by_product counts {counted} transactions, but "
+                f"record_count is {self.record_count}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _breakdowns_are_ranked_and_share_holds(self) -> SalesAnalyticsResult:
+        """Ranking is part of the contract, and every share must follow.
+
+        The ranked lists are what a chart renders; letting them arrive in an
+        arbitrary order would make two results over the same records differ.
+        The share check recomputes each percentage from the revenue it sits
+        beside, so a number that does not follow from its own arithmetic is
+        rejected rather than displayed.
+        """
+        total = self.total_revenue
+        for name, summaries in (
+            ("revenue_by_product", self.revenue_by_product),
+            ("top_customers", self.top_customers),
+            ("sales_by_region", self.sales_by_region),
+        ):
+            revenues = [summary.revenue for summary in summaries]
+            if any(a < b for a, b in zip(revenues, revenues[1:])):
+                raise ValueError(f"{name} must be ordered by revenue, highest first")
+            for summary in summaries:
+                expected = (
+                    float(Decimal(100) * summary.revenue / total) if total > 0 else 0.0
+                )
+                if abs(summary.share - expected) > 0.01:
+                    raise ValueError(
+                        f"{name}: share {summary.share} does not follow from revenue "
+                        f"{summary.revenue} of total {total}"
+                    )
+        regions = sum(
+            entry.transaction_count for entry in self.sales_by_region
+        )
+        if regions > self.record_count:
+            raise ValueError(
+                f"sales_by_region counts {regions} transactions, more than the "
+                f"{self.record_count} records analysed"
+            )
+        return self
 
 
 # --------------------------------------------------------------------------- #
@@ -1459,6 +1682,9 @@ class DashboardSummary(TarazuModel):
     #: Outstanding flags reworded as work, most severe first. At most five.
     next_best_actions: list[NextBestAction] = Field(default_factory=list, max_length=5)
     estimated_hours_saved: float = Field(ge=0.0)
+    #: The sales-analytics readout when a SALES_DATA document was uploaded.
+    #: None until the pipeline or a manual run has produced one.
+    sales_analytics: SalesAnalyticsResult | None = None
 
     @model_validator(mode="after")
     def _breakdowns_add_up(self) -> DashboardSummary:
