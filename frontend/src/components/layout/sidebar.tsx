@@ -8,6 +8,7 @@ import {
   Briefcase,
   ChevronLeft,
   ChevronRight,
+  Dices,
   Files,
   FileText,
   Menu,
@@ -18,56 +19,96 @@ import {
   TableProperties,
   TrendingUp,
   Upload,
+  Users,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProfileMenu } from "@/components/layout/profile-menu";
 
+/**
+ * The rail, in the order the work actually happens: who you audit, the
+ * engagement, the documents, the decisions, then what comes out of it. The
+ * firm-wide screens (Insights, Compare) sit at the end because they are read
+ * between engagements rather than during one.
+ */
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/analytics", label: "Analytics", icon: TrendingUp },
+  { href: "/clients", label: "Clients", icon: Users },
   { href: "/cases", label: "Cases", icon: Briefcase },
   { href: "/upload", label: "Upload", icon: Upload },
-  { href: "/documents", label: "Documents", icon: Files },
   { href: "/review", label: "Review", icon: TableProperties },
+  { href: "/documents", label: "Documents", icon: Files },
+  { href: "/sampling", label: "Sampling", icon: Dices },
   { href: "/assistant", label: "Assistant", icon: MessageSquare },
   { href: "/audit-trail", label: "Audit trail", icon: ShieldCheck },
   { href: "/reports", label: "Reports", icon: FileText },
+  { href: "/insights", label: "Insights", icon: TrendingUp },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 const COLLAPSED_KEY = "tarazu.sidebar";
+/** Matches Tailwind's `md` breakpoint, which every rule below is keyed to. */
+const MOBILE_QUERY = "(max-width: 767.98px)";
 
+function readCollapsed() {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(COLLAPSED_KEY) === "collapsed";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * One rail, two shapes, decided by the viewport rather than by a measurement
+ * taken in JavaScript: below `md` it is an off-canvas drawer at full label
+ * width, at `md` and up it is a column in the page flow that the auditor can
+ * collapse to icons. Collapsing is therefore a desktop affordance only — every
+ * collapsed rule is `md:`-scoped, so the drawer can never open half-collapsed.
+ *
+ * The saved choice is read during the first render, not in an effect, so the
+ * rail paints at its final width instead of snapping a frame later.
+ */
 export function Sidebar() {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = React.useState(false);
+  const [collapsed, setCollapsed] = React.useState(readCollapsed);
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const [isMobile, setIsMobile] = React.useState(false);
+  // Width and transform animate on a real interaction, never on first paint.
+  const [animate, setAnimate] = React.useState(false);
 
-  // Restore the saved state after mount and keep the rail in sync with viewport changes
   React.useEffect(() => {
-    const syncToViewport = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      
-      if (mobile) {
-        setCollapsed(false);
-        setMobileOpen(false);
-      } else {
-        try {
-          setCollapsed(window.localStorage.getItem(COLLAPSED_KEY) === "collapsed");
-        } catch {
-          setCollapsed(false);
-        }
-      }
-    };
-
-    syncToViewport();
-    window.addEventListener("resize", syncToViewport);
-    return () => window.removeEventListener("resize", syncToViewport);
+    const frame = window.requestAnimationFrame(() => setAnimate(true));
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
-  const toggle = () =>
+  // The drawer belongs to the small viewport alone: growing past the
+  // breakpoint closes it, so a resize can never strand a locked page scroll
+  // or a backdrop behind the desktop rail.
+  React.useEffect(() => {
+    const query = window.matchMedia(MOBILE_QUERY);
+    const sync = () => {
+      if (!query.matches) setMobileOpen(false);
+    };
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
+  // Navigating is what the drawer is for; it closes once it has done its job.
+  React.useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  React.useEffect(() => {
+    if (!mobileOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [mobileOpen]);
+
+  const toggleCollapsed = () =>
     setCollapsed((current) => {
       const next = !current;
       try {
@@ -78,111 +119,85 @@ export function Sidebar() {
       return next;
     });
 
-  const toggleMobile = () => setMobileOpen(!mobileOpen);
-  const closeMobileMenu = () => setMobileOpen(false);
-
-  // Close mobile menu when route changes
-  React.useEffect(() => {
-    closeMobileMenu();
-  }, [pathname]);
-
-  // Prevent body scroll when mobile menu is open
-  React.useEffect(() => {
-    if (mobileOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [mobileOpen]);
-
   return (
     <>
-      {/* Mobile Menu Toggle */}
-      {isMobile && (
-        <button
-          onClick={toggleMobile}
-          aria-label="Toggle menu"
-          className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-brand-800 text-white shadow-lg transition-all hover-lift md:hidden"
-        >
-          {mobileOpen ? (
-            <X className="h-6 w-6" aria-hidden />
-          ) : (
-            <Menu className="h-6 w-6" aria-hidden />
-          )}
-        </button>
-      )}
+      {/* Drawer backdrop — mobile only, and only while the drawer is open. */}
+      <div
+        onClick={() => setMobileOpen(false)}
+        aria-hidden
+        className={cn(
+          "fixed inset-0 z-40 bg-ink-900/50 transition-opacity duration-300 md:hidden",
+          mobileOpen ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+      />
 
-      {/* Backdrop for mobile */}
-      {isMobile && mobileOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm transition-opacity duration-300 md:hidden"
-          onClick={closeMobileMenu}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* Sidebar */}
       <aside
         className={cn(
-          "sidebar-animated relative flex shrink-0 flex-col border-r border-slate-200 bg-white transition-all duration-300",
-          isMobile
-            ? cn(
-                "fixed top-0 left-0 h-screen z-40 shadow-2xl",
-                mobileOpen ? "w-64 translate-x-0" : "w-64 -translate-x-full"
-              )
-            : collapsed
-              ? "w-16"
-              : "w-56",
+          // Mobile: an off-canvas drawer at full label width.
+          "fixed inset-y-0 left-0 z-50 flex w-64 max-w-[80vw] shrink-0 flex-col",
+          "border-r border-slate-200 bg-white",
+          mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full",
+          // Desktop: a column in the page flow. `relative` (not `static`) so
+          // the collapse handle keeps this element as its containing block.
+          "md:relative md:inset-auto md:z-50 md:max-w-none md:translate-x-0 md:shadow-none",
+          collapsed ? "md:w-16" : "md:w-56",
+          animate && "transition-[width,transform] duration-300",
         )}
       >
-        {/* Desktop Collapse toggle */}
-        {!isMobile && (
-          <button
-            onClick={toggle}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className={cn(
-              "absolute -right-3 top-7 z-20 flex h-6 w-6 items-center justify-center rounded-full",
-              "border border-slate-300 bg-white text-ink-600 shadow-sm transition-all hover-lift",
-              "hover:border-brand-700 hover:bg-brand-50 hover:text-brand-800",
-            )}
-          >
-            {collapsed ? (
-              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-            ) : (
-              <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
-            )}
-          </button>
-        )}
+        {/* Collapse handle: desktop only — there is nothing to collapse into
+            on a phone, where the rail is a drawer that closes outright. */}
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className={cn(
+            "absolute -right-3 top-7 z-50 hidden h-6 w-6 items-center justify-center rounded-full md:flex",
+            "border border-slate-300 bg-white text-ink-600 shadow-sm transition-colors",
+            "hover:border-brand-700 hover:bg-brand-50 hover:text-brand-800",
+          )}
+        >
+          {collapsed ? (
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          ) : (
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+          )}
+        </button>
 
         {/* Brand */}
-        <div className={cn("flex items-center py-5 transition-all duration-300", collapsed ? "justify-center px-0" : "px-4")}>
+        <div
+          className={cn(
+            "flex shrink-0 items-center px-4 py-5",
+            collapsed && "md:justify-center md:px-0",
+          )}
+        >
           <Link
             href="/dashboard"
-            className="flex items-center gap-2.5 transition-transform hover:scale-105"
+            className="flex items-center gap-2.5"
             title="Tarazu — AI Audit Assistant"
           >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-brand-700 to-brand-900 text-white shadow-md transition-all hover:shadow-lg hover:scale-110">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-brand-700 to-brand-900 text-white shadow-md">
               <Scale className="h-4.5 w-4.5" aria-hidden />
             </span>
-            {!collapsed && (
-              <span>
-                <span className="block text-base font-bold leading-tight tracking-tight text-brand-950">
-                  Tarazu
-                </span>
-                <span className="block text-[10px] leading-tight text-ink-400">
-                  AI Audit Assistant
-                </span>
+            <span className={cn("min-w-0", collapsed && "md:hidden")}>
+              <span className="block text-base font-bold leading-tight tracking-tight text-brand-950">
+                Tarazu
               </span>
-            )}
+              <span className="block text-[10px] leading-tight text-ink-400">
+                AI Audit Assistant
+              </span>
+            </span>
           </Link>
         </div>
 
-        {/* Navigation */}
-        <nav className={cn("mt-1 flex flex-col gap-1 transition-all duration-300", collapsed ? "px-2" : "px-3")}>
+        {/* Navigation. It scrolls on its own so a short window never squeezes
+            the rows or pushes the account menu out of reach. */}
+        <nav
+          className={cn(
+            "flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 pb-2",
+            collapsed && "md:px-2",
+          )}
+        >
           {navItems.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
@@ -190,35 +205,49 @@ export function Sidebar() {
                 key={href}
                 href={href}
                 title={collapsed ? label : undefined}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "group flex items-center gap-2.5 rounded-lg py-2.5 text-sm font-medium transition-all duration-200",
-                  collapsed ? "justify-center px-0" : "px-3",
+                  "flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150",
+                  collapsed && "md:justify-center md:gap-0 md:px-0",
                   active
                     ? "bg-gradient-to-r from-brand-700 to-brand-800 text-white shadow-md"
                     : "text-ink-600 hover:bg-slate-100 hover:text-brand-700",
-                  "hover-lift"
                 )}
               >
-                <Icon className={cn(
-                  "h-5 w-5 shrink-0 transition-all",
-                  active ? "scale-110" : "group-hover:scale-110"
-                )} aria-hidden />
-                {!collapsed && (
-                  <span className="flex-1">{label}</span>
-                )}
+                <Icon className="h-5 w-5 shrink-0" aria-hidden />
+                <span className={cn("min-w-0 flex-1 truncate", collapsed && "md:hidden")}>
+                  {label}
+                </span>
               </Link>
             );
           })}
         </nav>
 
-        {/* Profile Menu */}
-        <div className={cn(
-          "mt-auto border-t border-slate-100 pb-3 pt-2 transition-all duration-300",
-          collapsed ? "px-2" : "px-3"
-        )}>
+        {/* Account */}
+        <div
+          className={cn(
+            "shrink-0 border-t border-slate-100 px-3 pb-3 pt-2",
+            collapsed && "md:px-2",
+          )}
+        >
           <ProfileMenu collapsed={collapsed} />
         </div>
       </aside>
+
+      {/* Drawer handle — mobile only. */}
+      <button
+        type="button"
+        onClick={() => setMobileOpen((current) => !current)}
+        aria-label={mobileOpen ? "Close menu" : "Open menu"}
+        aria-expanded={mobileOpen}
+        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-brand-800 text-white shadow-lg transition-colors hover:bg-brand-900 md:hidden"
+      >
+        {mobileOpen ? (
+          <X className="h-6 w-6" aria-hidden />
+        ) : (
+          <Menu className="h-6 w-6" aria-hidden />
+        )}
+      </button>
     </>
   );
 }

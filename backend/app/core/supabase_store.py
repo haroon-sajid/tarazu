@@ -27,19 +27,30 @@ from app.core.repository import CaseDocument, StoredDocument
 from app.core.supabase_client import SupabaseRest
 from app.shared.schemas import (
     ApiKeyRecord,
+    AssistantLanguage,
     AuditRecord,
     BenfordResult,
     CaseRecord,
     CaseStatus,
+    Client,
+    ClientRuleConfig,
+    EvidenceRequest,
+    EvidenceRequestStatus,
     ExtractionResult,
+    JobKind,
+    JobRecord,
+    JobStatus,
     Organization,
     OrganizationMember,
     OrgInvitation,
+    OrgProfile,
     OrgRole,
     ReportRecord,
     ReviewItem,
     SalesAnalyticsResult,
+    SignOff,
     UserProfile,
+    ValueCorrection,
 )
 
 __all__ = ["SupabaseCaseRepository"]
@@ -109,6 +120,125 @@ class SupabaseCaseRepository:
                 {"org_id": f"eq.{org_id}", "order": "created_at.asc"},
             )
         ]
+
+    # -- organization profile ------------------------------------------------ #
+    # Table from infra/supabase/0007-clients-and-periods.sql.
+
+    def get_org_profile(self, org_id: str) -> OrgProfile | None:
+        rows = self._rest.select(
+            "org_profiles", {"org_id": f"eq.{org_id}", "limit": "1"}
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        return OrgProfile(
+            org_id=row["org_id"],
+            legal_name=row.get("legal_name"),
+            address=row.get("address"),
+            contact_email=row.get("contact_email"),
+            phone=row.get("phone"),
+            website=row.get("website"),
+            registration_number=row.get("registration_number"),
+            logo=row.get("logo"),
+            report_footer=row.get("report_footer"),
+            updated_at=row.get("updated_at"),
+        )
+
+    def save_org_profile(self, profile: OrgProfile) -> None:
+        self._rest.insert(
+            "org_profiles",
+            [
+                {
+                    "org_id": profile.org_id,
+                    "legal_name": profile.legal_name,
+                    "address": profile.address,
+                    "contact_email": profile.contact_email,
+                    "phone": profile.phone,
+                    "website": profile.website,
+                    "registration_number": profile.registration_number,
+                    "logo": profile.logo,
+                    "report_footer": profile.report_footer,
+                    "updated_at": _iso(profile.updated_at),
+                }
+            ],
+            upsert=True,
+        )
+
+    # -- clients (ADR 0005) -------------------------------------------------- #
+
+    def create_client(self, org_id: str, client: Client) -> None:
+        self._rest.insert("clients", [self._client_row(org_id, client)], upsert=True)
+
+    @staticmethod
+    def _client_row(org_id: str, client: Client) -> dict:
+        return {
+            "client_id": client.client_id,
+            "org_id": org_id,
+            "name": client.name,
+            "reference": client.reference,
+            # A JSON column in Postgres; PostgREST takes the object directly.
+            "rules": client.rules.model_dump(mode="json"),
+            "currency": client.currency,
+            "language": client.language.value,
+            "relationship_owner": client.relationship_owner,
+            "notes": client.notes,
+            "created_by": client.created_by,
+            "created_at": client.created_at.isoformat(),
+            "archived_at": _iso(client.archived_at),
+        }
+
+    def get_client(self, org_id: str, client_id: str) -> Client | None:
+        rows = self._rest.select(
+            "clients",
+            {"client_id": f"eq.{client_id}", "org_id": f"eq.{org_id}", "limit": "1"},
+        )
+        return self._client(rows[0]) if rows else None
+
+    def list_clients(self, org_id: str, include_archived: bool = False) -> list[Client]:
+        params = {"org_id": f"eq.{org_id}", "order": "created_at.desc"}
+        if not include_archived:
+            params["archived_at"] = "is.null"
+        return [self._client(row) for row in self._rest.select("clients", params)]
+
+    def update_client(self, org_id: str, client: Client) -> Client | None:
+        if self.get_client(org_id, client.client_id) is None:
+            return None
+        self._rest.insert("clients", [self._client_row(org_id, client)], upsert=True)
+        return self.get_client(org_id, client.client_id)
+
+    def set_client_archived(
+        self, org_id: str, client_id: str, archived_at: datetime | None
+    ) -> bool:
+        if self.get_client(org_id, client_id) is None:
+            return False
+        self._rest.update(
+            "clients",
+            {"client_id": f"eq.{client_id}", "org_id": f"eq.{org_id}"},
+            {"archived_at": _iso(archived_at)},
+        )
+        return True
+
+    @staticmethod
+    def _client(row: dict) -> Client:
+        rules = row.get("rules") or {}
+        return Client(
+            client_id=row["client_id"],
+            name=row["name"],
+            reference=row.get("reference"),
+            # A jsonb column comes back as a dict; a text one as a string.
+            rules=(
+                ClientRuleConfig.model_validate_json(rules)
+                if isinstance(rules, str)
+                else ClientRuleConfig.model_validate(rules)
+            ),
+            currency=row.get("currency") or "PKR",
+            language=AssistantLanguage(row.get("language") or "en"),
+            relationship_owner=row.get("relationship_owner"),
+            notes=row.get("notes"),
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+            archived_at=row.get("archived_at"),
+        )
 
     # -- invitations --------------------------------------------------------- #
     # Table from infra/supabase/0005-org-invitations.sql.
@@ -200,6 +330,7 @@ class SupabaseCaseRepository:
                     "case_id": case.case_id,
                     "org_id": org_id,
                     "client_name": case.client_name,
+                    "client_id": case.client_id,
                     "period_start": case.period_start.isoformat() if case.period_start else None,
                     "period_end": case.period_end.isoformat() if case.period_end else None,
                     "status": case.status.value,
@@ -214,12 +345,14 @@ class SupabaseCaseRepository:
         rows = self._rest.select(
             "cases", {"case_id": f"eq.{case_id}", "org_id": f"eq.{org_id}", "limit": "1"}
         )
-        if not rows:
-            return None
-        row = rows[0]
+        return self._case(rows[0]) if rows else None
+
+    @staticmethod
+    def _case(row: dict) -> CaseRecord:
         return CaseRecord(
             case_id=row["case_id"],
             client_name=row["client_name"],
+            client_id=row.get("client_id"),
             period_start=row.get("period_start"),
             period_end=row.get("period_end"),
             status=CaseStatus(row["status"]),
@@ -232,18 +365,22 @@ class SupabaseCaseRepository:
 
     def list_cases(self, org_id: str) -> list[CaseRecord]:
         return [
-            CaseRecord(
-                case_id=row["case_id"],
-                client_name=row["client_name"],
-                period_start=row.get("period_start"),
-                period_end=row.get("period_end"),
-                status=CaseStatus(row["status"]),
-                created_by=row["created_by"],
-                created_at=row["created_at"],
-                status_detail=None,
-            )
+            self._case(row)
             for row in self._rest.select(
                 "cases", {"org_id": f"eq.{org_id}", "order": "created_at.desc"}
+            )
+        ]
+
+    def list_cases_for_client(self, org_id: str, client_id: str) -> list[CaseRecord]:
+        return [
+            self._case(row)
+            for row in self._rest.select(
+                "cases",
+                {
+                    "org_id": f"eq.{org_id}",
+                    "client_id": f"eq.{client_id}",
+                    "order": "created_at.desc",
+                },
             )
         ]
 
@@ -278,6 +415,7 @@ class SupabaseCaseRepository:
         client_name: str,
         period_start: date | None,
         period_end: date | None,
+        client_id: str | None = None,
     ) -> CaseRecord | None:
         if self.get_case(org_id, case_id) is None:
             return None
@@ -286,6 +424,7 @@ class SupabaseCaseRepository:
             {"case_id": f"eq.{case_id}", "org_id": f"eq.{org_id}"},
             {
                 "client_name": client_name,
+                "client_id": client_id,
                 "period_start": period_start.isoformat() if period_start else None,
                 "period_end": period_end.isoformat() if period_end else None,
             },
@@ -302,6 +441,8 @@ class SupabaseCaseRepository:
         # class or in the database privileges.
         for table in (
             "flags",
+            "value_corrections",
+            "evidence_requests",
             "review_items",
             "extractions",
             "documents",
@@ -607,6 +748,240 @@ class SupabaseCaseRepository:
             flag_count=row["flag_count"],
             audit_record_count=row["audit_record_count"],
         )
+
+    # -- background jobs ---------------------------------------------------- #
+
+    def create_job(self, org_id: str, job: JobRecord) -> None:
+        self._rest.insert("jobs", [self._job_row(org_id, job)], upsert=True)
+
+    def update_job(self, org_id: str, job: JobRecord) -> None:
+        # Working state, not evidence: unlike the trail and the reports, a job
+        # row is meant to be rewritten as the work advances.
+        self._rest.insert("jobs", [self._job_row(org_id, job)], upsert=True)
+
+    @staticmethod
+    def _job_row(org_id: str, job: JobRecord) -> dict:
+        return {
+            "job_id": job.job_id,
+            "org_id": org_id,
+            "case_id": job.case_id,
+            "kind": job.kind.value,
+            "status": job.status.value,
+            "progress": job.progress,
+            "step": job.step,
+            "created_by": job.created_by,
+            "created_at": job.created_at.isoformat(),
+            "started_at": _iso(job.started_at),
+            "finished_at": _iso(job.finished_at),
+            "error": job.error,
+        }
+
+    def get_job(self, org_id: str, job_id: str) -> JobRecord | None:
+        rows = self._rest.select(
+            "jobs", {"job_id": f"eq.{job_id}", "org_id": f"eq.{org_id}", "limit": "1"}
+        )
+        return self._job(rows[0]) if rows else None
+
+    def latest_job_for_case(self, org_id: str, case_id: str) -> JobRecord | None:
+        rows = self._rest.select(
+            "jobs",
+            {
+                "org_id": f"eq.{org_id}",
+                "case_id": f"eq.{case_id}",
+                "order": "created_at.desc,job_id.desc",
+                "limit": "1",
+            },
+        )
+        return self._job(rows[0]) if rows else None
+
+    def list_jobs(
+        self, org_id: str, status: JobStatus | None = None, limit: int = 50
+    ) -> list[JobRecord]:
+        params = {
+            "org_id": f"eq.{org_id}",
+            "order": "created_at.desc,job_id.desc",
+            "limit": str(int(limit)),
+        }
+        if status is not None:
+            params["status"] = f"eq.{status.value}"
+        return [self._job(row) for row in self._rest.select("jobs", params)]
+
+    @staticmethod
+    def _job(row: dict) -> JobRecord:
+        return JobRecord(
+            job_id=row["job_id"],
+            case_id=row["case_id"],
+            kind=JobKind(row.get("kind") or "pipeline"),
+            status=JobStatus(row["status"]),
+            progress=row.get("progress") or 0,
+            step=row.get("step") or "Queued",
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+            started_at=row.get("started_at"),
+            finished_at=row.get("finished_at"),
+            error=row.get("error"),
+        )
+
+    # -- value corrections --------------------------------------------------- #
+
+    def save_correction(self, org_id: str, correction: ValueCorrection) -> None:
+        self._rest.insert(
+            "value_corrections",
+            [
+                {
+                    "correction_id": correction.correction_id,
+                    "org_id": org_id,
+                    "case_id": correction.case_id,
+                    "review_item_id": correction.review_item_id,
+                    "document_id": correction.document_id,
+                    "field": correction.field,
+                    "ai_value": correction.ai_value,
+                    "corrected_value": correction.corrected_value,
+                    "note": correction.note,
+                    "corrected_by": correction.corrected_by,
+                    "corrected_at": correction.corrected_at.isoformat(),
+                }
+            ],
+            upsert=True,
+        )
+
+    def list_corrections(self, org_id: str, case_id: str) -> list[ValueCorrection]:
+        return [
+            ValueCorrection(
+                correction_id=row["correction_id"],
+                case_id=row["case_id"],
+                review_item_id=row["review_item_id"],
+                document_id=row["document_id"],
+                field=row["field"],
+                ai_value=row.get("ai_value"),
+                corrected_value=row["corrected_value"],
+                note=row.get("note"),
+                corrected_by=row["corrected_by"],
+                corrected_at=row["corrected_at"],
+            )
+            for row in self._rest.select(
+                "value_corrections",
+                {
+                    "org_id": f"eq.{org_id}",
+                    "case_id": f"eq.{case_id}",
+                    "order": "corrected_at.asc,correction_id.asc",
+                },
+            )
+        ]
+
+    # -- evidence requests --------------------------------------------------- #
+
+    def save_evidence_request(self, org_id: str, request: EvidenceRequest) -> None:
+        self._rest.insert(
+            "evidence_requests",
+            [
+                {
+                    "request_id": request.request_id,
+                    "org_id": org_id,
+                    "case_id": request.case_id,
+                    "review_item_id": request.review_item_id,
+                    "title": request.title,
+                    "detail": request.detail,
+                    "status": request.status.value,
+                    "due_date": request.due_date.isoformat() if request.due_date else None,
+                    "requested_by": request.requested_by,
+                    "requested_at": request.requested_at.isoformat(),
+                    "response_note": request.response_note,
+                    "responded_by": request.responded_by,
+                    "responded_at": _iso(request.responded_at),
+                    "cancellation_note": request.cancellation_note,
+                    "closed_by": request.closed_by,
+                    "closed_at": _iso(request.closed_at),
+                }
+            ],
+            upsert=True,
+        )
+
+    def get_evidence_request(
+        self, org_id: str, request_id: str
+    ) -> EvidenceRequest | None:
+        rows = self._rest.select(
+            "evidence_requests",
+            {"request_id": f"eq.{request_id}", "org_id": f"eq.{org_id}", "limit": "1"},
+        )
+        return self._evidence_request(rows[0]) if rows else None
+
+    def list_evidence_requests(self, org_id: str, case_id: str) -> list[EvidenceRequest]:
+        return [
+            self._evidence_request(row)
+            for row in self._rest.select(
+                "evidence_requests",
+                {
+                    "org_id": f"eq.{org_id}",
+                    "case_id": f"eq.{case_id}",
+                    "order": "requested_at.desc,request_id.desc",
+                },
+            )
+        ]
+
+    @staticmethod
+    def _evidence_request(row: dict) -> EvidenceRequest:
+        return EvidenceRequest(
+            request_id=row["request_id"],
+            case_id=row["case_id"],
+            review_item_id=row.get("review_item_id"),
+            title=row["title"],
+            detail=row.get("detail"),
+            status=EvidenceRequestStatus(row["status"]),
+            due_date=row.get("due_date"),
+            requested_by=row["requested_by"],
+            requested_at=row["requested_at"],
+            response_note=row.get("response_note"),
+            responded_by=row.get("responded_by"),
+            responded_at=row.get("responded_at"),
+            cancellation_note=row.get("cancellation_note"),
+            closed_by=row.get("closed_by"),
+            closed_at=row.get("closed_at"),
+        )
+
+    # -- sign-offs ------------------------------------------------------------ #
+
+    def save_sign_off(self, org_id: str, sign_off: SignOff) -> None:
+        # A plain insert, never an upsert: the table is append-only in the
+        # database, and a duplicate id is an error rather than a rewrite.
+        self._rest.insert(
+            "sign_offs",
+            [
+                {
+                    "sign_off_id": sign_off.sign_off_id,
+                    "org_id": org_id,
+                    "case_id": sign_off.case_id,
+                    "signed_by": sign_off.signed_by,
+                    "signed_at": sign_off.signed_at.isoformat(),
+                    "note": sign_off.note,
+                    "item_count": sign_off.item_count,
+                    "approved_count": sign_off.approved_count,
+                    "rejected_count": sign_off.rejected_count,
+                }
+            ],
+        )
+
+    def list_sign_offs(self, org_id: str, case_id: str) -> list[SignOff]:
+        return [
+            SignOff(
+                sign_off_id=row["sign_off_id"],
+                case_id=row["case_id"],
+                signed_by=row["signed_by"],
+                signed_at=row["signed_at"],
+                note=row.get("note"),
+                item_count=row["item_count"],
+                approved_count=row["approved_count"],
+                rejected_count=row["rejected_count"],
+            )
+            for row in self._rest.select(
+                "sign_offs",
+                {
+                    "org_id": f"eq.{org_id}",
+                    "case_id": f"eq.{case_id}",
+                    "order": "signed_at.desc,sign_off_id.desc",
+                },
+            )
+        ]
 
     # -- api keys ----------------------------------------------------------- #
 

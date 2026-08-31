@@ -133,11 +133,16 @@ export function ProfileMenu({ collapsed = false }: { collapsed?: boolean }) {
   const close = () => setOpen(false);
 
   const panel = (
-    // Beside the rail, bottom-aligned with the trigger, at the sidebar's
-    // expanded width — an extension of the sidebar, not a floating window.
+    // On desktop: beside the rail, bottom-aligned with the trigger, at the
+    // sidebar's expanded width — an extension of the sidebar, not a floating
+    // window. In the mobile drawer there is no room beside it, so it opens
+    // above the trigger at the drawer's own width instead of off-screen.
     <div
       role="menu"
-      className="absolute bottom-0 left-full z-50 ml-3 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-xl"
+      className={cn(
+        "absolute bottom-full left-0 z-50 mb-2 w-full rounded-xl border border-slate-200 bg-white p-2 shadow-xl",
+        "md:bottom-0 md:left-full md:mb-0 md:ml-3 md:w-56",
+      )}
     >
       {/* One rich row is the whole identity block: it IS the "Your profile"
           entry, so nothing above it repeats what the trigger already shows. */}
@@ -206,8 +211,10 @@ export function ProfileMenu({ collapsed = false }: { collapsed?: boolean }) {
         aria-expanded={open}
         title={collapsed ? displayName : undefined}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-md py-2 transition-colors hover:bg-slate-100",
-          collapsed ? "justify-center px-0" : "px-2",
+          "flex w-full items-center gap-2.5 rounded-md px-2 py-2 transition-colors hover:bg-slate-100",
+          // `collapsed` is a desktop rail state: the mobile drawer always
+          // shows the full row, so every collapsed rule is md:-scoped.
+          collapsed && "md:justify-center md:gap-0 md:px-0",
           open && "bg-slate-100",
         )}
       >
@@ -216,19 +223,16 @@ export function ProfileMenu({ collapsed = false }: { collapsed?: boolean }) {
           initial={initial}
           className="h-8 w-8 shrink-0 text-sm"
         />
-        {!collapsed && (
-          <>
-            <span className="min-w-0 flex-1 text-left">
-              <span className="block truncate text-sm font-medium text-ink-900">
-                {displayName}
-              </span>
-              <span className="block truncate text-[10px] text-ink-400">
-                {session.email}
-              </span>
-            </span>
-            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden />
-          </>
-        )}
+        <span className={cn("min-w-0 flex-1 text-left", collapsed && "md:hidden")}>
+          <span className="block truncate text-sm font-medium text-ink-900">
+            {displayName}
+          </span>
+          <span className="block truncate text-[10px] text-ink-400">{session.email}</span>
+        </span>
+        <ChevronsUpDown
+          className={cn("h-3.5 w-3.5 shrink-0 text-ink-400", collapsed && "md:hidden")}
+          aria-hidden
+        />
       </button>
     </div>
   );

@@ -47,6 +47,7 @@ def _summary(repository: CaseRepository, org_id: str, case: CaseRecord) -> CaseS
     return CaseSummary(
         case_id=case.case_id,
         client_name=case.client_name,
+        client_id=case.client_id,
         period_start=case.period_start,
         period_end=case.period_end,
         status=case.status,
@@ -128,12 +129,30 @@ async def update_case(
             detail="The period cannot end before it starts.",
         )
 
+    # Attaching a period to a client, or detaching it with an explicit null.
+    # The client is checked inside this organization first: a case pointing at
+    # another firm's client would put that firm's name on this firm's report.
+    client_id = case.client_id
+    if "client_id" in provided:
+        client_id = body.client_id
+        if client_id:
+            client = repository.get_client(principal.org_id, client_id)
+            if client is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"No client with id {client_id!r}.",
+                )
+            # A period belongs to the business its client record names; letting
+            # the two disagree would show one business under two names.
+            client_name = client.name
+
     updated = repository.update_case(
         principal.org_id,
         case_id,
         client_name=client_name,
         period_start=period_start,
         period_end=period_end,
+        client_id=client_id,
     )
     if updated is None:  # pragma: no cover - the read above just found it
         raise HTTPException(
@@ -144,6 +163,10 @@ async def update_case(
     changes: list[str] = []
     if client_name != case.client_name:
         changes.append(f"client renamed from {case.client_name!r} to {client_name!r}")
+    if client_id != case.client_id:
+        changes.append(
+            f"attached to client {client_id}" if client_id else "detached from its client"
+        )
     if period_start != case.period_start:
         changes.append(
             f"period start set to {period_start.isoformat()}"

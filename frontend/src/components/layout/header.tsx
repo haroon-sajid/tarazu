@@ -13,7 +13,10 @@ const STATUS_DOT: Record<CaseStatus, string> = {
   uploaded: "bg-slate-400",
   extracting: "bg-sky-500 animate-pulse",
   awaiting_matching: "bg-amber-500 animate-pulse",
+  matching: "bg-sky-500 animate-pulse",
   ready_for_review: "bg-emerald-500",
+  approved: "bg-brand-600",
+  reported: "bg-brand-800",
   failed: "bg-rose-500",
 };
 
@@ -109,8 +112,12 @@ export function Header() {
   };
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 px-6 backdrop-blur-sm transition-all duration-300">
-      <div className="flex min-w-0 items-center gap-3">
+    // `relative z-30`: the backdrop blur makes the header its own stacking
+    // context, and `main` (contain: paint, later in the DOM) is another one.
+    // Without a positive z-index here the case switcher would paint *under*
+    // the page content no matter how high its own z-index is.
+    <header className="relative z-30 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 px-4 backdrop-blur-sm sm:px-6">
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         {active && cases && cases.length > 0 && (
           <>
             <span className="hidden text-xs font-medium text-ink-400 sm:inline">Case:</span>
@@ -121,14 +128,28 @@ export function Header() {
                 title="Switch case"
                 aria-haspopup="listbox"
                 aria-expanded={open}
-                className="hover-lift flex items-center gap-1.5 rounded-lg border border-slate-200 bg-linear-to-b from-slate-50 to-white px-3 py-1.5 text-sm font-medium text-ink-900 transition-all hover:border-brand-600 hover:text-brand-900"
+                aria-controls="case-switcher-listbox"
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg border bg-linear-to-b from-slate-50 to-white px-3 py-1.5 text-sm font-medium transition-colors",
+                  open
+                    ? "border-brand-600 text-brand-900"
+                    : "border-slate-200 text-ink-900 hover:border-brand-600 hover:text-brand-900",
+                )}
               >
-                <span className="max-w-56 truncate">{active.client_name}</span>
+                <span className="max-w-[46vw] truncate sm:max-w-56">{active.client_name}</span>
                 <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden />
               </button>
               {open && (
-                <div className="absolute left-0 top-full z-40 mt-1.5 w-80 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-                  <div className="max-h-80 overflow-y-auto p-1" role="listbox" aria-label="Cases">
+                <div className="absolute left-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+                  <p className="px-3 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                    Switch case
+                  </p>
+                  <div
+                    id="case-switcher-listbox"
+                    className="max-h-80 overflow-y-auto p-2 pt-0"
+                    role="listbox"
+                    aria-label="Cases"
+                  >
                     {cases.map((caseSummary) => {
                       const isActive = caseSummary.case_id === active.case_id;
                       return (
@@ -139,8 +160,8 @@ export function Header() {
                           aria-selected={isActive}
                           onClick={() => select(caseSummary)}
                           className={cn(
-                            "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors",
-                            isActive ? "bg-brand-50" : "hover:bg-slate-50",
+                            "flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left transition-colors",
+                            isActive ? "bg-brand-50" : "hover:bg-slate-100",
                           )}
                         >
                           <span
@@ -171,11 +192,11 @@ export function Header() {
                       );
                     })}
                   </div>
-                  <div className="border-t border-slate-100 p-1">
+                  <div className="border-t border-slate-100 p-2">
                     <Link
                       href="/cases"
                       onClick={() => setOpen(false)}
-                      className="flex items-center gap-2 rounded-md px-2.5 py-2 text-xs text-ink-600 transition-colors hover:bg-slate-50 hover:text-ink-900"
+                      className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-ink-600 transition-colors hover:bg-slate-100 hover:text-ink-900"
                     >
                       <FolderOpen className="h-3.5 w-3.5" aria-hidden />
                       Manage cases — rename, delete, or open
@@ -188,7 +209,7 @@ export function Header() {
         )}
         {FIXTURE_MODE && (
           <span
-            className="animate-glow-pulse rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-sky-700 ring-1 ring-sky-200 whitespace-nowrap"
+            className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-sky-700 ring-1 ring-sky-200 whitespace-nowrap"
             title="NEXT_PUBLIC_TARAZU_API_URL is unset, so data comes from sample fixtures"
           >
             FIXTURE DATA

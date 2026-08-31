@@ -50,18 +50,25 @@ __all__ = [
     "BoundingBox",
     "CaseRecord",
     "CaseStatus",
+    "Client",
+    "ClientRuleConfig",
     "Confidence",
     "ConfidenceBreakdown",
     "CustomerSummary",
     "DashboardSummary",
     "DecisionBreakdown",
     "DocumentType",
+    "EvidenceRequest",
+    "EvidenceRequestStatus",
     "ExtractedField",
     "ExtractedRow",
     "ExtractionResult",
     "FieldDisagreement",
     "Flag",
     "Invoice",
+    "JobKind",
+    "JobRecord",
+    "JobStatus",
     "LedgerEntry",
     "MatchResult",
     "MONETARY_FIELD_NAMES",
@@ -69,6 +76,7 @@ __all__ = [
     "MatchStrength",
     "MonthlyRevenue",
     "NextBestAction",
+    "OrgProfile",
     "OrgRole",
     "Organization",
     "OrganizationMember",
@@ -86,8 +94,10 @@ __all__ = [
     "SecondOpinion",
     "SeverityBreakdown",
     "Severity",
+    "SignOff",
     "StatusBreakdown",
     "UserProfile",
+    "ValueCorrection",
     "VerificationOutcome",
 ]
 
@@ -167,7 +177,13 @@ class ActorType(str, Enum):
 
 
 class CaseStatus(str, Enum):
-    """Where a case is in the pipeline."""
+    """Where a case — a client's period, per ADR 0005 — is in its life.
+
+    The pipeline drives the first half (`uploaded → extracting → matching →
+    ready_for_review`); people drive the second (`approved` once every item
+    carries a decision, `reported` once a report has been generated). A case
+    that fails at any point is `failed` with the reason on `status_detail`.
+    """
 
     UPLOADED = "uploaded"
     EXTRACTING = "extracting"
@@ -175,7 +191,14 @@ class CaseStatus(str, Enum):
     #: parked here; the pipeline no longer produces it, and the value stays so
     #: those rows still read. Re-upload such a case to process it.
     AWAITING_MATCHING = "awaiting_matching"
+    #: The deterministic steps are running. Set by the background job runner
+    #: between extraction and the assembled queue.
+    MATCHING = "matching"
     READY_FOR_REVIEW = "ready_for_review"
+    #: Every review item carries an explicit human decision.
+    APPROVED = "approved"
+    #: A report has been generated for the case.
+    REPORTED = "reported"
     FAILED = "failed"
 
 
@@ -195,6 +218,31 @@ class AuditAction(str, Enum):
     ITEM_APPROVED = "item_approved"
     ITEM_REJECTED = "item_rejected"
     REPORT_GENERATED = "report_generated"
+    #: A person corrected a value the model misread. Both readings are kept —
+    #: the correction records what the AI said and what the human says.
+    VALUE_CORRECTED = "value_corrected"
+    #: The engagement was signed off by a second person (maker-checker).
+    CASE_SIGNED_OFF = "case_signed_off"
+    #: An auditor asked the client for a missing document or an explanation.
+    EVIDENCE_REQUESTED = "evidence_requested"
+    #: The client (or the auditor on their behalf) answered an evidence request.
+    EVIDENCE_ANSWERED = "evidence_answered"
+    #: The auditor closed an evidence request.
+    EVIDENCE_RESOLVED = "evidence_resolved"
+    #: The auditor withdrew an evidence request without a response.
+    EVIDENCE_CANCELLED = "evidence_cancelled"
+    #: A client record was created, edited, or archived. `detail` says what.
+    CLIENT_CREATED = "client_created"
+    CLIENT_UPDATED = "client_updated"
+    CLIENT_ARCHIVED = "client_archived"
+    #: Processing was queued as a background job rather than run in the request.
+    JOB_QUEUED = "job_queued"
+    #: A background job ended without finishing its work.
+    JOB_FAILED = "job_failed"
+    #: A deterministic sample was drawn from the population for testing.
+    SAMPLE_DRAWN = "sample_drawn"
+    #: The full evidence bundle (documents, report, trail, manifest) was exported.
+    BUNDLE_EXPORTED = "bundle_exported"
     #: A person asked the assistant something. `detail` carries the question.
     ASSISTANT_QUESTION_ASKED = "assistant_question_asked"
     #: The assistant answered. `actor_id` names what composed the answer —
@@ -997,13 +1045,22 @@ class AssistantAnswer(TarazuModel):
 class OrgRole(str, Enum):
     """What a member may do inside their own organization.
 
-    Both roles see and decide on the same cases; `OWNER` is the identity that
-    created the organization and the one a future member-management screen will
-    check. Neither role reaches across an organization boundary.
+    `OWNER` created the organization; `MEMBER` is an auditor at the firm. Both
+    see and decide on the same cases. `VIEWER` is the read-only role from ADR
+    0005 — the audited business's own owner, invited to watch their engagement
+    without being able to decide anything. No role reaches across an
+    organization boundary.
     """
 
     OWNER = "owner"
     MEMBER = "member"
+    #: Read-only. Never approves, rejects, uploads, or corrects (rule 1).
+    VIEWER = "viewer"
+
+    @property
+    def can_decide(self) -> bool:
+        """Whether this role may record a decision or change data."""
+        return self is not OrgRole.VIEWER
 
 
 class Organization(TarazuModel):
@@ -1156,15 +1213,315 @@ class UserProfile(TarazuModel):
 
 
 # --------------------------------------------------------------------------- #
+# Clients and periods (ADR 0005)
+#
+# A firm audits many clients; each client is audited every month or quarter.
+# The `cases` row is the period — `case_id` stays its identity so nothing that
+# references it moves — and a case with no `client_id` is a one-off engagement,
+# which stays valid.
+# --------------------------------------------------------------------------- #
+
+
+class ClientRuleConfig(TarazuModel):
+    """One client's own red-flag thresholds.
+
+    The same keys `modules/rules/` already accepts, carried on the client row
+    instead of the environment — the change ADR 0005 anticipated. A firm that
+    audits a corner shop and a textile mill needs different approval limits for
+    each, and "the rules are ours" is what makes this the firm's tool.
+
+    `require_sign_off` is the maker-checker switch: with it on, a report cannot
+    be generated until somebody other than the person who decided the items has
+    signed the engagement off. It only ever adds a gate; nothing here can
+    approve anything (rule 1).
+    """
+
+    approval_limits: list[int] = Field(
+        default_factory=lambda: [50_000, 100_000, 500_000], max_length=12
+    )
+    round_number_floor: int = Field(default=10_000, ge=0)
+    date_tolerance_days: int = Field(default=3, ge=0, le=60)
+    duplicate_window_days: int = Field(default=3, ge=0, le=180)
+    near_limit_tolerance: float = Field(default=0.02, ge=0.0, le=0.5)
+    require_sign_off: bool = False
+
+    @field_validator("approval_limits")
+    @classmethod
+    def _limits_are_positive_and_sorted(cls, value: list[int]) -> list[int]:
+        if any(limit <= 0 for limit in value):
+            raise ValueError("approval limits must be positive")
+        return sorted(set(value))
+
+    def to_rules_config(self) -> dict:
+        """The dictionary `rules.evaluate_flags` takes. Sign-off is not a rule."""
+        return {
+            "approval_limits": list(self.approval_limits),
+            "round_number_floor": self.round_number_floor,
+            "date_tolerance_days": self.date_tolerance_days,
+            "duplicate_window_days": self.duplicate_window_days,
+            "near_limit_tolerance": self.near_limit_tolerance,
+        }
+
+
+class Client(TarazuModel):
+    """A business the firm audits, across many periods.
+
+    Adding a client once and running a period every cycle is what makes this
+    recurring work rather than a one-off tool. The client carries the settings
+    that roll forward: its rule thresholds, its currency, and the language its
+    owner reads.
+    """
+
+    client_id: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=200)
+    #: The firm's own reference for this client, if it has one.
+    reference: str | None = Field(default=None, max_length=60)
+    rules: ClientRuleConfig = Field(default_factory=ClientRuleConfig)
+    currency: Currency = "PKR"
+    #: The language the business owner's summary is written in: "en" or "ur".
+    language: AssistantLanguage = AssistantLanguage.ENGLISH
+    #: The auditor at the firm who owns this relationship.
+    relationship_owner: str | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+    created_by: str = Field(min_length=1)
+    created_at: datetime
+    #: Set when the client is archived. Archived clients keep their history and
+    #: stop appearing in the pickers; nothing is ever deleted underneath them.
+    archived_at: datetime | None = None
+
+    @property
+    def is_active(self) -> bool:
+        return self.archived_at is None
+
+
+# --------------------------------------------------------------------------- #
+# Background jobs
+#
+# Extraction over a real bank statement takes tens of seconds. A request should
+# not, so the pipeline runs as a job and the upload route answers immediately
+# with something to poll.
+# --------------------------------------------------------------------------- #
+
+
+class JobStatus(str, Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+    @property
+    def is_terminal(self) -> bool:
+        return self in (JobStatus.SUCCEEDED, JobStatus.FAILED)
+
+
+class JobKind(str, Enum):
+    #: Upload → extract → match → flag → assemble the review queue.
+    PIPELINE = "pipeline"
+
+
+class JobRecord(TarazuModel):
+    """One unit of background work, and how far it has got.
+
+    `progress` and `step` exist so the upload screen can say what is happening
+    rather than spin. They are presentation: no decision, number, or flag is
+    ever read from this row — those come from the persisted results the job
+    produced, exactly as when the pipeline ran inside the request.
+    """
+
+    job_id: str = Field(min_length=1)
+    case_id: str = Field(min_length=1)
+    kind: JobKind = JobKind.PIPELINE
+    status: JobStatus = JobStatus.QUEUED
+    progress: int = Field(default=0, ge=0, le=100)
+    #: A short human-readable stage name: "Extracting invoices", "Matching".
+    step: str = Field(default="Queued", min_length=1)
+    created_by: str = Field(min_length=1)
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    #: Set only when `status` is `failed`. The same text the case carries.
+    error: str | None = None
+
+    @model_validator(mode="after")
+    def _failure_says_why(self) -> JobRecord:
+        if self.status is JobStatus.FAILED and not self.error:
+            raise ValueError("a failed job must record why it failed")
+        if self.status is not JobStatus.FAILED and self.error:
+            raise ValueError("only a failed job may carry an error")
+        return self
+
+
+# --------------------------------------------------------------------------- #
+# Corrections
+# --------------------------------------------------------------------------- #
+
+
+class ValueCorrection(TarazuModel):
+    """A human's correction of a value the model misread.
+
+    **Both readings are kept.** The point is not to overwrite the AI — it is to
+    record that it read `49,500` where the statement says `49,900`, and who
+    says so. That is evidence about the extraction, which is exactly what
+    Tarazu is for; it is not data entry, because the client's books are not
+    being written here (ADR 0004).
+
+    A correction never re-runs matching on its own. Changing a figure changes
+    arithmetic, and arithmetic is deterministic code run over a whole case —
+    so the correction is recorded, shown beside the original, and carried into
+    the report, while re-processing stays an explicit act.
+    """
+
+    correction_id: str = Field(min_length=1)
+    case_id: str = Field(min_length=1)
+    review_item_id: str = Field(min_length=1)
+    #: Which document the misread value came from, so the trail points at it.
+    document_id: str = Field(min_length=1)
+    #: The field as extraction named it: "amount", "invoice_number", "date".
+    field: str = Field(min_length=1, max_length=80)
+    #: What the model read. Null when it read nothing at all (`unreadable`).
+    ai_value: str | None = Field(default=None, max_length=500)
+    #: What the human says it actually is. Required — a correction that
+    #: corrects to nothing is a rejection, and that is a different act.
+    corrected_value: str = Field(min_length=1, max_length=500)
+    note: str | None = Field(default=None, max_length=1000)
+    corrected_by: str = Field(min_length=1)
+    corrected_at: datetime
+
+    @model_validator(mode="after")
+    def _correction_changes_something(self) -> ValueCorrection:
+        if self.ai_value is not None and self.ai_value == self.corrected_value:
+            raise ValueError(
+                "the corrected value is identical to what the model read; "
+                "there is nothing to correct"
+            )
+        return self
+
+
+# --------------------------------------------------------------------------- #
+# Evidence requests
+#
+# "Ask the client for invoice #43." The workflow a firm actually lives in,
+# kept inside the audit trail rather than in somebody's inbox.
+# --------------------------------------------------------------------------- #
+
+
+class EvidenceRequestStatus(str, Enum):
+    OPEN = "open"
+    #: The client (or the auditor on their behalf) has responded.
+    ANSWERED = "answered"
+    #: The auditor is satisfied and closed it.
+    RESOLVED = "resolved"
+    CANCELLED = "cancelled"
+
+    @property
+    def is_closed(self) -> bool:
+        return self in (EvidenceRequestStatus.RESOLVED, EvidenceRequestStatus.CANCELLED)
+
+
+class EvidenceRequest(TarazuModel):
+    """One outstanding ask of the client, tied to the item that raised it."""
+
+    request_id: str = Field(min_length=1)
+    case_id: str = Field(min_length=1)
+    #: The review item this is about, when it came from one.
+    review_item_id: str | None = None
+    title: str = Field(min_length=1, max_length=200)
+    detail: str | None = Field(default=None, max_length=2000)
+    status: EvidenceRequestStatus = EvidenceRequestStatus.OPEN
+    due_date: Date | None = None
+    requested_by: str = Field(min_length=1)
+    requested_at: datetime
+    response_note: str | None = Field(default=None, max_length=2000)
+    responded_by: str | None = None
+    responded_at: datetime | None = None
+    #: Why the auditor withdrew the ask without a response, when they did.
+    cancellation_note: str | None = Field(default=None, max_length=2000)
+    closed_by: str | None = None
+    closed_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def _states_are_complete(self) -> EvidenceRequest:
+        if self.status is EvidenceRequestStatus.ANSWERED and self.responded_at is None:
+            raise ValueError("an answered request must record when it was answered")
+        if self.status.is_closed and self.closed_at is None:
+            raise ValueError(
+                f"a {self.status.value} request must record when it was closed"
+            )
+        return self
+
+
+# --------------------------------------------------------------------------- #
+# Sign-off (maker-checker)
+# --------------------------------------------------------------------------- #
+
+
+class SignOff(TarazuModel):
+    """A second person's sign-off on a finished engagement.
+
+    The four-eyes principle: whoever decided the items is not who signs the
+    engagement off. This is a stricter gate, never a looser one — it cannot
+    approve an item, and a case with pending items cannot be signed off at all.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    sign_off_id: str = Field(min_length=1)
+    case_id: str = Field(min_length=1)
+    signed_by: str = Field(min_length=1)
+    signed_at: datetime
+    note: str | None = Field(default=None, max_length=1000)
+    #: Counts at the moment of signing, so the record reads on its own.
+    item_count: int = Field(ge=0)
+    approved_count: int = Field(ge=0)
+    rejected_count: int = Field(ge=0)
+
+
+# --------------------------------------------------------------------------- #
+# Organization profile (report branding)
+# --------------------------------------------------------------------------- #
+
+
+class OrgProfile(TarazuModel):
+    """The firm's own details, printed on every report it delivers.
+
+    Presentation only: nothing here is an authorization input, and nothing here
+    changes a number. `logo` is a size-capped `data:image/...` URL so branding
+    needs no file storage, exactly like a user's avatar.
+    """
+
+    org_id: str = Field(min_length=1)
+    legal_name: str | None = Field(default=None, max_length=200)
+    address: str | None = Field(default=None, max_length=400)
+    contact_email: str | None = Field(default=None, max_length=200)
+    phone: str | None = Field(default=None, max_length=40)
+    website: str | None = Field(default=None, max_length=200)
+    #: Practising licence / institute registration, printed under the firm name.
+    registration_number: str | None = Field(default=None, max_length=80)
+    logo: str | None = None
+    #: A line printed at the foot of every report page.
+    report_footer: str | None = Field(default=None, max_length=300)
+    updated_at: datetime | None = None
+
+
+# --------------------------------------------------------------------------- #
 # Dashboard
 # --------------------------------------------------------------------------- #
 
 
 class CaseRecord(TarazuModel):
-    """One audit engagement: the documents, results, and decisions for a client."""
+    """One audit engagement: the documents, results, and decisions for a client.
+
+    Per ADR 0005 this row is also the *period*: `client_id` names the recurring
+    client it belongs to and the period is the span between `period_start` and
+    `period_end`. Both are optional — a case with neither is a one-off
+    engagement, which stays valid and is what every case created before Phase 1
+    is.
+    """
 
     case_id: str = Field(min_length=1)
     client_name: str = Field(min_length=1)
+    #: The recurring client (ADR 0005). Null for a one-off engagement.
+    client_id: str | None = None
     period_start: Date | None = None
     period_end: Date | None = None
     status: CaseStatus = CaseStatus.UPLOADED

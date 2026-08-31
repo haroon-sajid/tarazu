@@ -37,25 +37,37 @@ from app.core.config import DEFAULT_ORG_ID
 from app.core.repository import CaseDocument, StoredDocument
 from app.shared.schemas import (
     ApiKeyRecord,
+    AssistantLanguage,
     AuditRecord,
     BenfordResult,
     CaseRecord,
     CaseStatus,
+    Client,
+    ClientRuleConfig,
+    EvidenceRequest,
+    EvidenceRequestStatus,
     ExtractionResult,
+    JobKind,
+    JobRecord,
+    JobStatus,
     OrganizationMember,
     Organization,
     OrgInvitation,
+    OrgProfile,
     OrgRole,
     ReportRecord,
     ReviewItem,
     SalesAnalyticsResult,
+    SignOff,
     UserProfile,
+    ValueCorrection,
 )
 
 __all__ = [
     "AuditTrailImmutable",
     "LocalDocumentStore",
     "ReportImmutable",
+    "SignOffImmutable",
     "SqliteCaseRepository",
     "hash_password",
     "verify_password_hash",
@@ -68,6 +80,10 @@ class AuditTrailImmutable(RuntimeError):
 
 class ReportImmutable(RuntimeError):
     """Something tried to change or remove a generated report's record. Refused."""
+
+
+class SignOffImmutable(RuntimeError):
+    """Something tried to change or remove a sign-off. It was refused."""
 
 
 #: Every tenant-owned table, and the audit trail. Used by the migration below.
@@ -159,10 +175,30 @@ create table if not exists user_profiles (
 
 
 SCHEMA = """
+-- A recurring client of the firm (ADR 0005). Periods point at it; archiving
+-- one keeps every period, decision, report, and trail entry behind it.
+create table if not exists clients (
+  client_id          text primary key,
+  org_id             text not null,
+  name               text not null,
+  reference          text,
+  rules              text not null,
+  currency           text not null default 'PKR',
+  language           text not null default 'en',
+  relationship_owner text,
+  notes              text,
+  created_by         text not null,
+  created_at         text not null,
+  archived_at        text
+);
+
+create index if not exists clients_org_idx on clients (org_id, created_at);
+
 create table if not exists cases (
   case_id       text primary key,
   org_id        text not null,
   client_name   text not null,
+  client_id     text,
   period_start  text,
   period_end    text,
   status        text not null default 'uploaded',
@@ -170,6 +206,8 @@ create table if not exists cases (
   created_by    text not null,
   created_at    text not null
 );
+
+create index if not exists cases_client_idx on cases (org_id, client_id, created_at);
 
 create table if not exists documents (
   document_id   text primary key,
@@ -314,6 +352,114 @@ begin
   select raise(abort, 'reports are append-only: DELETE is not permitted');
 end;
 
+-- Background jobs. Working state, not evidence: these rows are updated as a
+-- job progresses, and what actually happened is in the audit trail regardless
+-- of what this table ends up saying. No foreign key to `cases`, so a job row
+-- survives a case being deleted mid-flight.
+create table if not exists jobs (
+  job_id      text primary key,
+  org_id      text not null,
+  case_id     text not null,
+  kind        text not null default 'pipeline',
+  status      text not null default 'queued',
+  progress    integer not null default 0,
+  step        text not null default 'Queued',
+  created_by  text not null,
+  created_at  text not null,
+  started_at  text,
+  finished_at text,
+  error       text
+);
+
+create index if not exists jobs_org_case_idx on jobs (org_id, case_id, created_at);
+
+-- What a human says a value actually is, beside what the model read. Both are
+-- kept: this is evidence about the extraction, not a rewrite of it.
+create table if not exists value_corrections (
+  correction_id   text primary key,
+  org_id          text not null,
+  case_id         text not null references cases (case_id) on delete cascade,
+  review_item_id  text not null,
+  document_id     text not null,
+  field           text not null,
+  ai_value        text,
+  corrected_value text not null,
+  note            text,
+  corrected_by    text not null,
+  corrected_at    text not null
+);
+
+create index if not exists value_corrections_case_idx
+  on value_corrections (org_id, case_id, corrected_at);
+
+-- "Ask the client for invoice #43", with its state, inside the trail rather
+-- than in somebody's inbox.
+create table if not exists evidence_requests (
+  request_id     text primary key,
+  org_id         text not null,
+  case_id        text not null references cases (case_id) on delete cascade,
+  review_item_id text,
+  title          text not null,
+  detail         text,
+  status         text not null default 'open',
+  due_date       text,
+  requested_by   text not null,
+  requested_at   text not null,
+  response_note  text,
+  responded_by   text,
+  responded_at   text,
+  cancellation_note text,
+  closed_by      text,
+  closed_at      text
+);
+
+create index if not exists evidence_requests_case_idx
+  on evidence_requests (org_id, case_id, requested_at);
+
+-- A second person putting their name to a finished engagement (maker-checker).
+-- Append-only for the same reason reports are: it is somebody's signature.
+create table if not exists sign_offs (
+  sign_off_id    text primary key,
+  org_id         text not null,
+  case_id        text not null,
+  signed_by      text not null,
+  signed_at      text not null,
+  note           text,
+  item_count     integer not null,
+  approved_count integer not null,
+  rejected_count integer not null
+);
+
+create index if not exists sign_offs_org_case_idx
+  on sign_offs (org_id, case_id, signed_at);
+
+create trigger if not exists sign_offs_no_update
+  before update on sign_offs
+begin
+  select raise(abort, 'sign_offs are append-only: UPDATE is not permitted');
+end;
+
+create trigger if not exists sign_offs_no_delete
+  before delete on sign_offs
+begin
+  select raise(abort, 'sign_offs are append-only: DELETE is not permitted');
+end;
+
+-- The firm's own details, printed on every report it delivers. Presentation
+-- only; nothing here is an authorization input.
+create table if not exists org_profiles (
+  org_id              text primary key,
+  legal_name          text,
+  address             text,
+  contact_email       text,
+  phone               text,
+  website             text,
+  registration_number text,
+  logo                text,
+  report_footer       text,
+  updated_at          text
+);
+
 -- Named for the columns they lead with, so a database migrated from the
 -- single-tenant schema gains them rather than keeping the narrower ones under
 -- a name `create index if not exists` would skip.
@@ -403,6 +549,12 @@ class SqliteCaseRepository:
         # a database written before tenancy has no such column yet.
         self._migrate_to_multi_tenant()
         self._migrate_user_profiles()
+        # Before the schema, not after: the schema indexes `cases (client_id)`,
+        # and a database written before that column existed has to gain it
+        # first or the index is built over a column that is not there. On a
+        # fresh database the tables do not exist yet, so this does nothing and
+        # the schema below creates them complete.
+        self._migrate_added_columns()
         with self._lock:
             self._connection.executescript(SCHEMA)
             self._connection.commit()
@@ -443,6 +595,34 @@ class SqliteCaseRepository:
                     self._connection.execute(
                         f"alter table user_profiles add column {column} {column_type}"
                     )
+            self._connection.commit()
+
+    #: Columns added to existing tables after they were first shipped. Purely
+    #: additive: `create table if not exists` never alters a table that is
+    #: already there, so a database from an earlier build keeps its old shape
+    #: until this fills the gaps. Every one of these is nullable, which is what
+    #: makes the migration safe to run against live rows — a case written
+    #: before clients existed simply has no client, and that is a valid case.
+    ADDED_COLUMNS: dict[str, dict[str, str]] = {
+        "cases": {"client_id": "text"},
+        "evidence_requests": {"cancellation_note": "text"},
+    }
+
+    def _migrate_added_columns(self) -> None:
+        """Add nullable columns a database created before them does not have."""
+        with self._lock:
+            for table, columns in self.ADDED_COLUMNS.items():
+                existing = {
+                    row["name"]
+                    for row in self._connection.execute(f"pragma table_info({table})")
+                }
+                if not existing:
+                    continue  # fresh database: the schema created it in full
+                for column, column_type in columns.items():
+                    if column not in existing:
+                        self._connection.execute(
+                            f"alter table {table} add column {column} {column_type}"
+                        )
             self._connection.commit()
 
     def _migrate_to_multi_tenant(self) -> None:
@@ -542,6 +722,8 @@ class SqliteCaseRepository:
                 message = str(error)
                 if message.startswith("reports are append-only"):
                     raise ReportImmutable(message) from error
+                if message.startswith("sign_offs are append-only"):
+                    raise SignOffImmutable(message) from error
                 if "append-only" in message:
                     raise AuditTrailImmutable(message) from error
                 raise
@@ -617,6 +799,129 @@ class SqliteCaseRepository:
             user_id=row["user_id"],
             role=OrgRole(row["role"]),
             created_at=row["created_at"],
+        )
+
+    # -- organization profile ------------------------------------------------ #
+
+    def get_org_profile(self, org_id: str) -> OrgProfile | None:
+        rows = self._rows("select * from org_profiles where org_id = ?", (org_id,))
+        if not rows:
+            return None
+        row = rows[0]
+        return OrgProfile(
+            org_id=row["org_id"],
+            legal_name=row["legal_name"],
+            address=row["address"],
+            contact_email=row["contact_email"],
+            phone=row["phone"],
+            website=row["website"],
+            registration_number=row["registration_number"],
+            logo=row["logo"],
+            report_footer=row["report_footer"],
+            updated_at=row["updated_at"],
+        )
+
+    def save_org_profile(self, profile: OrgProfile) -> None:
+        self._write(
+            [
+                (
+                    "insert or replace into org_profiles (org_id, legal_name, address, "
+                    "contact_email, phone, website, registration_number, logo, "
+                    "report_footer, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        profile.org_id,
+                        profile.legal_name,
+                        profile.address,
+                        profile.contact_email,
+                        profile.phone,
+                        profile.website,
+                        profile.registration_number,
+                        profile.logo,
+                        profile.report_footer,
+                        _iso(profile.updated_at),
+                    ),
+                )
+            ]
+        )
+
+    # -- clients (ADR 0005) -------------------------------------------------- #
+
+    def create_client(self, org_id: str, client: Client) -> None:
+        self._write([self._client_upsert(org_id, client)])
+
+    @staticmethod
+    def _client_upsert(org_id: str, client: Client) -> tuple[str, tuple]:
+        return (
+            "insert or replace into clients (client_id, org_id, name, reference, "
+            "rules, currency, language, relationship_owner, notes, created_by, "
+            "created_at, archived_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                client.client_id,
+                org_id,
+                client.name,
+                client.reference,
+                client.rules.model_dump_json(),
+                client.currency,
+                client.language.value,
+                client.relationship_owner,
+                client.notes,
+                client.created_by,
+                client.created_at.isoformat(),
+                _iso(client.archived_at),
+            ),
+        )
+
+    def get_client(self, org_id: str, client_id: str) -> Client | None:
+        rows = self._rows(
+            "select * from clients where client_id = ? and org_id = ?",
+            (client_id, org_id),
+        )
+        return self._client(rows[0]) if rows else None
+
+    def list_clients(self, org_id: str, include_archived: bool = False) -> list[Client]:
+        sql = "select * from clients where org_id = ?"
+        if not include_archived:
+            sql += " and archived_at is null"
+        return [
+            self._client(row)
+            for row in self._rows(sql + " order by created_at desc", (org_id,))
+        ]
+
+    def update_client(self, org_id: str, client: Client) -> Client | None:
+        if self.get_client(org_id, client.client_id) is None:
+            return None
+        self._write([self._client_upsert(org_id, client)])
+        return self.get_client(org_id, client.client_id)
+
+    def set_client_archived(
+        self, org_id: str, client_id: str, archived_at: datetime | None
+    ) -> bool:
+        if self.get_client(org_id, client_id) is None:
+            return False
+        self._write(
+            [
+                (
+                    "update clients set archived_at = ? where client_id = ? and org_id = ?",
+                    (_iso(archived_at), client_id, org_id),
+                )
+            ]
+        )
+        return True
+
+    @staticmethod
+    def _client(row: sqlite3.Row) -> Client:
+        return Client(
+            client_id=row["client_id"],
+            name=row["name"],
+            reference=row["reference"],
+            rules=ClientRuleConfig.model_validate_json(row["rules"]),
+            currency=row["currency"],
+            language=AssistantLanguage(row["language"]),
+            relationship_owner=row["relationship_owner"],
+            notes=row["notes"],
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+            archived_at=row["archived_at"],
         )
 
     # -- invitations --------------------------------------------------------- #
@@ -746,13 +1051,14 @@ class SqliteCaseRepository:
         self._write(
             [
                 (
-                    "insert or replace into cases (case_id, org_id, client_name, period_start, "
-                    "period_end, status, status_detail, created_by, created_at) "
-                    "values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "insert or replace into cases (case_id, org_id, client_name, client_id, "
+                    "period_start, period_end, status, status_detail, created_by, created_at) "
+                    "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         case.case_id,
                         org_id,
                         case.client_name,
+                        case.client_id,
                         case.period_start.isoformat() if case.period_start else None,
                         case.period_end.isoformat() if case.period_end else None,
                         case.status.value,
@@ -779,11 +1085,26 @@ class SqliteCaseRepository:
             )
         ]
 
+    def list_cases_for_client(self, org_id: str, client_id: str) -> list[CaseRecord]:
+        return [
+            self._case(row)
+            for row in self._rows(
+                "select * from cases where org_id = ? and client_id = ? "
+                "order by created_at desc",
+                (org_id, client_id),
+            )
+        ]
+
     @staticmethod
     def _case(row: sqlite3.Row) -> CaseRecord:
+        keys = row.keys()
         return CaseRecord(
             case_id=row["case_id"],
             client_name=row["client_name"],
+            # A database written before clients existed has no such column even
+            # after the migration adds it to `cases` — a row read from an older
+            # connection can still be missing it, so ask before reading.
+            client_id=row["client_id"] if "client_id" in keys else None,
             period_start=row["period_start"],
             period_end=row["period_end"],
             status=CaseStatus(row["status"]),
@@ -828,16 +1149,18 @@ class SqliteCaseRepository:
         client_name: str,
         period_start: date | None,
         period_end: date | None,
+        client_id: str | None = None,
     ) -> CaseRecord | None:
         if self.get_case(org_id, case_id) is None:
             return None
         self._write(
             [
                 (
-                    "update cases set client_name = ?, period_start = ?, period_end = ? "
-                    "where case_id = ? and org_id = ?",
+                    "update cases set client_name = ?, client_id = ?, period_start = ?, "
+                    "period_end = ? where case_id = ? and org_id = ?",
                     (
                         client_name,
+                        client_id,
                         period_start.isoformat() if period_start else None,
                         period_end.isoformat() if period_end else None,
                         case_id,
@@ -860,6 +1183,14 @@ class SqliteCaseRepository:
         self._write(
             [
                 ("delete from flags where org_id = ? and case_id = ?", (org_id, case_id)),
+                (
+                    "delete from value_corrections where org_id = ? and case_id = ?",
+                    (org_id, case_id),
+                ),
+                (
+                    "delete from evidence_requests where org_id = ? and case_id = ?",
+                    (org_id, case_id),
+                ),
                 (
                     "delete from review_items where org_id = ? and case_id = ?",
                     (org_id, case_id),
@@ -1178,6 +1509,250 @@ class SqliteCaseRepository:
             flag_count=row["flag_count"],
             audit_record_count=row["audit_record_count"],
         )
+
+    # -- background jobs ---------------------------------------------------- #
+
+    def create_job(self, org_id: str, job: JobRecord) -> None:
+        self._write([self._job_upsert(org_id, job)])
+
+    def update_job(self, org_id: str, job: JobRecord) -> None:
+        # Jobs are working state, not evidence: `insert or replace` is right
+        # here, and there is no trigger refusing it. What actually happened is
+        # in the append-only audit trail, whatever this row ends up saying.
+        self._write([self._job_upsert(org_id, job)])
+
+    @staticmethod
+    def _job_upsert(org_id: str, job: JobRecord) -> tuple[str, tuple]:
+        return (
+            "insert or replace into jobs (job_id, org_id, case_id, kind, status, "
+            "progress, step, created_by, created_at, started_at, finished_at, error) "
+            "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                job.job_id,
+                org_id,
+                job.case_id,
+                job.kind.value,
+                job.status.value,
+                job.progress,
+                job.step,
+                job.created_by,
+                job.created_at.isoformat(),
+                _iso(job.started_at),
+                _iso(job.finished_at),
+                job.error,
+            ),
+        )
+
+    def get_job(self, org_id: str, job_id: str) -> JobRecord | None:
+        rows = self._rows(
+            "select * from jobs where job_id = ? and org_id = ?", (job_id, org_id)
+        )
+        return self._job(rows[0]) if rows else None
+
+    def latest_job_for_case(self, org_id: str, case_id: str) -> JobRecord | None:
+        rows = self._rows(
+            "select * from jobs where org_id = ? and case_id = ? "
+            "order by created_at desc, job_id desc limit 1",
+            (org_id, case_id),
+        )
+        return self._job(rows[0]) if rows else None
+
+    def list_jobs(
+        self, org_id: str, status: JobStatus | None = None, limit: int = 50
+    ) -> list[JobRecord]:
+        sql = "select * from jobs where org_id = ?"
+        params: tuple = (org_id,)
+        if status is not None:
+            sql += " and status = ?"
+            params = (org_id, status.value)
+        return [
+            self._job(row)
+            for row in self._rows(
+                sql + " order by created_at desc, job_id desc limit ?",
+                (*params, int(limit)),
+            )
+        ]
+
+    @staticmethod
+    def _job(row: sqlite3.Row) -> JobRecord:
+        return JobRecord(
+            job_id=row["job_id"],
+            case_id=row["case_id"],
+            kind=JobKind(row["kind"]),
+            status=JobStatus(row["status"]),
+            progress=row["progress"],
+            step=row["step"],
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+            started_at=row["started_at"],
+            finished_at=row["finished_at"],
+            error=row["error"],
+        )
+
+    # -- value corrections --------------------------------------------------- #
+
+    def save_correction(self, org_id: str, correction: ValueCorrection) -> None:
+        self._write(
+            [
+                (
+                    "insert or replace into value_corrections (correction_id, org_id, "
+                    "case_id, review_item_id, document_id, field, ai_value, "
+                    "corrected_value, note, corrected_by, corrected_at) "
+                    "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        correction.correction_id,
+                        org_id,
+                        correction.case_id,
+                        correction.review_item_id,
+                        correction.document_id,
+                        correction.field,
+                        correction.ai_value,
+                        correction.corrected_value,
+                        correction.note,
+                        correction.corrected_by,
+                        correction.corrected_at.isoformat(),
+                    ),
+                )
+            ]
+        )
+
+    def list_corrections(self, org_id: str, case_id: str) -> list[ValueCorrection]:
+        return [
+            ValueCorrection(
+                correction_id=row["correction_id"],
+                case_id=row["case_id"],
+                review_item_id=row["review_item_id"],
+                document_id=row["document_id"],
+                field=row["field"],
+                ai_value=row["ai_value"],
+                corrected_value=row["corrected_value"],
+                note=row["note"],
+                corrected_by=row["corrected_by"],
+                corrected_at=row["corrected_at"],
+            )
+            for row in self._rows(
+                "select * from value_corrections where org_id = ? and case_id = ? "
+                "order by corrected_at, correction_id",
+                (org_id, case_id),
+            )
+        ]
+
+    # -- evidence requests --------------------------------------------------- #
+
+    def save_evidence_request(self, org_id: str, request: EvidenceRequest) -> None:
+        self._write(
+            [
+                (
+                    "insert or replace into evidence_requests (request_id, org_id, "
+                    "case_id, review_item_id, title, detail, status, due_date, "
+                    "requested_by, requested_at, response_note, responded_by, "
+                    "responded_at, cancellation_note, closed_by, closed_at) "
+                    "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        request.request_id,
+                        org_id,
+                        request.case_id,
+                        request.review_item_id,
+                        request.title,
+                        request.detail,
+                        request.status.value,
+                        request.due_date.isoformat() if request.due_date else None,
+                        request.requested_by,
+                        request.requested_at.isoformat(),
+                        request.response_note,
+                        request.responded_by,
+                        _iso(request.responded_at),
+                        request.cancellation_note,
+                        request.closed_by,
+                        _iso(request.closed_at),
+                    ),
+                )
+            ]
+        )
+
+    def get_evidence_request(
+        self, org_id: str, request_id: str
+    ) -> EvidenceRequest | None:
+        rows = self._rows(
+            "select * from evidence_requests where request_id = ? and org_id = ?",
+            (request_id, org_id),
+        )
+        return self._evidence_request(rows[0]) if rows else None
+
+    def list_evidence_requests(self, org_id: str, case_id: str) -> list[EvidenceRequest]:
+        return [
+            self._evidence_request(row)
+            for row in self._rows(
+                "select * from evidence_requests where org_id = ? and case_id = ? "
+                "order by requested_at desc, request_id desc",
+                (org_id, case_id),
+            )
+        ]
+
+    @staticmethod
+    def _evidence_request(row: sqlite3.Row) -> EvidenceRequest:
+        return EvidenceRequest(
+            request_id=row["request_id"],
+            case_id=row["case_id"],
+            review_item_id=row["review_item_id"],
+            title=row["title"],
+            detail=row["detail"],
+            status=EvidenceRequestStatus(row["status"]),
+            due_date=row["due_date"],
+            requested_by=row["requested_by"],
+            requested_at=row["requested_at"],
+            response_note=row["response_note"],
+            responded_by=row["responded_by"],
+            responded_at=row["responded_at"],
+            cancellation_note=row["cancellation_note"],
+            closed_by=row["closed_by"],
+            closed_at=row["closed_at"],
+        )
+
+    # -- sign-offs ------------------------------------------------------------ #
+
+    def save_sign_off(self, org_id: str, sign_off: SignOff) -> None:
+        # A plain insert: the triggers refuse an update, and `insert or replace`
+        # would be a delete in disguise. A duplicate id is an error, correctly.
+        self._write(
+            [
+                (
+                    "insert into sign_offs (sign_off_id, org_id, case_id, signed_by, "
+                    "signed_at, note, item_count, approved_count, rejected_count) "
+                    "values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        sign_off.sign_off_id,
+                        org_id,
+                        sign_off.case_id,
+                        sign_off.signed_by,
+                        sign_off.signed_at.isoformat(),
+                        sign_off.note,
+                        sign_off.item_count,
+                        sign_off.approved_count,
+                        sign_off.rejected_count,
+                    ),
+                )
+            ]
+        )
+
+    def list_sign_offs(self, org_id: str, case_id: str) -> list[SignOff]:
+        return [
+            SignOff(
+                sign_off_id=row["sign_off_id"],
+                case_id=row["case_id"],
+                signed_by=row["signed_by"],
+                signed_at=row["signed_at"],
+                note=row["note"],
+                item_count=row["item_count"],
+                approved_count=row["approved_count"],
+                rejected_count=row["rejected_count"],
+            )
+            for row in self._rows(
+                "select * from sign_offs where org_id = ? and case_id = ? "
+                "order by signed_at desc, sign_off_id desc",
+                (org_id, case_id),
+            )
+        ]
 
     # -- api keys ----------------------------------------------------------- #
 

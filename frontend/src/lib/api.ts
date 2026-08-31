@@ -33,17 +33,33 @@ import type {
   AssistantChatResponse,
   AuditRecord,
   AuditTrailResponse,
+  BusinessSummary,
   CaseListResponse,
   CaseSummary,
+  ClientDetailResponse,
+  ClientListResponse,
+  ClientSummary,
+  CompareResponse,
+  CorrectionListResponse,
+  CorrectionResponse,
+  CreateClientRequest,
+  CreateCorrectionRequest,
+  CreateEvidenceRequestRequest,
   CreatedApiKeyResponse,
   DashboardSummary,
   DecisionResponse,
   DeletedApiKeyResponse,
   DeletedCaseResponse,
   DocumentListResponse,
+  EvidenceRequestListResponse,
+  EvidenceRequestResponse,
+  InsightsResponse,
   InvitationListResponse,
   InvitationSummary,
+  JobListResponse,
+  JobSummary,
   MembersResponse,
+  OrgProfileResponse,
   OrgRole,
   LoginResponse,
   ReportFormat,
@@ -53,8 +69,14 @@ import type {
   ReviewItemFilters,
   ReviewItemsResponse,
   SalesAnalyticsResult,
+  SampleRequest,
+  SampleResponse,
+  SignOffListResponse,
+  SignOffResponse,
   SignupResponse,
   UpdateCaseRequest,
+  UpdateClientRequest,
+  UpdateOrgProfileRequest,
   UpdateProfileRequest,
   UploadFiles,
   UploadResponse,
@@ -540,13 +562,18 @@ export async function uploadDocuments(files: UploadFiles): Promise<UploadRespons
     for (const invoice of files.invoices) form.append("invoices", invoice);
     if (files.salesData) form.append("sales_data", files.salesData);
     if (files.clientName) form.append("client_name", files.clientName);
+    if (files.clientId) form.append("client_id", files.clientId);
     const token = authToken();
     const headers: Record<string, string> = token
       ? { Authorization: `Bearer ${token}` }
       : {};
+    // Queued by default from the browser: extraction over a real statement
+    // takes tens of seconds, and a request held open that long is one the
+    // network will drop before the pipeline finishes.
+    const query = files.background === false ? "" : "?background=true";
     let response: Response;
     try {
-      response = await fetch(`${API_URL}/v1/upload`, {
+      response = await fetch(`${API_URL}/v1/upload${query}`, {
         method: "POST",
         body: form,
         headers,
@@ -1194,4 +1221,361 @@ export async function deleteApiKey(keyId: string): Promise<DeletedApiKeyResponse
   if (index === -1) throw new ApiError(404, `No API key ${keyId}`);
   fixtureApiKeys.splice(index, 1);
   return { key_id: keyId, deleted: true };
+}
+
+// --------------------------------------------------------------------------
+// Clients and periods (ADR 0005)
+//
+// Fixture mode has no client directory: the sample data is one engagement, and
+// inventing a roster of clients client-side would be exactly the kind of made-up
+// data this file exists to avoid. The screens show their empty state instead.
+// --------------------------------------------------------------------------
+
+const NEEDS_BACKEND =
+  "This needs the live backend. Set NEXT_PUBLIC_TARAZU_API_URL and sign in.";
+
+/** GET /v1/clients — the firm's recurring clients, newest first. */
+export async function listClients(
+  includeArchived = false,
+): Promise<ClientListResponse> {
+  if (!FIXTURE_MODE) {
+    return request<ClientListResponse>(
+      `/v1/clients${includeArchived ? "?include_archived=true" : ""}`,
+    );
+  }
+  await sleep(FIXTURE_LATENCY_MS / 3);
+  return { total: 0, clients: [] };
+}
+
+/** GET /v1/clients/{id} — the client and every period run for it. */
+export async function getClient(clientId: string): Promise<ClientDetailResponse> {
+  if (!FIXTURE_MODE) {
+    return request<ClientDetailResponse>(`/v1/clients/${encodeURIComponent(clientId)}`);
+  }
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+/** POST /v1/clients — add a recurring client. */
+export async function createClient(
+  body: CreateClientRequest,
+): Promise<ClientSummary> {
+  if (!FIXTURE_MODE) {
+    return request<ClientSummary>("/v1/clients", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+/** PATCH /v1/clients/{id} — send only what changes. */
+export async function updateClient(
+  clientId: string,
+  body: UpdateClientRequest,
+): Promise<ClientSummary> {
+  if (!FIXTURE_MODE) {
+    return request<ClientSummary>(`/v1/clients/${encodeURIComponent(clientId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+/**
+ * POST /v1/clients/{id}/archive — take a client out of the pickers. Archiving
+ * never deletes: every period, decision, report, and trail entry stays.
+ */
+export async function archiveClient(clientId: string): Promise<ClientSummary> {
+  if (!FIXTURE_MODE) {
+    return request<ClientSummary>(
+      `/v1/clients/${encodeURIComponent(clientId)}/archive`,
+      { method: "POST" },
+    );
+  }
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+/** POST /v1/clients/{id}/restore — bring an archived client back. */
+export async function restoreClient(clientId: string): Promise<ClientSummary> {
+  if (!FIXTURE_MODE) {
+    return request<ClientSummary>(
+      `/v1/clients/${encodeURIComponent(clientId)}/restore`,
+      { method: "POST" },
+    );
+  }
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+// --------------------------------------------------------------------------
+// Background jobs — what a queued upload reports while it runs
+// --------------------------------------------------------------------------
+
+/** GET /v1/jobs/{id} — poll until `finished`, then read the case as usual. */
+export async function getJob(jobId: string): Promise<JobSummary> {
+  if (!FIXTURE_MODE) {
+    return request<JobSummary>(`/v1/jobs/${encodeURIComponent(jobId)}`);
+  }
+  throw new ApiError(404, `No job ${jobId}`);
+}
+
+/** GET /v1/jobs — recent background jobs, newest first. */
+export async function listJobs(): Promise<JobListResponse> {
+  if (!FIXTURE_MODE) return request<JobListResponse>("/v1/jobs");
+  await sleep(FIXTURE_LATENCY_MS / 3);
+  return { total: 0, jobs: [] };
+}
+
+// --------------------------------------------------------------------------
+// Value corrections
+// --------------------------------------------------------------------------
+
+/**
+ * POST /v1/review-items/{id}/corrections — record what a misread value really
+ * is. Both readings are kept, and this never re-runs matching.
+ */
+export async function createCorrection(
+  reviewItemId: string,
+  body: CreateCorrectionRequest,
+): Promise<CorrectionResponse> {
+  if (!FIXTURE_MODE) {
+    return request<CorrectionResponse>(
+      `/v1/review-items/${encodeURIComponent(reviewItemId)}/corrections`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  }
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+/** GET /v1/corrections — every correction on the case, oldest first. */
+export async function listCorrections(): Promise<CorrectionListResponse> {
+  if (!FIXTURE_MODE) {
+    const caseId = getActiveCaseId();
+    const query = caseId ? `?case_id=${encodeURIComponent(caseId)}` : "";
+    try {
+      return await request<CorrectionListResponse>(`/v1/corrections${query}`);
+    } catch (caught) {
+      if (staleActiveCase(caught, undefined, caseId)) {
+        return request<CorrectionListResponse>("/v1/corrections");
+      }
+      throw caught;
+    }
+  }
+  await sleep(FIXTURE_LATENCY_MS / 3);
+  return { case_id: reviewItemsFixture.case_id, total: 0, corrections: [] };
+}
+
+// --------------------------------------------------------------------------
+// Evidence requests — what the auditor still needs from the client
+// --------------------------------------------------------------------------
+
+/** GET /v1/evidence-requests — every ask on the case, newest first. */
+export async function listEvidenceRequests(): Promise<EvidenceRequestListResponse> {
+  if (!FIXTURE_MODE) {
+    const caseId = getActiveCaseId();
+    const query = caseId ? `?case_id=${encodeURIComponent(caseId)}` : "";
+    try {
+      return await request<EvidenceRequestListResponse>(
+        `/v1/evidence-requests${query}`,
+      );
+    } catch (caught) {
+      if (staleActiveCase(caught, undefined, caseId)) {
+        return request<EvidenceRequestListResponse>("/v1/evidence-requests");
+      }
+      throw caught;
+    }
+  }
+  await sleep(FIXTURE_LATENCY_MS / 3);
+  return {
+    case_id: reviewItemsFixture.case_id,
+    total: 0,
+    open_total: 0,
+    requests: [],
+  };
+}
+
+/** POST /v1/evidence-requests — ask the client for something. */
+export async function createEvidenceRequest(
+  body: CreateEvidenceRequestRequest,
+): Promise<EvidenceRequestResponse> {
+  if (!FIXTURE_MODE) {
+    const caseId = getActiveCaseId();
+    return request<EvidenceRequestResponse>("/v1/evidence-requests", {
+      method: "POST",
+      body: JSON.stringify({ ...body, case_id: body.case_id ?? caseId ?? undefined }),
+    });
+  }
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+/** POST /v1/evidence-requests/{id}/{respond|resolve|cancel}. */
+export async function actOnEvidenceRequest(
+  requestId: string,
+  action: "respond" | "resolve" | "cancel",
+  note?: string,
+): Promise<EvidenceRequestResponse> {
+  if (!FIXTURE_MODE) {
+    const body =
+      action === "respond"
+        ? { response_note: note ?? "" }
+        : action === "cancel"
+          ? { note: note ?? null }
+          : {};
+    return request<EvidenceRequestResponse>(
+      `/v1/evidence-requests/${encodeURIComponent(requestId)}/${action}`,
+      {
+        method: "POST",
+        ...(Object.keys(body).length > 0 ? { body: JSON.stringify(body) } : {}),
+      },
+    );
+  }
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+// --------------------------------------------------------------------------
+// Sign-off (maker-checker)
+// --------------------------------------------------------------------------
+
+/** GET /v1/sign-offs — signatures on the case, and whether one is required. */
+export async function listSignOffs(): Promise<SignOffListResponse> {
+  if (!FIXTURE_MODE) {
+    const caseId = getActiveCaseId();
+    const query = caseId ? `?case_id=${encodeURIComponent(caseId)}` : "";
+    try {
+      return await request<SignOffListResponse>(`/v1/sign-offs${query}`);
+    } catch (caught) {
+      if (staleActiveCase(caught, undefined, caseId)) {
+        return request<SignOffListResponse>("/v1/sign-offs");
+      }
+      throw caught;
+    }
+  }
+  await sleep(FIXTURE_LATENCY_MS / 3);
+  return {
+    case_id: reviewItemsFixture.case_id,
+    total: 0,
+    sign_offs: [],
+    required: false,
+    satisfied: false,
+  };
+}
+
+/**
+ * POST /v1/sign-offs — sign a finished engagement off. The backend refuses if
+ * anything is pending, or if you decided the items yourself.
+ */
+export async function createSignOff(note?: string): Promise<SignOffResponse> {
+  if (!FIXTURE_MODE) {
+    const caseId = getActiveCaseId();
+    return request<SignOffResponse>("/v1/sign-offs", {
+      method: "POST",
+      body: JSON.stringify({ case_id: caseId ?? undefined, note: note ?? null }),
+    });
+  }
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+// --------------------------------------------------------------------------
+// The firm's letterhead
+// --------------------------------------------------------------------------
+
+/** GET /v1/org-profile — the branding printed on every report. */
+export async function getOrgProfile(): Promise<OrgProfileResponse> {
+  if (!FIXTURE_MODE) return request<OrgProfileResponse>("/v1/org-profile");
+  await sleep(FIXTURE_LATENCY_MS / 3);
+  return {
+    org_id: "org-demo",
+    name: "Demo Audit Firm",
+    legal_name: null,
+    address: null,
+    contact_email: null,
+    phone: null,
+    website: null,
+    registration_number: null,
+    logo: null,
+    report_footer: null,
+    updated_at: null,
+  };
+}
+
+/** PUT /v1/org-profile — a full replacement. Owners only. */
+export async function updateOrgProfile(
+  body: UpdateOrgProfileRequest,
+): Promise<OrgProfileResponse> {
+  if (!FIXTURE_MODE) {
+    return request<OrgProfileResponse>("/v1/org-profile", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+  }
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+// --------------------------------------------------------------------------
+// Insights, comparison, and sampling
+// --------------------------------------------------------------------------
+
+/** GET /v1/insights — the firm across all of its cases. */
+export async function getInsights(): Promise<InsightsResponse> {
+  if (!FIXTURE_MODE) return request<InsightsResponse>("/v1/insights");
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+/** GET /v1/business-summary — the owner-facing view of the active engagement. */
+export async function getBusinessSummary(caseId?: string): Promise<BusinessSummary> {
+  if (!FIXTURE_MODE) {
+    const effective = caseId ?? getActiveCaseId();
+    const query = effective ? `?case_id=${encodeURIComponent(effective)}` : "";
+    try {
+      return await request<BusinessSummary>(`/v1/business-summary${query}`);
+    } catch (caught) {
+      if (staleActiveCase(caught, caseId, effective)) {
+        return request<BusinessSummary>("/v1/business-summary");
+      }
+      throw caught;
+    }
+  }
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+/** GET /v1/compare — two periods side by side. */
+export async function comparePeriods(
+  left: string,
+  right: string,
+): Promise<CompareResponse> {
+  if (!FIXTURE_MODE) {
+    return request<CompareResponse>(
+      `/v1/compare?left=${encodeURIComponent(left)}&right=${encodeURIComponent(right)}`,
+    );
+  }
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+/**
+ * POST /v1/sampling — draw a reproducible sample. The seed comes back on the
+ * response so the same draw can be repeated and defended later.
+ */
+export async function drawSample(body: SampleRequest): Promise<SampleResponse> {
+  if (!FIXTURE_MODE) {
+    const caseId = getActiveCaseId();
+    return request<SampleResponse>("/v1/sampling", {
+      method: "POST",
+      body: JSON.stringify({ ...body, case_id: body.case_id ?? caseId ?? undefined }),
+    });
+  }
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+/**
+ * GET /v1/cases/{id}/bundle — the evidence bundle: documents, reports, the
+ * trail, and a SHA-256 manifest, in one zip. Handed straight to the browser.
+ */
+export async function downloadEvidenceBundle(caseId?: string): Promise<void> {
+  if (FIXTURE_MODE) throw new ApiError(501, NEEDS_BACKEND);
+  const target = caseId ?? getActiveCaseId();
+  if (!target) throw new ApiError(404, "No case selected.");
+  const blob = await requestBlob(
+    `/v1/cases/${encodeURIComponent(target)}/bundle`,
+  );
+  saveBlob(blob, `tarazu-${target}-evidence-bundle.zip`);
 }

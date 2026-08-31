@@ -1,11 +1,24 @@
 "use client";
 
 /**
- * Upload — four inputs open a case, and the analysis is visible while it
- * runs: upload → AI extraction → deterministic matching → red-flag rules →
- * Benford → sales analytics. The first three (ledger, bank statement, invoices)
- * are required; the fourth (sales data) is optional and feeds the deterministic
- * sales-analytics module — no AI on that path, same as the ledger.
+ * Upload — three required inputs and an optional fourth open a case, and the
+ * analysis is visible while it runs.
+ *
+ * The progress on this screen is **real**. The upload is queued as a background
+ * job (`?background=true`) and this page polls `GET /v1/jobs/{id}`: the bar and
+ * the stage name are the pipeline's own `progress` and `step`, not a timer
+ * pretending. That matters beyond honesty — extraction over a real bank
+ * statement takes tens of seconds, and a request held open that long is one the
+ * network will drop before the work finishes.
+ *
+ * Picking a client makes the case one *period* of a recurring engagement (ADR
+ * 0005), and the red-flag thresholds become that client's own rather than the
+ * firm-wide defaults.
+ *
+ * The optional fourth input, a sales-data export (Excel or CSV), feeds the
+ * deterministic sales-analytics module — no AI on that path, same as the ledger.
+ *
+ * Nothing here computes: every count on the result screen is the backend's.
  */
 
 import * as React from "react";
@@ -18,59 +31,79 @@ import {
   FileSearch,
   Files,
   FlaskConical,
-  GitCompareArrows,
   Loader2,
   ScanText,
   UploadCloud,
 } from "lucide-react";
-import { uploadDocuments, setActiveCaseId, ApiError, FIXTURE_MODE } from "@/lib/api";
-import type { UploadResponse } from "@/lib/types";
+import {
+  ApiError,
+  FIXTURE_MODE,
+  getJob,
+  getReviewItems,
+  listClients,
+  setActiveCaseId,
+  uploadDocuments,
+} from "@/lib/api";
+import type { ClientSummary, JobSummary, UploadResponse } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/states";
 import { DropZone } from "@/components/upload/drop-zone";
 import { cn } from "@/lib/utils";
 
-type Phase = "idle" | "uploading" | "done";
+type Phase = "idle" | "working" | "done";
 
+/**
+ * What the pipeline does, in order, with the progress percentage each stage is
+ * reported at by `app/pipeline.py`. The percentages live here only so the list
+ * can light up in step with the job; the bar itself uses the job's own number.
+ */
 const PIPELINE_STEPS = [
   {
     icon: UploadCloud,
-    label: "Uploading documents",
-    detail: "Bank statement, ledger, invoices, and optionally sales data stored against the new case.",
+    label: "Storing documents",
+    detail:
+      "Bank statement, ledger, invoices, and optionally sales data stored against the new case.",
+    at: 5,
   },
   {
     icon: ScanText,
-    label: "AI extraction",
+    label: "Reading documents",
     detail:
-      "The vision model reads every page. Each value carries a confidence level and its page-and-position source: no provenance, no value.",
-  },
-  {
-    icon: GitCompareArrows,
-    label: "Deterministic matching",
-    detail:
-      "Pure pandas, three tiers: exact amount and date, then a ±3-day window, then tolerance. No AI touches a number.",
+      "Spreadsheets are read by pandas with no model involved. Anything only on paper goes to the vision model, and every value it reads carries a confidence level and its page-and-position source.",
+    at: 15,
   },
   {
     icon: FileSearch,
-    label: "Red-flag rules",
+    label: "Matching transactions",
     detail:
-      "Round numbers · duplicates · weekend entries · near-limit amounts · structuring · sequence gaps.",
+      "Pure pandas, three tiers: exact amount and date, then a ±3-day window, then tolerance. No AI touches a number.",
+    at: 70,
   },
   {
     icon: FlaskConical,
-    label: "Benford analysis",
-    detail: "First-digit distribution of the amounts against the expected curve.",
+    label: "Rules and Benford",
+    detail:
+      "Round numbers · duplicates · weekend entries · near-limit amounts · structuring · sequence gaps, then the first-digit distribution.",
+    at: 82,
   },
   {
     icon: BarChart3,
     label: "Sales analytics",
-    detail: "Revenue by month, product, and region, top customers, and anomaly detection — deterministic pandas, no AI.",
+    detail:
+      "Revenue by month, product, and region, top customers, and anomalies — deterministic pandas, run when a sales export was uploaded.",
+    at: 90,
   },
-];
+  {
+    icon: Check,
+    label: "Review queue ready",
+    detail: "Every row assembled with its evidence, waiting for your decision.",
+    at: 95,
+  },
+] as const;
 
-/** Cadence of the step display while the request is in flight. */
-const STEP_ADVANCE_MS = 1100;
+/** How often the job is polled. Fast enough to feel live, slow enough to be cheap. */
+const POLL_MS = 1200;
 
 function StepRow({
   icon: Icon,
@@ -118,9 +151,9 @@ function StepRow({
 
 function ResultStat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-      <p className="text-2xl font-bold text-ink-900 tabular-nums">{value}</p>
-      <p className="text-xs text-ink-400">{label}</p>
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 sm:px-4 sm:py-3">
+      <p className="text-xl font-bold text-ink-900 tabular-nums sm:text-2xl">{value}</p>
+      <p className="text-[11px] leading-snug text-ink-400 sm:text-xs">{label}</p>
     </div>
   );
 }
@@ -130,47 +163,88 @@ export default function UploadPage() {
   const [bankStatement, setBankStatement] = React.useState<File[]>([]);
   const [invoices, setInvoices] = React.useState<File[]>([]);
   const [salesData, setSalesData] = React.useState<File[]>([]);
+  const [clients, setClients] = React.useState<ClientSummary[]>([]);
+  const [clientId, setClientId] = React.useState("");
   const [phase, setPhase] = React.useState<Phase>("idle");
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<UploadResponse | null>(null);
-  const [activeStep, setActiveStep] = React.useState(0);
-  const timerRef = React.useRef<number | null>(null);
+  const [itemCount, setItemCount] = React.useState(0);
+  const [job, setJob] = React.useState<JobSummary | null>(null);
+  const cancelled = React.useRef(false);
 
-  React.useEffect(
-    () => () => {
-      if (timerRef.current !== null) window.clearInterval(timerRef.current);
-    },
-    [],
-  );
+  React.useEffect(() => {
+    cancelled.current = false;
+    return () => {
+      cancelled.current = true;
+    };
+  }, []);
+
+  // The client list is a convenience, not a requirement: a case with no client
+  // is a one-off engagement and stays perfectly valid (ADR 0005).
+  React.useEffect(() => {
+    listClients()
+      .then((response) => setClients(response.clients))
+      .catch(() => setClients([]));
+  }, []);
 
   const ready =
     ledger.length === 1 && bankStatement.length === 1 && invoices.length >= 1;
 
+  /** Poll until the job stops, then hand back its final state. */
+  const followJob = React.useCallback(async (jobId: string): Promise<JobSummary> => {
+    for (;;) {
+      const current = await getJob(jobId);
+      if (!cancelled.current) setJob(current);
+      if (current.finished) return current;
+      await new Promise((resolve) => window.setTimeout(resolve, POLL_MS));
+    }
+  }, []);
+
   const submit = async () => {
-    if (!ready || phase === "uploading") return;
-    setPhase("uploading");
+    if (!ready || phase === "working") return;
+    setPhase("working");
     setError(null);
-    setActiveStep(0);
-    // Walk the steps forward while the request runs; hold on the last one
-    // until the backend answers, then mark everything complete.
-    timerRef.current = window.setInterval(() => {
-      setActiveStep((current) => Math.min(current + 1, PIPELINE_STEPS.length - 1));
-    }, STEP_ADVANCE_MS);
+    setJob(null);
     try {
       const response = await uploadDocuments({
         bankStatement: bankStatement[0],
         ledger: ledger[0],
         invoices,
         ...(salesData.length === 1 ? { salesData: salesData[0] } : {}),
+        clientId: clientId || undefined,
       });
-      if (timerRef.current !== null) window.clearInterval(timerRef.current);
-      setActiveStep(PIPELINE_STEPS.length);
+
+      // Fixture mode answers with the finished case and no job to follow.
+      if (response.job_id) {
+        const finished = await followJob(response.job_id);
+        if (finished.status === "failed") {
+          setError(
+            finished.error ??
+              "Processing failed. The case records why; check the case list.",
+          );
+          setPhase("idle");
+          return;
+        }
+      }
+      if (cancelled.current) return;
       setResult(response);
+      // A queued upload answered before the queue existed, so its
+      // `review_item_count` is zero by construction. The real figure is read
+      // back from the case rather than guessed from the job's wording.
+      if (response.job_id) {
+        try {
+          const queue = await getReviewItems({ case_id: response.case_id });
+          if (!cancelled.current) setItemCount(queue.total);
+        } catch {
+          setItemCount(response.review_item_count);
+        }
+      } else {
+        setItemCount(response.review_item_count);
+      }
       // The new case becomes the one the whole workspace is about.
       setActiveCaseId(response.case_id);
-      window.setTimeout(() => setPhase("done"), 500);
+      setPhase("done");
     } catch (caught) {
-      if (timerRef.current !== null) window.clearInterval(timerRef.current);
       setError(
         caught instanceof ApiError
           ? caught.message
@@ -180,8 +254,10 @@ export default function UploadPage() {
     }
   };
 
+  const progress = job?.progress ?? 0;
+
   return (
-    <div>
+    <div className="pb-20 md:pb-0">
       <div className="mb-6">
         <h1 className="text-xl font-bold text-ink-900">Upload documents</h1>
         <p className="mt-1 text-sm text-ink-600">
@@ -198,11 +274,13 @@ export default function UploadPage() {
             <CardTitle>Case {result.case_id} is ready</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-ink-600">{result.message}</p>
+            <p className="text-sm text-ink-600">
+              {job?.step ?? result.message}
+            </p>
 
-            <div className="mt-4 grid grid-cols-3 gap-3">
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
               <ResultStat label="Documents received" value={result.documents.length} />
-              <ResultStat label="Review items created" value={result.review_item_count} />
+              <ResultStat label="Review items created" value={itemCount} />
               <ResultStat
                 label="Escalated to you"
                 value={result.needs_human_review_count}
@@ -211,11 +289,11 @@ export default function UploadPage() {
 
             <ul className="mt-4 space-y-1 text-xs text-ink-600">
               {result.documents.map((doc) => (
-                <li key={doc.document_id} className="flex items-center gap-2">
+                <li key={doc.document_id} className="flex flex-wrap items-center gap-2">
                   <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-ink-600">
                     {doc.document_id}
                   </span>
-                  {doc.filename}
+                  <span className="min-w-0 break-all">{doc.filename}</span>
                 </li>
               ))}
             </ul>
@@ -227,7 +305,7 @@ export default function UploadPage() {
                 reading passes disagree, so those items are escalated to you.
               </p>
             )}
-            <div className="mt-4 flex gap-3">
+            <div className="mt-4 flex flex-wrap gap-3">
               <Link href="/review">
                 <Button>
                   Go to review <ArrowRight className="h-4 w-4" aria-hidden />
@@ -242,24 +320,54 @@ export default function UploadPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-[minmax(0,1fr)_22rem] items-start gap-5">
-          <div>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="min-w-0">
+            {clients.length > 0 && (
+              <div className="mb-4">
+                <label
+                  htmlFor="upload-client"
+                  className="mb-1 block text-xs font-medium text-ink-600"
+                >
+                  Client (optional)
+                </label>
+                <select
+                  id="upload-client"
+                  value={clientId}
+                  onChange={(event) => setClientId(event.target.value)}
+                  disabled={phase === "working"}
+                  className="h-10 w-full max-w-sm rounded-lg border border-slate-300 bg-white px-3 text-sm text-ink-900 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600"
+                >
+                  <option value="">One-off engagement (firm defaults)</option>
+                  {clients.map((client) => (
+                    <option key={client.client_id} value={client.client_id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-ink-400">
+                  Picking a client makes this one period of a recurring
+                  engagement, and runs it against that client&apos;s own approval
+                  limits and thresholds instead of the firm-wide defaults.
+                </p>
+              </div>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2">
               <DropZone
                 label="Ledger"
                 hint="Excel or CSV (.xlsx, .xls, .csv)"
                 accept={[".xlsx", ".xls", ".csv"]}
                 files={ledger}
                 onFiles={setLedger}
-                disabled={phase === "uploading"}
+                disabled={phase === "working"}
               />
               <DropZone
                 label="Bank statement"
-                hint="PDF only (.pdf)"
-                accept={[".pdf"]}
+                hint="PDF, or the CSV/Excel export from internet banking"
+                accept={[".pdf", ".csv", ".xlsx", ".xlsm", ".xls"]}
                 files={bankStatement}
                 onFiles={setBankStatement}
-                disabled={phase === "uploading"}
+                disabled={phase === "working"}
               />
               <DropZone
                 label="Invoices"
@@ -268,7 +376,7 @@ export default function UploadPage() {
                 multiple
                 files={invoices}
                 onFiles={setInvoices}
-                disabled={phase === "uploading"}
+                disabled={phase === "working"}
               />
               <DropZone
                 label="Sales data"
@@ -276,9 +384,15 @@ export default function UploadPage() {
                 accept={[".xlsx", ".xls", ".csv"]}
                 files={salesData}
                 onFiles={setSalesData}
-                disabled={phase === "uploading"}
+                disabled={phase === "working"}
               />
             </div>
+
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
+              Prefer the bank&apos;s CSV or Excel export where you have one: it is
+              read by deterministic code rather than the vision model, so there
+              is no reading uncertainty on the statement at all.
+            </p>
 
             {error && (
               <div className="mt-4">
@@ -286,9 +400,9 @@ export default function UploadPage() {
               </div>
             )}
 
-            <div className="mt-6 flex items-center gap-4">
-              <Button size="lg" disabled={!ready || phase === "uploading"} onClick={submit}>
-                {phase === "uploading" ? (
+            <div className="mt-6 flex flex-wrap items-center gap-4">
+              <Button size="lg" disabled={!ready || phase === "working"} onClick={submit}>
+                {phase === "working" ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                     Analyzing…
@@ -302,35 +416,62 @@ export default function UploadPage() {
                   The button unlocks when the three required slots are filled. Sales data is optional.
                 </p>
               )}
-              {phase === "uploading" && (
+              {phase === "working" && (
                 <p className="text-xs text-ink-400">
                   {FIXTURE_MODE
                     ? "Simulated pipeline (fixture mode)."
-                    : "The pipeline runs synchronously; a real statement takes tens of seconds."}
+                    : "You can leave this page; the work continues on the server."}
                 </p>
               )}
             </div>
           </div>
 
-          {/* The analysis, visible while it happens */}
+          {/* The analysis, as it actually happens */}
           <Card>
             <CardHeader>
-              <CardTitle>{phase === "uploading" ? "Analyzing your data" : "What happens on upload"}</CardTitle>
+              <CardTitle>
+                {phase === "working" ? "Analyzing your data" : "What happens on upload"}
+              </CardTitle>
             </CardHeader>
             <CardContent>
+              {phase === "working" && job && (
+                <div className="mb-4">
+                  <div className="mb-1 flex items-baseline justify-between text-xs">
+                    <span className="min-w-0 truncate font-medium text-ink-900">
+                      {job.step}
+                    </span>
+                    <span className="shrink-0 text-ink-400 tabular-nums">
+                      {progress}%
+                    </span>
+                  </div>
+                  <div
+                    className="h-1.5 overflow-hidden rounded-full bg-slate-100"
+                    role="progressbar"
+                    aria-valuenow={progress}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label="Processing progress"
+                  >
+                    <div
+                      className="h-full rounded-full bg-brand-700 transition-[width] duration-500"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
               <ul className="space-y-4">
-                {PIPELINE_STEPS.map((step, index) => (
+                {PIPELINE_STEPS.map((step) => (
                   <StepRow
                     key={step.label}
                     icon={step.icon}
                     label={step.label}
                     detail={step.detail}
                     state={
-                      phase !== "uploading"
+                      phase !== "working"
                         ? "pending"
-                        : index < activeStep
+                        : progress > step.at
                           ? "done"
-                          : index === activeStep
+                          : progress >= step.at
                             ? "running"
                             : "pending"
                     }

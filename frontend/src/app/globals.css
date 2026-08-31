@@ -3,7 +3,8 @@
 /*
  * Tarazu — AI Audit Assistant design tokens.
  * Light, calm, auditor-grade: teal brand, white surfaces, restrained badges.
- * Responsive audit workspace with 3D animations and transactional hover effects.
+ * Motion is limited to colour, border, shadow and opacity transitions: nothing
+ * scales, lifts, tilts or rotates on hover — an audit tool should feel still.
  */
 @theme {
   --color-brand-50: #f0fdfa;
@@ -27,7 +28,6 @@
 
 html {
   scroll-behavior: smooth;
-  perspective: 1000px;
 }
 
 body {
@@ -35,151 +35,32 @@ body {
   color: var(--color-ink-900);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  perspective: 1200px;
-  transform-style: preserve-3d;
 }
 
-/* 3D Elevation and Floating Effect */
-@keyframes float-in {
-  from {
-    opacity: 0;
-    transform: translateY(20px) rotateX(10deg) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) rotateX(0) scale(1);
-  }
-}
-
-@keyframes card-hover-lift {
-  0% {
-    transform: translateY(0) rotateX(0) rotateY(0);
-  }
-  100% {
-    transform: translateY(-8px) rotateX(2deg) rotateY(1deg);
-  }
-}
-
-@keyframes card-shadow-expand {
-  0% {
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
-  }
-  100% {
-    box-shadow: 0 20px 40px rgba(13, 148, 136, 0.15), 0 10px 20px rgba(0, 0, 0, 0.1);
-  }
-}
-
-/* Landing page (src/app/page.tsx): demo activity chips sliding in with 3D effect. */
+/* Landing page (src/app/page.tsx): demo activity chips fading in. */
 @keyframes fade-slide {
   from {
     opacity: 0;
-    transform: translateY(8px) rotateX(-5deg);
   }
   to {
     opacity: 1;
-    transform: translateY(0) rotateX(0);
   }
 }
 
-/* Landing page (src/app/page.tsx): pulsing status dots. */
+/* Landing page (src/app/page.tsx): pulsing status dots (opacity only). */
 @keyframes pulse-dot {
   0%,
   100% {
     opacity: 1;
-    transform: scale(1);
   }
   50% {
     opacity: 0.3;
-    transform: scale(0.7);
-  }
-}
-
-/* Button press effect */
-@keyframes button-press {
-  0% {
-    transform: scale(1) translateZ(0);
-  }
-  50% {
-    transform: scale(0.98) translateZ(-4px);
-  }
-  100% {
-    transform: scale(1) translateZ(0);
-  }
-}
-
-/* Sidebar slide animation */
-@keyframes sidebar-slide-in {
-  from {
-    transform: translateX(-100%) rotateY(5deg);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0) rotateY(0);
-    opacity: 1;
-  }
-}
-
-/* Smooth scale and glow effect */
-@keyframes glow-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(13, 148, 136, 0);
   }
 }
 
 /* Money and ids read better tabular. */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
-}
-
-/* 3D Card Effects */
-.card-3d {
-  perspective: 1000px;
-  transform-style: preserve-3d;
-  transition: all 0.3s cubic-bezier(0.23, 1, 0.320, 1);
-}
-
-.card-3d:hover {
-  animation: card-hover-lift 0.4s ease-out forwards,
-             card-shadow-expand 0.4s ease-out forwards;
-}
-
-/* Interactive Element Hover Effects */
-.hover-lift {
-  transition: transform 0.3s cubic-bezier(0.23, 1, 0.320, 1),
-              box-shadow 0.3s cubic-bezier(0.23, 1, 0.320, 1);
-}
-
-.hover-lift:hover {
-  transform: translateY(-4px) scale(1.02);
-  box-shadow: 0 12px 24px rgba(13, 148, 136, 0.15);
-}
-
-/* Smooth Button Press Effect */
-.btn-interactive {
-  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  transform-style: preserve-3d;
-}
-
-.btn-interactive:active {
-  animation: button-press 0.3s ease-out;
-}
-
-/* Sidebar animations */
-.sidebar-animated {
-  animation: sidebar-slide-in 0.4s ease-out;
-}
-
-/* Float-in animation for elements */
-.animate-float-in {
-  animation: float-in 0.6s ease-out;
-}
-
-/* Glow pulse for active states */
-.animate-glow-pulse {
-  animation: glow-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 /* Smooth scrolling utilities */
@@ -224,67 +105,11 @@ main {
     font-size: 14px;
   }
 
-  /* Mobile sidebar - improved drawer behavior */
-  aside {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    z-index: 50;
-    width: 16rem !important;
-    max-width: 80vw;
-    height: 100vh;
-    overflow-y: auto;
-    transform: translateX(-100%);
-    transition: transform 0.3s cubic-bezier(0.23, 1, 0.320, 1);
-    -webkit-overflow-scrolling: touch;
-  }
-
-  aside.sidebar-open {
-    transform: translateX(0);
-  }
-
-  /* Backdrop for mobile sidebar */
-  aside::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s ease-out;
-    z-index: -1;
-  }
-
-  aside.sidebar-open::before {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  aside > div:first-child {
-    justify-content: center;
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-
-  aside nav {
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
-  }
-
-  aside nav a {
-    padding-left: 1rem;
-    padding-right: 1rem;
-    justify-content: flex-start;
-  }
-
-  aside nav a > svg + span {
-    display: inline;
-  }
-
-  aside nav a svg {
-    margin-right: 0.75rem;
-  }
+  /* The sidebar owns its own layout — drawer, widths and collapsed state all
+   * live in `components/layout/sidebar.tsx`. Element selectors here used to
+   * force a width with !important and toggle on classes the component never
+   * set, which left the collapsed rail full-width and the mobile drawer
+   * stuck off-canvas. Style it in the component, not from here. */
 
   main {
     padding: 1.5rem 1rem !important;
@@ -325,10 +150,6 @@ main {
 
 /* Tablet responsive */
 @media (min-width: 769px) and (max-width: 1024px) {
-  aside {
-    width: 14rem !important;
-  }
-
   main {
     padding: 1.25rem !important;
   }
@@ -338,27 +159,8 @@ main {
   }
 }
 
-/* Large screens enhancement */
-@media (min-width: 1025px) {
-  aside {
-    width: 16rem !important;
-  }
-
-  aside.collapsed {
-    width: 4rem !important;
-  }
-}
-
 /* Touch device optimizations */
 @media (hover: none) and (pointer: coarse) {
-  .hover-lift:hover {
-    transform: scale(1.01);
-  }
-
-  .card-3d:hover {
-    animation: none;
-  }
-
   button {
     min-height: 2.75rem;
     min-width: 2.75rem;
@@ -374,7 +176,5 @@ main {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-    perspective: none !important;
-    transform-style: unset !important;
   }
 }

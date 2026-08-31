@@ -1,6 +1,6 @@
 -- Tarazu — AI Audit Assistant: sales analytics.
 --
--- Run after `0006-reports-and-assistant.sql`. Idempotent, like the others.
+-- Run after `0007-clients-and-periods.sql`. Idempotent, like the others.
 --
 -- Two things:
 --
@@ -65,8 +65,9 @@ create policy sales_analytics_org_members
 -- 2. The analytics audit action
 --
 -- The constraint is re-created with the full authoritative list —
--- `AuditAction` in backend/app/shared/schemas.py. `case_updated` and
--- `case_deleted` are in the enum and were missing from the list stated in
+-- `AuditAction` in backend/app/shared/schemas.py. The Phase 1 actions
+-- (corrections, sign-offs, evidence requests, clients, jobs, sampling, the
+-- bundle) are in the enum and were missing from the list stated in
 -- `0006-reports-and-assistant.sql`; restating the whole list here brings the
 -- constraint and the enum back together. Change one and change the other.
 -- ---------------------------------------------------------------------------
@@ -79,6 +80,12 @@ alter table public.audit_trail add constraint audit_trail_action_check
                     'matching_completed', 'flag_raised',
                     'item_approved', 'item_rejected',
                     'report_generated',
+                    'value_corrected', 'case_signed_off',
+                    'evidence_requested', 'evidence_answered',
+                    'evidence_resolved', 'evidence_cancelled',
+                    'client_created', 'client_updated', 'client_archived',
+                    'job_queued', 'job_failed',
+                    'sample_drawn', 'bundle_exported',
                     'assistant_question_asked', 'assistant_answered',
                     'sales_analytics_run'));
 

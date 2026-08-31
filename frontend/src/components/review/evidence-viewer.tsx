@@ -18,10 +18,11 @@
 import * as React from "react";
 import Link from "next/link";
 import { ExternalLink, FileText, History, Loader2, X } from "lucide-react";
-import { getReviewItemAudit } from "@/lib/api";
+import { ApiError, createCorrection, getReviewItemAudit } from "@/lib/api";
 import type { AuditRecord, ExtractedField, Provenance, ReviewItem } from "@/lib/types";
 import { formatDate, formatMoney, formatTimestamp } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { ConfidenceBadge, SeverityBadge, StatusBadge, MatchStrengthBadge } from "@/components/ui/badge";
 import { DocumentPage } from "@/components/documents/schematic-page";
 
@@ -122,6 +123,87 @@ function ComparisonRow({
 // The slide-over
 // ---------------------------------------------------------------------------
 
+/**
+ * Record what a misread value actually is.
+ *
+ * The wording matters here as much as the fields. An auditor pressing this is
+ * saying "the model read it wrong", and the product's answer must be honest
+ * about what that does: it writes both readings into the record and the
+ * report, and it does **not** silently re-run the arithmetic. Promising a
+ * re-match would be promising something rule 2 does not allow.
+ */
+function CorrectionForm({
+  field,
+  value,
+  onValue,
+  note,
+  onNote,
+  busy,
+  error,
+  saved,
+  onCancel,
+  onSave,
+}: {
+  field: ExtractedField;
+  reviewItemId: string;
+  value: string;
+  onValue: (next: string) => void;
+  note: string;
+  onNote: (next: string) => void;
+  busy: boolean;
+  error: string | null;
+  saved: boolean;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <p className="text-[11px] leading-relaxed text-ink-600">
+        The model read{" "}
+        <span className="font-mono font-semibold text-ink-900">
+          {field.value === null ? "nothing" : String(field.value)}
+        </span>{" "}
+        for <span className="font-medium">{field.field}</span>. Record what the
+        source actually says — both readings are kept.
+      </p>
+      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+        <input
+          value={value}
+          onChange={(event) => onValue(event.target.value)}
+          placeholder="The correct value"
+          aria-label="The correct value"
+          className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-ink-900 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600"
+        />
+        <input
+          value={note}
+          onChange={(event) => onNote(event.target.value)}
+          placeholder="Why (optional)"
+          aria-label="Why the value is wrong"
+          className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-ink-900 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600"
+        />
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button size="sm" disabled={busy || !value.trim()} onClick={onSave}>
+          {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+          Record the correction
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>
+          Cancel
+        </Button>
+      </div>
+      <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
+        This does not re-run matching. Every figure in the queue stays as the
+        deterministic run computed it; the correction is recorded beside the
+        model&apos;s reading, lands in the audit trail, and appears in the report.
+      </p>
+      {error && <p className="mt-2 text-[11px] text-rose-600">{error}</p>}
+      {saved && (
+        <p className="mt-2 text-[11px] text-emerald-700">Correction recorded.</p>
+      )}
+    </div>
+  );
+}
+
 export function EvidenceViewer({
   item,
   onClose,
@@ -132,6 +214,50 @@ export function EvidenceViewer({
   const [selectedEvidence, setSelectedEvidence] = React.useState<ExtractedField | null>(
     item.evidence.find((e) => e.source.page != null) ?? item.evidence[0] ?? null,
   );
+  // Correcting a misread value. Both readings survive: this records what the
+  // auditor says the source actually says, beside what the model read, and it
+  // deliberately does not re-run matching — see `ValueCorrection` in the
+  // backend schemas for why arithmetic is never re-done one row at a time.
+  const [correcting, setCorrecting] = React.useState(false);
+  const [correctedValue, setCorrectedValue] = React.useState("");
+  const [correctionNote, setCorrectionNote] = React.useState("");
+  const [savingCorrection, setSavingCorrection] = React.useState(false);
+  const [correctionError, setCorrectionError] = React.useState<string | null>(null);
+  const [savedCorrection, setSavedCorrection] = React.useState(false);
+
+  // A different reading means a different correction; nothing carries over.
+  React.useEffect(() => {
+    setCorrecting(false);
+    setSavedCorrection(false);
+    setCorrectionError(null);
+    setCorrectionNote("");
+  }, [selectedEvidence]);
+
+  const saveCorrection = async () => {
+    if (!selectedEvidence || !correctedValue.trim()) return;
+    setSavingCorrection(true);
+    setCorrectionError(null);
+    try {
+      await createCorrection(item.review_item_id, {
+        document_id: selectedEvidence.source.document_id,
+        field: selectedEvidence.field,
+        ai_value:
+          selectedEvidence.value === null ? null : String(selectedEvidence.value),
+        corrected_value: correctedValue.trim(),
+        note: correctionNote.trim() || null,
+      });
+      setSavedCorrection(true);
+      setCorrecting(false);
+    } catch (caught) {
+      setCorrectionError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not record the correction.",
+      );
+    } finally {
+      setSavingCorrection(false);
+    }
+  };
   const [audit, setAudit] = React.useState<AuditRecord[] | null>(null);
   const [auditError, setAuditError] = React.useState<string | null>(null);
 
@@ -364,7 +490,7 @@ export function EvidenceViewer({
             )}
             {selectedEvidence ? (
               <>
-                <div className="mb-2 flex items-center gap-2">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
                   <span className="text-xs text-ink-600">
                     Read as{" "}
                     <span className="font-semibold text-ink-900 tabular-nums">
@@ -372,7 +498,35 @@ export function EvidenceViewer({
                     </span>
                   </span>
                   <ConfidenceBadge confidence={selectedEvidence.extraction_confidence} />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCorrecting(true);
+                      setCorrectedValue(String(selectedEvidence.value ?? ""));
+                      setCorrectionError(null);
+                    }}
+                    className="rounded-md border border-slate-300 px-2 py-0.5 text-[11px] font-medium text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-800"
+                  >
+                    Misread?
+                  </button>
                 </div>
+
+                {correcting && (
+                  <CorrectionForm
+                    field={selectedEvidence}
+                    reviewItemId={item.review_item_id}
+                    value={correctedValue}
+                    onValue={setCorrectedValue}
+                    note={correctionNote}
+                    onNote={setCorrectionNote}
+                    busy={savingCorrection}
+                    error={correctionError}
+                    saved={savedCorrection}
+                    onCancel={() => setCorrecting(false)}
+                    onSave={saveCorrection}
+                  />
+                )}
+
                 <div className="min-h-0 flex-1">
                   <DocumentPane provenance={selectedEvidence.source} />
                 </div>

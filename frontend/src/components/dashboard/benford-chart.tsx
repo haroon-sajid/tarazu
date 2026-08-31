@@ -6,6 +6,7 @@
  * deterministic `BenfordResult`; nothing is computed here.
  */
 
+import * as React from "react";
 import {
   Bar,
   BarChart,
@@ -19,7 +20,22 @@ import {
 import type { BenfordResult } from "@/lib/types";
 import { formatPercent } from "@/lib/format";
 
+// Phones render nine digit groups in a much narrower box: a shorter chart, a
+// slimmer Y axis, and smaller ticks keep it readable. ≥sm keeps the desktop look.
+function useIsPhone() {
+  const [phone, setPhone] = React.useState(false);
+  React.useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)");
+    const sync = () => setPhone(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+  return phone;
+}
+
 export function BenfordChart({ benford }: { benford: BenfordResult }) {
+  const phone = useIsPhone();
   const data = benford.digits.map((digit) => ({
     digit: String(digit.digit),
     Observed: +(digit.observed_frequency * 100).toFixed(2),
@@ -29,12 +45,12 @@ export function BenfordChart({ benford }: { benford: BenfordResult }) {
 
   return (
     <div>
-      <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
+      <ResponsiveContainer width="100%" height={phone ? 210 : 260}>
+        <BarChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: phone ? 0 : -16 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
           <XAxis
             dataKey="digit"
-            tick={{ fontSize: 11, fill: "#64748b" }}
+            tick={{ fontSize: phone ? 10 : 11, fill: "#64748b" }}
             axisLine={{ stroke: "#cbd5e1" }}
             tickLine={false}
             label={{
@@ -46,7 +62,8 @@ export function BenfordChart({ benford }: { benford: BenfordResult }) {
             }}
           />
           <YAxis
-            tick={{ fontSize: 11, fill: "#64748b" }}
+            width={phone ? 34 : undefined}
+            tick={{ fontSize: phone ? 10 : 11, fill: "#64748b" }}
             axisLine={false}
             tickLine={false}
             unit="%"

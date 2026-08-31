@@ -61,6 +61,7 @@ deployment overhead.
 | `backend/app/modules/extraction/` | Qwen VL document reading, confidence scoring, AI second-opinion check | **Yes** (extraction only) |
 | `backend/app/modules/matching/` | Deterministic matching of statement, invoices, and ledger (pure Python and pandas) | **Never** |
 | `backend/app/modules/rules/` | Deterministic red-flag rules (round numbers, duplicates, weekend entries, near-limit amounts, structuring, sequence gaps) and Benford | **Never** |
+| `backend/app/modules/sampling/` | Deterministic audit sampling: random, monetary-unit, and high-value selection, reproducible from a seed | **Never** |
 | `backend/app/modules/analytics/` | Deterministic sales analytics over a `sales_data` export (pandas): revenue by month, product, region, top customers, and anomaly findings | **Never** |
 | `backend/app/modules/assistant/` | Ask Tarazu: intent → deterministic query → worded answer with citations and facts, English and Urdu | **Yes** (only to rephrase computed facts; never to compute — ADR 0006) |
 | `backend/app/modules/reports/` | PDF and Excel report generation from decided items, with provenance and the trail; immutable history | No |
@@ -69,7 +70,7 @@ deployment overhead.
 
 - **Each module exposes one public interface file: `service.py`.** Other modules may import only that.
 - **No cross-module imports of internals.** Data passes between modules via `app/shared/` schemas.
-- **`matching/`, `rules/`, and `analytics/` must never import any AI client**, not even transitively through a helper.
+- **`matching/`, `rules/`, `sampling/`, and `analytics/` must never import any AI client**, not even transitively through a helper.
 - **Boundaries exist so any module can later be extracted into a microservice without rewrites.** Never take a shortcut (shared mutable state, reaching into another module's files, bypassing `service.py`) that would break extractability.
 
 Each module directory has a README stating its purpose, inputs and outputs, and
@@ -85,7 +86,7 @@ what it must never do. Respect those constraints.
 - **All folder and file names use `lowercase-kebab-case`** (for example `api-contracts.md`).
   Exceptions: conventional files (`README.md`, `CLAUDE.md`, `Dockerfile`) and
   language-mandated names (Python modules use `snake_case.py`; React components may follow framework conventions inside `frontend/`).
-- Python: `snake_case` functions and variables, `PascalCase` classes; module packages under `app/modules/` are single-word lowercase (`extraction`, `matching`, `rules`, `analytics`, `assistant`, `reports`).
+- Python: `snake_case` functions and variables, `PascalCase` classes; module packages under `app/modules/` are single-word lowercase (`extraction`, `matching`, `rules`, `sampling`, `analytics`, `assistant`, `reports`).
 - TypeScript: `camelCase` functions and variables, `PascalCase` types and components.
 - API routes: `lowercase-kebab-case` paths, versioned (`/v1/...`).
 - Environment variables: `SCREAMING_SNAKE_CASE`, prefixed per module (see `.env.example`).
@@ -93,17 +94,37 @@ what it must never do. Respect those constraints.
 ## Rules for AI Agents Working Here
 
 - Do not move logic across module boundaries; propose an ADR in `docs/decisions/` instead.
-- Do not add AI/LLM calls or AI client imports to `matching/`, `rules/`, `analytics/`, `reports/`, `core/`, or `main.py`.
+- Do not add AI/LLM calls or AI client imports to `matching/`, `rules/`, `analytics/`, `sampling/`, `reports/`, `core/`, or `main.py`.
 - Update `docs/api-contracts.md` and `backend/app/shared/` in the same change whenever a contract changes.
 - Read the README of any folder before modifying its contents.
 
+## UI conventions (frontend)
+
+- **No transform-based motion.** Hover, focus, and press feedback is colour,
+  border, shadow, or opacity only. Do not add `hover:scale-*`,
+  `hover:-translate-*`, `perspective`, `rotate`, or entry animations that move
+  or resize an element: an audit tool should feel still. Positional transforms
+  that are not effects — a drawer sliding, a toggle knob, centring with
+  `-translate-x-1/2` — are fine, as are spinners and opacity pulses.
+- **Mobile-first and responsive.** Every screen works from 360px up. Wide
+  content (tables, diagrams) scrolls inside its own `overflow-x-auto`; the page
+  body never scrolls horizontally.
+- **The UI never computes.** Every number on screen is one the backend
+  computed. No summing, averaging, or deriving in the browser.
+
 ## Development Status (last updated 2026-08-31 — keep this section current)
 
-**Phase 0 of [docs/product-plan.md](docs/product-plan.md) ("finish the
-core") is delivered:** a case goes from upload to a finished report inside
-the product with no step outside it. Full route list: the table in
-`docs/api-contracts.md`. The delivery table at the end of the product plan
-maps each Phase 0 item to its code.
+**Phases 0 and 1 of [docs/product-plan.md](docs/product-plan.md) are
+delivered.** Phase 0 ("finish the core"): a case goes from upload to a
+finished report inside the product with no step outside it. Phase 1
+(ADR 0005): a firm adds a **client** once and runs a **period** every cycle,
+against that client's own rule thresholds, as a background job. Full route
+list: the table in `docs/api-contracts.md`. The delivery tables at the end of
+the product plan map each item to its code.
+
+**Phase 3 (webhooks, n8n templates, scheduled reports) is deferred** at the
+owner's request — the firm does not use n8n. The API keys and scopes it would
+build on are already live.
 
 **How to run it locally**
 
@@ -120,8 +141,12 @@ maps each Phase 0 item to its code.
   `NEXT_PUBLIC_TARAZU_API_URL` in `frontend/.env.local` switches it to
   zero-backend fixture mode.
 - Tests: `pytest` from the repo root (hermetic: no `.env`, no network).
-- Supabase: nine migrations, `python scripts/apply_supabase_schema.py`;
-  `0006-sales-analytics.sql` is the newest.
+  Background jobs run inline in the suite (`TARAZU_JOBS_INLINE=1`, set in
+  `conftest.py`) so nothing has to be polled or slept on.
+- Supabase: ten migrations, `python scripts/apply_supabase_schema.py`;
+  `0008-sales-analytics.sql` is the newest — one new table plus the
+  audit-action check restated with the full merged list, so it is safe
+  against live data.
 
 **Live end to end** (backend + frontend + tests): auth (signup/login/change
 password), tenancy, the **full upload pipeline** — extraction (stubbed by
@@ -147,17 +172,50 @@ profiles, the case list (the active case is a localStorage selection every
 screen passes as `?case_id=`), the case-wide audit trail viewer, and members
 with invitations (single-use `TZ-…` join codes).
 
-**Frontend-only or presentational**: the upload screen's staged "analyzing"
-panel is presentation over the synchronous request; fixture mode composes
-assistant answers in `frontend/src/lib/assistant.ts`; chat attachments are
-acknowledged, never read (upload them instead); Settings → webhooks /
-notifications / integrations are static "planned" copy (product plan Phase 3).
+**Phase 1 and what shipped beside it** (all live end to end, all tested):
+**clients** (`/v1/clients`, archive/restore, per-client `ClientRuleConfig`
+handed to `rules/` by the pipeline), **periods** (the `cases` row, now with
+`client_id` and the fuller status set), **background jobs** (`core/jobs.py`,
+`/v1/jobs`, `POST /v1/upload?background=true` → a `job_id` the upload screen
+polls for the pipeline's own progress), **bank statements as CSV/XLSX**
+(`extraction/bank_reader.py` — read by pandas, never by the model, with
+`pandas` named in the trail), **value corrections** (both readings kept,
+matching never re-run), **evidence requests** (ask → respond → resolve /
+cancel, all in the trail), **maker-checker sign-off** (append-only; the
+signer may not have decided any item; gates the report when the client
+requires it), **firm branding** on the PDF and workbook, the **Urdu executive
+summary** for the business owner, the **evidence bundle**
+(`GET /v1/cases/{id}/bundle` — a byte-reproducible zip with a SHA-256
+manifest), **audit sampling** (`modules/sampling/`: random, monetary-unit,
+high-value, reproducible from a seed), **firm-wide insights** and **period
+comparison**, and a **public `/demo` playground** rendered from fixtures with
+no backend call.
 
-**Not implemented (next, per the plan's sequence)**: Phase 1 — client and
-period entities (ADR 0005), the Business view, the read-only owner role,
-background jobs; Phase 2's remaining question types (sales, profit — need
-transaction direction from Phase 1); Phase 3 — webhooks, n8n templates,
-scheduled reports; real Qwen extraction has the code path (`DEMO_MODE=false`
-+ `EXTRACTION_*` vars) but the first run over a real client folder is a
-pilot task and is recorded in the product plan when it happens.
+**Frontend-only or presentational**: fixture mode composes assistant answers
+in `frontend/src/lib/assistant.ts`; chat attachments are acknowledged, never
+read (upload them instead); Settings → webhooks / notifications /
+integrations are static "planned" copy (Phase 3, deferred). The upload
+screen's progress is no longer presentational — it is the job's own
+`progress` and `step`.
+
+**Known limitation, deliberately taken**: the Urdu summary is rendered in the
+Excel workbook and the evidence bundle but **not drawn into the PDF**.
+reportlab's built-in fonts carry no Arabic-script glyphs and it performs
+neither bidirectional reordering nor contextual shaping, so drawing it there
+would produce empty boxes. Doing it properly means bundling a Nastaliq font
+and adding a shaping pass; the PDF prints a pointer to the sheet instead.
+
+**Not implemented (next)**: the **Business view** — a dedicated in-product
+screen for the audited owner. The owner-facing artefact shipped as the Urdu
+executive summary in the report instead, which is what an owner actually
+receives, but the screen itself is still open. Phase 2's remaining question
+types (sales, profit) still need **transaction direction**: ADR 0005's
+normalized transactions table was deliberately *not* built — matching still
+reads per-source lists, and rewriting it was not worth destabilising a
+working pipeline for two question types. The assistant continues to say so
+rather than guess. Phase 3 (webhooks, n8n, scheduled reports) is deferred at
+the owner's request. Real Qwen extraction has the code path
+(`DEMO_MODE=false` + `EXTRACTION_*` vars) and the deterministic CSV/XLSX path
+now covers statements and ledgers, but the first full run over a real client
+folder is a pilot task and is recorded in the product plan when it happens.
 `awaiting_matching` is a legacy case status the pipeline no longer produces.

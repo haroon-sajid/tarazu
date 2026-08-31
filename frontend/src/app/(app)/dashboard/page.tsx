@@ -18,13 +18,19 @@ import {
   Layers,
   Package,
 } from "lucide-react";
-import { ApiError, getDashboard } from "@/lib/api";
-import type { DashboardSummary, MonthlyRevenue, ReadinessComponent, SalesAnalyticsResult } from "@/lib/types";
+import { ApiError, getDashboard, listReports } from "@/lib/api";
+import type {
+  DashboardSummary,
+  MonthlyRevenue,
+  ReadinessComponent,
+  SalesAnalyticsResult,
+} from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { SeverityBadge } from "@/components/ui/badge";
 import { BenfordChart } from "@/components/dashboard/benford-chart";
+import { FirstRunChecklist } from "@/components/dashboard/first-run-checklist";
 import { formatDate } from "@/lib/format";
 
 /**
@@ -217,20 +223,20 @@ function StatCard({
   tone?: "default" | "good" | "warn";
 }) {
   return (
-    <Card className="hover-lift">
-      <CardContent className="flex items-start justify-between px-5 py-4">
-        <div>
-          <p className="text-xs font-medium text-ink-400">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-ink-900 tabular-nums">{value}</p>
-          {detail && <p className="mt-0.5 text-[11px] text-ink-400">{detail}</p>}
+    <Card>
+      <CardContent className="flex items-start justify-between gap-2 px-3.5 py-3.5 sm:px-5 sm:py-4">
+        <div className="min-w-0">
+          <p className="text-xs font-medium leading-tight text-ink-400">{label}</p>
+          <p className="mt-1 text-xl font-bold text-ink-900 tabular-nums sm:text-2xl">{value}</p>
+          {detail && <p className="mt-0.5 text-[11px] leading-snug text-ink-400">{detail}</p>}
         </div>
         <span
           className={
             tone === "good"
-              ? "rounded-lg bg-gradient-to-br from-emerald-50 to-emerald-100 p-2.5 text-emerald-600 shadow-sm transition-transform hover:scale-110"
+              ? "hidden shrink-0 rounded-lg bg-gradient-to-br from-emerald-50 to-emerald-100 p-2.5 text-emerald-600 shadow-sm sm:inline"
               : tone === "warn"
-                ? "rounded-lg bg-gradient-to-br from-purple-50 to-purple-100 p-2.5 text-purple-600 shadow-sm transition-transform hover:scale-110"
-                : "rounded-lg bg-gradient-to-br from-brand-50 to-brand-100 p-2.5 text-brand-700 shadow-sm transition-transform hover:scale-110"
+                ? "hidden shrink-0 rounded-lg bg-gradient-to-br from-purple-50 to-purple-100 p-2.5 text-purple-600 shadow-sm sm:inline"
+                : "hidden shrink-0 rounded-lg bg-gradient-to-br from-brand-50 to-brand-100 p-2.5 text-brand-700 shadow-sm sm:inline"
           }
         >
           <Icon className="h-5 w-5" aria-hidden />
@@ -269,11 +275,18 @@ export default function DashboardPage() {
   const [summary, setSummary] = React.useState<DashboardSummary | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [noCases, setNoCases] = React.useState(false);
+  // Only for the first-run checklist: whether this case has ever produced a
+  // report. A failure here is not worth an error state — the checklist simply
+  // shows that step as outstanding.
+  const [hasReport, setHasReport] = React.useState(false);
 
   const load = React.useCallback(() => {
     setError(null);
     setSummary(null);
     setNoCases(false);
+    listReports()
+      .then((reports) => setHasReport(reports.total > 0))
+      .catch(() => setHasReport(false));
     getDashboard()
       .then(setSummary)
       .catch((caught) => {
@@ -313,8 +326,8 @@ export default function DashboardPage() {
 
   if (summary === null) {
     return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="space-y-4 pb-20 md:pb-0">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
             <Skeleton key={index} className="h-24" />
           ))}
@@ -353,19 +366,25 @@ export default function DashboardPage() {
       : undefined;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20 md:pb-0">
       <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-ink-900">{summary.client_name}</h1>
-          <p className="mt-1 text-sm text-ink-600">
+        <div className="min-w-0">
+          <h1 className="break-words text-xl font-bold text-ink-900">{summary.client_name}</h1>
+          <p className="mt-1 break-words text-xs text-ink-600 sm:text-sm">
             {summary.case_id}
             {period ? ` · ${period}` : ""}
           </p>
         </div>
       </div>
 
+      <FirstRunChecklist
+        hasCase
+        hasDecisions={summary.decisions.approved + summary.decisions.rejected > 0}
+        hasReport={hasReport}
+      />
+
       {/* Stat cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard
           label="Total review items"
           value={String(summary.total_review_items)}
@@ -396,7 +415,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Benford */}
-        <Card className="hover-lift lg:col-span-2">
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Benford&apos;s Law: first-digit distribution</CardTitle>
           </CardHeader>
@@ -413,7 +432,7 @@ export default function DashboardPage() {
 
         {/* Readiness + data confidence */}
         <div className="space-y-4">
-          <Card className="hover-lift">
+          <Card>
             <CardHeader>
               <CardTitle>Audit readiness</CardTitle>
             </CardHeader>
@@ -438,7 +457,7 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="hover-lift">
+          <Card>
             <CardHeader>
               <CardTitle>Data confidence</CardTitle>
             </CardHeader>
@@ -454,18 +473,25 @@ export default function DashboardPage() {
       {/* Sales Overview — shown only when sales analytics ran */}
       {summary.sales_analytics && (
         <>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-base font-semibold text-ink-900">Sales Overview</h2>
             <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-ink-400">
               deterministic · no AI
             </span>
+            <Link
+              href="/analytics"
+              className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
+            >
+              Full analytics
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+            </Link>
           </div>
           <SalesOverview analytics={summary.sales_analytics} />
         </>
       )}
 
       {/* Next best actions */}
-      <Card className="hover-lift">
+      <Card>
         <CardHeader>
           <CardTitle>Next best actions</CardTitle>
         </CardHeader>
@@ -480,14 +506,14 @@ export default function DashboardPage() {
                 <li key={`${action.review_item_id}-${action.rule_id}-${index}`}>
                   <Link
                     href={`/review?item=${encodeURIComponent(action.review_item_id)}`}
-                    className="group flex items-center justify-between gap-3 py-2.5 transition-all hover:pl-1"
+                    className="group flex items-center justify-between gap-3 py-2.5"
                   >
-                    <span className="flex min-w-0 items-center gap-3">
+                    <span className="flex min-w-0 items-center gap-2 sm:gap-3">
                       <SeverityBadge severity={action.severity} />
                       <span className="truncate text-sm text-ink-900 transition-colors group-hover:text-brand-700">
                         {action.action}
                       </span>
-                      <span className="shrink-0 font-mono text-[10px] text-ink-400">
+                      <span className="hidden shrink-0 font-mono text-[10px] text-ink-400 sm:inline">
                         {action.rule_id}
                       </span>
                     </span>

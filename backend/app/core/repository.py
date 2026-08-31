@@ -32,14 +32,21 @@ from app.shared.schemas import (
     BenfordResult,
     CaseRecord,
     CaseStatus,
+    Client,
+    EvidenceRequest,
     ExtractionResult,
+    JobRecord,
+    JobStatus,
     Organization,
     OrganizationMember,
     OrgInvitation,
+    OrgProfile,
     ReportRecord,
     ReviewItem,
     SalesAnalyticsResult,
+    SignOff,
     UserProfile,
+    ValueCorrection,
 )
 from app.shared.api import UploadedDocument
 
@@ -112,6 +119,40 @@ class CaseRepository(Protocol):
 
     def list_members(self, org_id: str) -> list[OrganizationMember]: ...
 
+    # -- organization profile ------------------------------------------------ #
+
+    def get_org_profile(self, org_id: str) -> OrgProfile | None:
+        """The firm's branding, or None if nobody has filled it in."""
+
+    def save_org_profile(self, profile: OrgProfile) -> None:
+        """Create or fully replace the firm's branding row."""
+
+    # -- clients (ADR 0005) -------------------------------------------------- #
+
+    def create_client(self, org_id: str, client: Client) -> None: ...
+
+    def get_client(self, org_id: str, client_id: str) -> Client | None:
+        """The client, or None if it does not exist *or* belongs to another firm."""
+
+    def list_clients(self, org_id: str, include_archived: bool = False) -> list[Client]:
+        """The firm's clients, newest first. Archived ones only when asked for."""
+
+    def update_client(self, org_id: str, client: Client) -> Client | None:
+        """Replace the client's editable facts. None if no such client here.
+
+        The creator and creation time are facts about its life, not settings;
+        callers send the record they read back, changed.
+        """
+
+    def set_client_archived(
+        self, org_id: str, client_id: str, archived_at: datetime | None
+    ) -> bool:
+        """Archive (or restore) a client. False if no such client in this org.
+
+        Archiving never deletes: the periods, decisions, reports, and trail
+        behind a client outlive the relationship.
+        """
+
     # -- invitations --------------------------------------------------------- #
 
     def create_invitation(self, invitation: OrgInvitation) -> None: ...
@@ -147,6 +188,9 @@ class CaseRepository(Protocol):
     def latest_case_id(self, org_id: str, created_by: str | None = None) -> str | None:
         """The most recently created case *in this org*, for a frontend that has none."""
 
+    def list_cases_for_client(self, org_id: str, client_id: str) -> list[CaseRecord]:
+        """Every period of one client, newest first. The client's history."""
+
     def update_case(
         self,
         org_id: str,
@@ -155,6 +199,7 @@ class CaseRepository(Protocol):
         client_name: str,
         period_start: date | None,
         period_end: date | None,
+        client_id: str | None = None,
     ) -> CaseRecord | None:
         """Replace the case's editable facts. None if no such case in this org.
 
@@ -241,6 +286,55 @@ class CaseRepository(Protocol):
 
     def get_report(self, org_id: str, report_id: str) -> ReportRecord | None:
         """The report, or None if it does not exist *or* belongs to another org."""
+
+    # -- background jobs ---------------------------------------------------- #
+
+    def create_job(self, org_id: str, job: JobRecord) -> None: ...
+
+    def get_job(self, org_id: str, job_id: str) -> JobRecord | None:
+        """The job, or None if it does not exist *or* belongs to another org."""
+
+    def update_job(self, org_id: str, job: JobRecord) -> None:
+        """Persist a job's progress. Jobs are working state, not evidence:
+        unlike the trail they may be updated, and what actually happened is
+        recorded in the audit trail regardless of what this row ends up saying."""
+
+    def latest_job_for_case(self, org_id: str, case_id: str) -> JobRecord | None:
+        """The most recent job for one case, which is the one to poll."""
+
+    def list_jobs(
+        self, org_id: str, status: JobStatus | None = None, limit: int = 50
+    ) -> list[JobRecord]:
+        """Recent jobs, newest first, optionally filtered by status."""
+
+    # -- value corrections --------------------------------------------------- #
+
+    def save_correction(self, org_id: str, correction: ValueCorrection) -> None:
+        """Record one correction. Corrections accumulate; none replaces another."""
+
+    def list_corrections(self, org_id: str, case_id: str) -> list[ValueCorrection]:
+        """Every correction made on the case, oldest first."""
+
+    # -- evidence requests --------------------------------------------------- #
+
+    def save_evidence_request(self, org_id: str, request: EvidenceRequest) -> None:
+        """Create or replace one request. The trail keeps the state history."""
+
+    def get_evidence_request(self, org_id: str, request_id: str) -> EvidenceRequest | None:
+        """The request, or None if it does not exist *or* belongs elsewhere."""
+
+    def list_evidence_requests(self, org_id: str, case_id: str) -> list[EvidenceRequest]:
+        """Every request raised on the case, newest first."""
+
+    # -- sign-offs ------------------------------------------------------------ #
+    #
+    # Append-only, like reports and the trail: a sign-off is somebody putting
+    # their name to an engagement. There is no update and no delete.
+
+    def save_sign_off(self, org_id: str, sign_off: SignOff) -> None: ...
+
+    def list_sign_offs(self, org_id: str, case_id: str) -> list[SignOff]:
+        """Every sign-off recorded on the case, newest first."""
 
     # -- api keys ----------------------------------------------------------- #
 

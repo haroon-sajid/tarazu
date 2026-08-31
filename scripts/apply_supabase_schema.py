@@ -40,7 +40,8 @@ MIGRATIONS = (
     ("0005-audit-id-is-text.sql", "audit_id is text, matching the ids the app mints"),
     ("0005-org-invitations.sql", "org_invitations: single-use join codes"),
     ("0006-reports-and-assistant.sql", "append-only reports, assistant audit actions"),
-    ("0006-sales-analytics.sql", "sales_analytics readout, sales_analytics_run action"),
+    ("0007-clients-and-periods.sql", "clients, jobs, corrections, evidence requests, sign-offs, org profiles"),
+    ("0008-sales-analytics.sql", "sales_analytics readout, sales_analytics_run action"),
 )
 
 #: What each migration should leave behind, so --check can say where a project is.
@@ -56,13 +57,16 @@ EXPECTED_TABLES = {
     "0005-audit-id-is-text.sql": (),
     "0005-org-invitations.sql": ("org_invitations",),
     "0006-reports-and-assistant.sql": ("reports",),
-    "0006-sales-analytics.sql": ("sales_analytics",),
+    "0007-clients-and-periods.sql": ("clients", "jobs", "value_corrections",
+                                     "evidence_requests", "sign_offs", "org_profiles"),
+    "0008-sales-analytics.sql": ("sales_analytics",),
 }
 
 #: Migrations whose effect is a privilege or a trigger rather than a table.
 EXPECTED_TRIGGERS = {
     "0004-revoke-truncate.sql": ("audit_trail_no_truncate",),
     "0006-reports-and-assistant.sql": ("reports_no_update_or_delete", "reports_no_truncate"),
+    "0007-clients-and-periods.sql": ("sign_offs_no_change",),
 }
 
 #: Migrations detected by a column's type: (table, column, expected data_type).

@@ -53,7 +53,7 @@ export function RevenueChart({ months }: { months: MonthlyRevenue[] }) {
             formatMoney(Number(value)),
             String(name),
           ]}
-          labelFormatter={(label: string) => formatMonth(label)}
+          labelFormatter={(label) => formatMonth(String(label))}
           contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: "#e2e8f0" }}
           cursor={{ stroke: "#cbd5e1" }}
         />
