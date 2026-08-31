@@ -10,7 +10,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Check, Eye, Loader2, X } from "lucide-react";
+import { Check, Eye, Loader2, MessageSquarePlus, X } from "lucide-react";
 import {
   ApiError,
   approveReviewItem,
@@ -180,7 +180,7 @@ function ReviewScreen() {
 
   return (
     <div>
-      <div className="mb-5 flex items-end justify-between">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-ink-900">Review queue</h1>
           <p className="mt-1 text-sm text-ink-600">
@@ -188,12 +188,20 @@ function ReviewScreen() {
             reject, and each decision lands in the immutable audit trail.
           </p>
         </div>
-        {items && (
-          <p className="text-xs text-ink-400">
-            {items.filter((item) => item.decision === "pending").length} of{" "}
-            {items.length} pending
-          </p>
-        )}
+        <div className="flex items-center gap-3">
+          {items && (
+            <p className="text-xs text-ink-400">
+              {items.filter((item) => item.decision === "pending").length} of{" "}
+              {items.length} pending
+            </p>
+          )}
+          <Link href="/queries" title="Ask the client for the paper behind an item">
+            <Button variant="outline" size="sm">
+              <MessageSquarePlus className="h-4 w-4" aria-hidden />
+              Evidence requests
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Filter tabs */}

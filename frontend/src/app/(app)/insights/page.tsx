@@ -34,6 +34,7 @@ import {
 } from "recharts";
 import {
   AlertTriangle,
+  ArrowLeftRight,
   Building2,
   ChevronRight,
   Clock3,
@@ -229,23 +230,43 @@ export default function InsightsPage() {
     <div>
       {header}
 
-      <Link
-        href="/business"
-        className="mb-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition-colors hover:border-brand-600 hover:bg-slate-50"
-      >
-        <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
-            <Building2 className="h-5 w-5" aria-hidden />
-          </span>
-          <div>
-            <p className="text-sm font-semibold text-ink-900">Business view</p>
-            <p className="text-xs text-ink-500">
-              Owner-facing summary of the active engagement.
-            </p>
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Link
+          href="/business"
+          className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition-colors hover:border-brand-600 hover:bg-slate-50"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
+              <Building2 className="h-5 w-5" aria-hidden />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-ink-900">Business view</p>
+              <p className="text-xs text-ink-500">
+                Owner-facing summary of the active engagement.
+              </p>
+            </div>
           </div>
-        </div>
-        <ChevronRight className="h-4 w-4 text-ink-400" aria-hidden />
-      </Link>
+          <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
+        </Link>
+
+        <Link
+          href="/compare"
+          className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition-colors hover:border-brand-600 hover:bg-slate-50"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
+              <ArrowLeftRight className="h-5 w-5" aria-hidden />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-ink-900">Compare periods</p>
+              <p className="text-xs text-ink-500">
+                One engagement read against another, movement by movement.
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
+        </Link>
+      </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
