@@ -22,7 +22,7 @@ export function ErrorState({
       <AlertTriangle className="h-8 w-8 text-rose-500" aria-hidden />
       <div>
         <p className="text-sm font-semibold text-rose-800">{title}</p>
-        <p className="mt-1 max-w-md text-sm text-rose-700">{message}</p>
+        <p className="mt-1 max-w-md text-sm text-rose-700 max-md:break-words">{message}</p>
       </div>
       {onRetry && (
         <Button variant="outline" size="sm" onClick={onRetry}>
@@ -48,7 +48,7 @@ export function EmptyState({
       <Inbox className="h-8 w-8 text-ink-400" aria-hidden />
       <div>
         <p className="text-sm font-semibold text-ink-900">{title}</p>
-        <p className="mt-1 max-w-md text-sm text-ink-600">{message}</p>
+        <p className="mt-1 max-w-md text-sm text-ink-600 max-md:break-words">{message}</p>
       </div>
       {action}
     </div>

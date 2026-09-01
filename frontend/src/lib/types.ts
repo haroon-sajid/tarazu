@@ -346,6 +346,35 @@ export interface SalesAnomaly {
   source: Provenance | null;
 }
 
+/**
+ * How one sales export was read and cleaned — which sheet and header row it
+ * came from, how the client's own columns were mapped, and which rows were
+ * skipped and why. One per export, carried on the readout so that nothing
+ * about the cleaning is silent.
+ */
+export interface SourceReadReport {
+  document_id: string;
+  filename: string;
+  format: string; // csv | tsv | excel | ods | json
+  sheet: string | null;
+  encoding: string | null;
+  delimiter: string | null;
+  /** The spreadsheet row (1-based) the header was found on. */
+  header_row: number;
+  /** Canonical field → the client's own column header it was read from. */
+  columns: Record<string, string>;
+  /** True when the amount was computed as quantity × unit price. */
+  amount_derived: boolean;
+  rows_seen: number;
+  rows_used: number;
+  rows_skipped: number;
+  /** Reason → count: blank, total_row, no_date, no_amount. */
+  skipped: Record<string, number>;
+  /** Field → how many rows were filed under "Unspecified" for it. */
+  filled_defaults: Record<string, number>;
+  warnings: string[];
+}
+
 /** The whole sales-analytics readout for one case. Pure arithmetic, no AI. */
 export interface SalesAnalyticsResult {
   record_count: number;
@@ -359,6 +388,8 @@ export interface SalesAnalyticsResult {
   anomalies: SalesAnomaly[];
   /** The documents the records were read from, so the readout names its sources. */
   document_ids: string[];
+  /** One read report per export; absent on readouts saved before the reader reported. */
+  data_quality?: SourceReadReport[];
   generated_at: string; // RFC 3339 UTC
 }
 

@@ -12,7 +12,7 @@ import type { Metadata } from "next";
 import { DemoPlayground } from "@/components/demo/demo-playground";
 
 export const metadata: Metadata = {
-  title: "Live demo — Tarazu",
+  title: "Live demo · Tarazu",
   description:
     "Work a sample audit engagement in your browser: the review queue, the evidence behind every row, and an honest account of which half of it an AI produced. No signup.",
 };

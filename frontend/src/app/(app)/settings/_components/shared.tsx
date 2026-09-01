@@ -52,7 +52,7 @@ export function SettingsSection({
   return (
     <section
       className={cn(
-        "mb-5 rounded-xl border border-slate-200 bg-white px-6 py-5 shadow-sm last:mb-0",
+        "mb-5 rounded-xl border border-slate-200 bg-white px-4 py-5 shadow-sm last:mb-0 md:px-6",
         className,
       )}
     >
@@ -66,6 +66,11 @@ export function SettingsSection({
 /**
  * One setting: name and purpose, then its control. Right-aligned by default;
  * `stacked` puts a wide control (a select, an input) under the label instead.
+ *
+ * Below md the default row is allowed to wrap: a narrow control (a toggle, a
+ * badge) stays beside the label, a wide one (a button, a long value) moves
+ * under it, and a long unbreakable value (an id, a URL) breaks rather than
+ * pushing the card wider than the screen. From md up the row is unchanged.
  */
 export function SettingRow({
   name,
@@ -93,14 +98,16 @@ export function SettingRow({
     );
   }
   return (
-    <div className="flex items-center justify-between gap-6 py-4">
-      <div className="min-w-0 max-w-md">
+    <div className="flex items-center justify-between gap-6 py-4 max-md:flex-wrap max-md:gap-y-3">
+      <div className="min-w-0 max-w-md max-md:grow max-md:basis-40">
         <p className="text-[13px] font-semibold text-ink-900">{name}</p>
         <p className="mt-0.5 text-xs leading-relaxed text-ink-500">{description}</p>
       </div>
-      <div className="flex shrink-0 items-center gap-3">
+      <div className="flex shrink-0 items-center gap-3 max-md:min-w-0 max-md:shrink">
         {value !== undefined && (
-          <div className="text-right text-sm text-ink-900">{value}</div>
+          <div className="text-right text-sm text-ink-900 max-md:min-w-0 max-md:break-words max-md:text-left">
+            {value}
+          </div>
         )}
         {action}
       </div>

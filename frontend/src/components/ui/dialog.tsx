@@ -44,7 +44,10 @@ export function Dialog({
     >
       <div
         className={cn(
-          "w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-xl",
+          "w-full max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-xl md:p-5",
+          // Below md only: a dialog taller than a short phone screen scrolls
+          // inside its panel instead of running off the fixed backdrop.
+          "max-md:max-h-[calc(100dvh-2rem)] max-md:overflow-y-auto",
           className,
         )}
       >

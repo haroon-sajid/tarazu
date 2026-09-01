@@ -199,7 +199,7 @@ export default function ReportPage() {
                 <CardTitle>What goes into the report</CardTitle>
               </CardHeader>
               <CardContent>
-                <dl className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                <dl className="grid grid-cols-1 gap-x-8 gap-y-2 text-sm md:grid-cols-2">
                   <div className="flex justify-between">
                     <dt className="text-ink-400">Client</dt>
                     <dd className="font-medium text-ink-900">{summary.client_name}</dd>
@@ -326,7 +326,7 @@ export default function ReportPage() {
                         {signOffs.sign_offs.map((entry) => (
                           <li
                             key={entry.sign_off_id}
-                            className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs"
+                            className="break-words rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs"
                           >
                             <span className="block font-medium text-ink-900">
                               Signed by {entry.signed_by}
@@ -379,7 +379,7 @@ export default function ReportPage() {
                 <p className="text-sm text-ink-600">
                   Everything needed to defend this engagement in one zip: the
                   source documents, every generated report, the decided queue,
-                  the corrections, the sign-offs, and the complete audit trail —
+                  the corrections, the sign-offs, and the complete audit trail,
                   with a <span className="font-mono text-xs">MANIFEST.txt</span>{" "}
                   giving a SHA-256 for every file in it.
                 </p>

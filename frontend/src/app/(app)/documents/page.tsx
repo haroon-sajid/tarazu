@@ -226,8 +226,8 @@ function DocumentsScreen() {
   };
 
   return (
-    <div>
-      <div className="mb-5 flex items-end justify-between">
+    <div className="pb-20 md:pb-0">
+      <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between md:gap-0">
         <div>
           <h1 className="text-xl font-bold text-ink-900">Documents</h1>
           <p className="mt-1 text-sm text-ink-600">
@@ -247,7 +247,7 @@ function DocumentsScreen() {
       {loadError ? (
         <ErrorState message={loadError} onRetry={load} />
       ) : items === null ? (
-        <div className="grid grid-cols-[15rem_minmax(0,1fr)_minmax(0,1fr)] gap-5">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-[15rem_minmax(0,1fr)_minmax(0,1fr)]">
           <Skeleton className="h-96" />
           <Skeleton className="h-96" />
           <Skeleton className="h-96" />
@@ -263,7 +263,7 @@ function DocumentsScreen() {
           }
         />
       ) : (
-        <div className="grid grid-cols-[15rem_minmax(0,1fr)_minmax(0,1fr)] items-start gap-5">
+        <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-[15rem_minmax(0,1fr)_minmax(0,1fr)]">
           {/* Document list */}
           <nav className="space-y-1.5" aria-label="Case documents">
             {documents.map((doc) => {
@@ -317,7 +317,7 @@ function DocumentsScreen() {
                   <Files className="h-3.5 w-3.5" aria-hidden /> Source document
                 </h2>
                 {selected.kind !== "ledger" && selected.pages.length > 1 && (
-                  <div className="flex items-center gap-1" aria-label="Pages">
+                  <div className="flex flex-wrap items-center gap-1 md:flex-nowrap" aria-label="Pages">
                     {selected.pages.map((page) => (
                       <button
                         key={page}

@@ -96,7 +96,7 @@ export default function AuditTrailPage() {
   });
 
   return (
-    <div>
+    <div className="pb-20 md:pb-0">
       <div className="mb-5 flex items-end justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-bold text-ink-900">
@@ -202,7 +202,7 @@ export default function AuditTrailPage() {
                         >
                           {record.action.replace(/_/g, " ")}
                         </span>
-                        <span className="text-xs text-ink-600">
+                        <span className="min-w-0 break-words text-xs text-ink-600">
                           by <span className="font-medium text-ink-900">{actorLabel(record)}</span>
                         </span>
                         <span className="ml-auto text-[11px] text-ink-400">
@@ -210,7 +210,7 @@ export default function AuditTrailPage() {
                         </span>
                       </div>
                       {record.detail && (
-                        <p className="mt-1.5 text-xs leading-relaxed text-ink-600">
+                        <p className="mt-1.5 break-words text-xs leading-relaxed text-ink-600">
                           “{record.detail}”
                         </p>
                       )}

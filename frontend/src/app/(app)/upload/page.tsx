@@ -368,10 +368,9 @@ export default function UploadPage() {
               />
             </div>
 
-            <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
-              Prefer the bank&apos;s CSV or Excel export where you have one: it is
-              read by deterministic code rather than the vision model, so there
-              is no reading uncertainty on the statement at all.
+            <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-ink-400">
+              Prefer the bank&apos;s CSV or Excel export where you have one:
+              deterministic code reads it, so the statement carries no reading uncertainty.
             </p>
 
             {error && (
@@ -380,29 +379,34 @@ export default function UploadPage() {
               </div>
             )}
 
-            <div className="mt-6 flex flex-wrap items-center gap-4">
-              <Button size="lg" disabled={!ready || phase === "working"} onClick={submit}>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+              {!ready && phase === "idle" && (
+                <p className="min-w-0 text-xs text-ink-400 sm:flex-1">
+                  The button unlocks when the three required slots are filled.
+                </p>
+              )}
+              {phase === "working" && (
+                <p className="min-w-0 text-xs text-ink-400 sm:flex-1">
+                  {FIXTURE_MODE
+                    ? "Simulated pipeline (fixture mode)."
+                    : "You can leave this page; the work continues on the server."}
+                </p>
+              )}
+              <Button
+                size="sm"
+                className="self-start sm:ml-auto sm:shrink-0"
+                disabled={!ready || phase === "working"}
+                onClick={submit}
+              >
                 {phase === "working" ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                     Analyzing…
                   </>
                 ) : (
                   "Start the audit"
                 )}
               </Button>
-              {!ready && phase === "idle" && (
-                <p className="text-xs text-ink-400">
-                  The button unlocks when the three required slots are filled.
-                </p>
-              )}
-              {phase === "working" && (
-                <p className="text-xs text-ink-400">
-                  {FIXTURE_MODE
-                    ? "Simulated pipeline (fixture mode)."
-                    : "You can leave this page; the work continues on the server."}
-                </p>
-              )}
             </div>
           </div>
 

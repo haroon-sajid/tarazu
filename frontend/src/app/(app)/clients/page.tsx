@@ -144,11 +144,11 @@ export default function ClientsPage() {
   };
 
   return (
-    <div>
-      <div className="mb-5 flex items-end justify-between">
-        <div>
+    <div className="pb-20 md:pb-0">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-xl font-bold text-ink-900">Clients</h1>
-          <p className="mt-1 text-sm text-ink-600">
+          <p className="mt-1 line-clamp-2 text-sm text-ink-600 sm:line-clamp-none">
             The businesses your firm audits, period after period. Open one to
             see its history and tune the red-flag thresholds it is audited
             against.
@@ -272,7 +272,7 @@ export default function ClientsPage() {
                       title={
                         client.archived
                           ? `Restore “${client.name}” to the pickers`
-                          : `Archive “${client.name}” — nothing is deleted`
+                          : `Archive “${client.name}”. Nothing is deleted`
                       }
                       aria-label={
                         client.archived
@@ -351,7 +351,7 @@ export default function ClientsPage() {
               hint="The language explanations are written in for this client."
             >
               <option value="en">English</option>
-              <option value="ur">اردو — Urdu</option>
+              <option value="ur">اردو (Urdu)</option>
             </Select>
           </div>
           <div>
@@ -385,8 +385,9 @@ export default function ClientsPage() {
               {createError}
             </p>
           )}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
+              className="w-full sm:w-auto"
               variant="outline"
               size="sm"
               onClick={() => setCreating(false)}
@@ -395,6 +396,7 @@ export default function ClientsPage() {
               Cancel
             </Button>
             <Button
+              className="w-full sm:w-auto"
               size="sm"
               onClick={submitCreate}
               disabled={createBusy || !newName.trim()}
@@ -426,8 +428,9 @@ export default function ClientsPage() {
             {confirmError}
           </p>
         )}
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button
+            className="w-full sm:w-auto"
             variant="outline"
             size="sm"
             onClick={() => setConfirming(null)}
@@ -435,7 +438,7 @@ export default function ClientsPage() {
           >
             Cancel
           </Button>
-          <Button size="sm" onClick={submitConfirm} disabled={confirmBusy}>
+          <Button className="w-full sm:w-auto" size="sm" onClick={submitConfirm} disabled={confirmBusy}>
             {confirmBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
             {confirming?.archived ? "Restore client" : "Archive client"}
           </Button>

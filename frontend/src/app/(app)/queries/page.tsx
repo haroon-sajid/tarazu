@@ -70,7 +70,7 @@ const STATUS_STYLE: Record<
   answered: {
     label: "Answered",
     className: "bg-sky-50 text-sky-700 ring-sky-200",
-    note: "Something came back — an auditor still has to read it",
+    note: "Something came back; an auditor still has to read it",
   },
   resolved: {
     label: "Resolved",
@@ -277,7 +277,7 @@ export default function EvidenceRequestsPage() {
       <p className="mb-5 rounded-md bg-slate-50 px-3 py-2 text-xs leading-relaxed text-ink-600 ring-1 ring-slate-200">
         An evidence request is a <strong className="font-semibold">question</strong>,
         not a decision. Recording an answer approves nothing, rejects nothing,
-        and re-matches nothing — the item behind it is still approved or
+        and re-matches nothing. The item behind it is still approved or
         rejected by a person on the review screen. Documents the client actually
         sends belong on the upload screen, where they get extracted, matched,
         and given provenance like every other document.
@@ -319,7 +319,7 @@ export default function EvidenceRequestsPage() {
                   {data.open_total}
                 </p>
                 <p className="mt-0.5 text-[11px] leading-snug text-ink-400">
-                  Open or answered — answered still needs an auditor to read it
+                  Open or answered; answered still needs an auditor to read it
                 </p>
               </CardContent>
             </Card>
@@ -380,7 +380,7 @@ export default function EvidenceRequestsPage() {
           {requests.length === 0 ? (
             <EmptyState
               title="Nothing outstanding"
-              message="No evidence has been requested on this case. Raise one when a document or an explanation is missing — the ask, the answer, and who closed it are all recorded on the case."
+              message="No evidence has been requested on this case. Raise one when a document or an explanation is missing. The ask, the answer, and who closed it are all recorded on the case."
               action={
                 <Button size="sm" onClick={openCreate}>
                   <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden />
@@ -683,7 +683,7 @@ export default function EvidenceRequestsPage() {
         <p className="text-sm leading-relaxed text-ink-600">
           {closing?.action === "cancel"
             ? "The request is withdrawn without a response. The client was still asked, and that stays on the record: the row keeps “cancelled” and the trail keeps both events."
-            : "You are saying a person read what came back and is satisfied by it. Your name goes on the close. This settles the question, not the item — the review item behind it is still approved or rejected on the review screen."}
+            : "You are saying a person read what came back and is satisfied by it. Your name goes on the close. This settles the question, not the item: the review item behind it is still approved or rejected on the review screen."}
         </p>
         <p className="mt-2 text-[11px] text-ink-400">
           Closed requests are not reopened. If the question comes back, raise a

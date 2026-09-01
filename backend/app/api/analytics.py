@@ -1,10 +1,14 @@
 """`/v1/cases/{case_id}/analytics` and `/v1/cases/{case_id}/sales-data`.
 
-Sales analytics now has its own data source: sales data exports uploaded
-separately from the audit documents. The analytics routes read those exports,
-compute a deterministic readout with pandas, and persist it per case. Uploading
-a sales export does not touch the audit pipeline — it is analytical material,
-ot evidence.
+Sales analytics has its own data source: sales exports uploaded separately
+from the audit documents. The analytics routes read those exports, compute a
+deterministic readout with pandas, persist it per case, and hand it back as a
+file on request. Uploading a sales export does not touch the audit pipeline —
+it is analytical material, not evidence.
+
+An upload is read once, immediately, before it is stored: a file the reader
+cannot make sense of is refused on the spot with the reason, rather than
+sitting in the case until a later run trips over it.
 """
 
 from __future__ import annotations
@@ -12,9 +16,10 @@ from __future__ import annotations
 import logging
 import mimetypes
 from datetime import datetime, timezone
+from typing import Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 
 from app.api.deps import Principal, get_repository, get_storage, require_read, require_write
 from app.core.audit import record_actor_action
@@ -28,11 +33,14 @@ __all__ = ["router"]
 router = APIRouter(tags=["analytics"])
 logger = logging.getLogger(__name__)
 
-#: What a sales data export may look like. The frontend enforces the same list.
-SALES_DATA_SUFFIXES = frozenset({".xlsx", ".xlsm", ".xls", ".csv"})
+#: What a sales export may look like — the reader's own list, so the API and
+#: the module cannot disagree. The upload screen offers the same set.
+SALES_DATA_SUFFIXES = analytics.SUPPORTED_SUFFIXES
 
 #: Guards against a mis-selected file exhausting memory.
 MAX_FILE_BYTES = 25 * 1024 * 1024
+
+_EXCEL_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def _suffix(filename: str | None) -> str:
@@ -55,38 +63,52 @@ def _ensure_case_exists(
 def _sales_uploads(
     repository: CaseRepository, org_id: str, case_id: str
 ) -> list[SalesDataUpload]:
-    """The case's uploaded sales data exports, or a 422 when there are none."""
+    """The case's uploaded sales exports, or a 422 when there are none."""
     _ensure_case_exists(repository, org_id, case_id)
     uploads = repository.list_sales_data_uploads(org_id, case_id)
     if not uploads:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
-                f"Case {case_id!r} has no sales data upload. Upload one and "
-                "run the analysis again."
+                "This case has no sales data yet. Upload a sales export first: "
+                "Excel, CSV, TSV, ODS, or JSON."
             ),
         )
     return uploads
+
+
+def _to_response(upload: SalesDataUpload) -> SalesDataUploadResponse:
+    return SalesDataUploadResponse(
+        sales_data_id=upload.sales_data_id,
+        case_id=upload.case_id,
+        filename=upload.filename,
+        size_bytes=upload.size_bytes,
+        uploaded_by=upload.uploaded_by,
+        uploaded_at=upload.uploaded_at,
+    )
 
 
 @router.post(
     "/cases/{case_id}/sales-data",
     response_model=SalesDataUploadResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Upload a sales data export for a case",
+    summary="Upload a sales export for a case",
 )
 async def upload_sales_data(
     case_id: str,
-    file: UploadFile = File(..., description="Sales data export (Excel or CSV)"),
+    file: UploadFile = File(
+        ..., description="Sales export: Excel, CSV, TSV, ODS, or JSON"
+    ),
     principal: Principal = Depends(require_write),
     repository: CaseRepository = Depends(get_repository),
     storage: DocumentStore = Depends(get_storage),
 ) -> SalesDataUploadResponse:
-    """Store a sales data export as a separate source for sales analytics.
+    """Store a sales export as a separate source for sales analytics.
 
-    The export is validated, stored, and tracked in its own table; it never
-    becomes a case document. After uploading, run `POST /analytics` to produce
-    the readout.
+    The file is checked, read once to prove the reader can make sense of it,
+    then stored and tracked in its own table; it never becomes a case document.
+    After uploading, `POST /analytics` produces the readout — the upload screen
+    does that automatically.
     """
     _ensure_case_exists(repository, principal.org_id, case_id)
 
@@ -113,9 +135,19 @@ async def upload_sales_data(
 
     sales_data_id = f"SLS-{uuid4().hex[:8]}"
     filename = file.filename or "unnamed"
+
+    # Read it now, so a file the reader cannot use is refused with the reason
+    # instead of being stored and failing every later run.
+    try:
+        analytics.read_sales_export(sales_data_id, filename, content)
+    except analytics.SalesReadError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"The sales data could not be read: {error}",
+        ) from error
+
     storage_path = f"{case_id}/sales-data/{sales_data_id}/{filename}"
     content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-
     storage.put(storage_path, content, content_type)
 
     upload = SalesDataUpload(
@@ -129,50 +161,30 @@ async def upload_sales_data(
         uploaded_at=datetime.now(timezone.utc),
     )
     repository.add_sales_data_upload(principal.org_id, case_id, upload)
-
-    return SalesDataUploadResponse(
-        sales_data_id=upload.sales_data_id,
-        case_id=upload.case_id,
-        filename=upload.filename,
-        size_bytes=upload.size_bytes,
-        uploaded_by=upload.uploaded_by,
-        uploaded_at=upload.uploaded_at,
-    )
+    return _to_response(upload)
 
 
 @router.get(
     "/cases/{case_id}/sales-data",
     response_model=SalesDataUploadListResponse,
-    summary="List sales data exports for a case",
+    summary="List the sales exports uploaded for a case",
 )
 async def list_sales_data(
     case_id: str,
     principal: Principal = Depends(require_read),
     repository: CaseRepository = Depends(get_repository),
 ) -> SalesDataUploadListResponse:
-    """Every sales data export uploaded to the case, newest first."""
+    """Every sales export uploaded to the case, newest first."""
     _ensure_case_exists(repository, principal.org_id, case_id)
     uploads = repository.list_sales_data_uploads(principal.org_id, case_id)
-    return SalesDataUploadListResponse(
-        uploads=[
-            SalesDataUploadResponse(
-                sales_data_id=upload.sales_data_id,
-                case_id=upload.case_id,
-                filename=upload.filename,
-                size_bytes=upload.size_bytes,
-                uploaded_by=upload.uploaded_by,
-                uploaded_at=upload.uploaded_at,
-            )
-            for upload in uploads
-        ]
-    )
+    return SalesDataUploadListResponse(uploads=[_to_response(upload) for upload in uploads])
 
 
 @router.delete(
     "/cases/{case_id}/sales-data/{sales_data_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     response_model=None,
-    summary="Delete a sales data export",
+    summary="Remove a sales export from a case",
 )
 async def delete_sales_data(
     case_id: str,
@@ -180,7 +192,7 @@ async def delete_sales_data(
     principal: Principal = Depends(require_write),
     repository: CaseRepository = Depends(get_repository),
 ) -> None:
-    """Remove a sales data export from the case.
+    """Remove a sales export from the case.
 
     The stored bytes are not deleted from the underlying store; removing the
     metadata is enough to stop the analysis from reading them. Re-running the
@@ -210,15 +222,17 @@ async def run_sales_analytics(
 ) -> SalesAnalyticsResult:
     """Re-read the case's sales exports and compute the readout from scratch.
 
-    Every sales data upload in the case is read — several exports are
-    concatenated in upload order, so a month split across two files still sums
-    whole. The result replaces whatever an earlier run saved, and the run is
-    recorded in the case's trail with the counts behind it.
+    Every sales export in the case is read — several exports are concatenated
+    in upload order, so a month split across two files still sums whole. The
+    result replaces whatever an earlier run saved, carries one data-quality
+    report per file, and the run is recorded in the case's trail with the
+    counts behind it.
     """
     uploads = _sales_uploads(repository, principal.org_id, case_id)
 
     records = []
-    for upload in uploads:
+    reports = []
+    for upload in reversed(uploads):  # the list is newest first; read in upload order
         try:
             content = storage.get(upload.storage_path)
         except Exception as error:  # noqa: BLE001 - a missing file is a 404, whatever raised
@@ -235,18 +249,18 @@ async def run_sales_analytics(
                 ),
             ) from error
         try:
-            records.extend(
-                analytics.read_sales_data(
-                    upload.sales_data_id, upload.filename, content
-                )
+            file_records, report = analytics.read_sales_export(
+                upload.sales_data_id, upload.filename, content
             )
         except analytics.SalesReadError as error:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"The sales data could not be read: {error}",
+                detail=f"The sales data in {upload.filename!r} could not be read: {error}",
             ) from error
+        records.extend(file_records)
+        reports.append(report)
 
-    result = analytics.analyze_sales(records)
+    result = analytics.analyze_sales(records, reports)
     repository.save_sales_analytics(principal.org_id, case_id, result)
     record_actor_action(
         repository,
@@ -257,7 +271,8 @@ async def run_sales_analytics(
         detail=(
             f"{result.record_count} sales records over {len(uploads)} "
             f"file(s): total revenue {result.total_revenue}, "
-            f"{len(result.anomalies)} anomalies"
+            f"{len(result.anomalies)} anomalies, "
+            f"{sum(report.rows_skipped for report in reports)} row(s) skipped"
         ),
     )
     return result
@@ -288,3 +303,44 @@ async def get_sales_analytics(
             ),
         )
     return result
+
+
+@router.get(
+    "/cases/{case_id}/analytics/download",
+    summary="Download the saved sales-analytics readout as a file",
+    response_class=Response,
+)
+async def download_sales_analytics(
+    case_id: str,
+    format: Literal["xlsx", "json"] = Query(
+        default="xlsx",
+        description="`xlsx` for a workbook with one sheet per breakdown; `json` for the readout as saved.",
+    ),
+    principal: Principal = Depends(require_read),
+    repository: CaseRepository = Depends(get_repository),
+) -> Response:
+    """The saved readout as a file. Nothing is recomputed: the workbook copies
+    the persisted figures sheet by sheet — summary, monthly revenue, products,
+    regions, top customers, anomalies, and the data-quality report of every
+    export — and the JSON is the readout exactly as `GET` returns it.
+    """
+    _ensure_case_exists(repository, principal.org_id, case_id)
+    result = repository.get_sales_analytics(principal.org_id, case_id)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No sales analytics for case {case_id!r} yet; nothing to download.",
+        )
+
+    stem = f"tarazu-{case_id}-sales-analytics"
+    if format == "json":
+        return Response(
+            content=result.model_dump_json(indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{stem}.json"'},
+        )
+    return Response(
+        content=analytics.export_workbook(result),
+        media_type=_EXCEL_MEDIA_TYPE,
+        headers={"Content-Disposition": f'attachment; filename="{stem}.xlsx"'},
+    )

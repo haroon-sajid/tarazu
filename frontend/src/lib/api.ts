@@ -743,6 +743,44 @@ export async function runSalesAnalytics(
   return { ...result, generated_at: new Date().toISOString() };
 }
 
+/**
+ * The file types a sales export may arrive in — the backend reader's own list
+ * (`SUPPORTED_SUFFIXES` in modules/analytics), so the drop zone and the API
+ * cannot disagree.
+ */
+export const SALES_DATA_ACCEPT = [
+  ".xlsx",
+  ".xlsm",
+  ".xls",
+  ".ods",
+  ".csv",
+  ".tsv",
+  ".txt",
+  ".json",
+];
+
+export type SalesAnalyticsDownloadFormat = "xlsx" | "json";
+
+/**
+ * GET /v1/cases/{case_id}/analytics/download — the saved readout as a file.
+ * Nothing is recomputed: the workbook copies the persisted figures sheet by
+ * sheet (summary, monthly, products, regions, customers, anomalies, data
+ * quality); the JSON is the readout exactly as GET returns it.
+ */
+export async function downloadSalesAnalytics(
+  format: SalesAnalyticsDownloadFormat = "xlsx",
+  caseId?: string,
+): Promise<void> {
+  const effective = analyticsCaseId(caseId);
+  if (FIXTURE_MODE) {
+    throw new ApiError(501, "Analytics downloads need the live backend.");
+  }
+  const blob = await requestBlob(
+    `/v1/cases/${encodeURIComponent(effective)}/analytics/download?format=${format}`,
+  );
+  saveBlob(blob, `tarazu-${effective}-sales-analytics.${format}`);
+}
+
 // --------------------------------------------------------------------------
 // Sales data uploads — separate source for sales analytics
 // --------------------------------------------------------------------------

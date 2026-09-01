@@ -175,7 +175,7 @@ export default function InsightsPage() {
         {header}
         <EmptyState
           title="Insights need the live backend"
-          message={`${unavailable} Counting across every case is deterministic work the backend does over stored results — there is nothing to count, and nothing worth inventing, while the app is running on sample fixtures.`}
+          message={`${unavailable} Counting across every case is deterministic work the backend does over stored results. There is nothing to count, and nothing worth inventing, while the app is running on sample fixtures.`}
           action={
             <Link href="/cases">
               <Button size="sm" variant="outline">
@@ -209,7 +209,7 @@ export default function InsightsPage() {
         {header}
         <EmptyState
           title="Nothing to count yet"
-          message="Insights read across finished work. Run a period — upload a bank statement, invoices, and a ledger — and the counts, the parties, and the rules that fired will appear here."
+          message="Insights read across finished work. Run a period (upload a bank statement, invoices, and a ledger) and the counts, the parties, and the rules that fired will appear here."
           action={
             <Link href="/upload">
               <Button size="sm">Go to upload</Button>
@@ -298,8 +298,8 @@ export default function InsightsPage() {
       <p className="mt-3 flex items-center gap-1.5 text-[11px] text-ink-400">
         <Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden />
         Estimated {insights.estimated_hours_saved.toFixed(1)} hours saved against
-        reconciling these items by hand — an estimate the backend derives from
-        item counts, and the only figure on this screen that is not a count.
+        reconciling these items by hand. The backend derives the estimate from
+        item counts, and it is the only figure on this screen that is not a count.
       </p>
 
       {/* Vendor attention — not a risk score, and never described as one */}

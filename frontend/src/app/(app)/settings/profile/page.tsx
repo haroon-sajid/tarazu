@@ -233,7 +233,7 @@ export default function ProfileSettingsPage() {
               </span>
             )}
             <div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 max-md:flex-wrap">
                 <Button
                   size="sm"
                   variant="outline"
@@ -306,7 +306,7 @@ export default function ProfileSettingsPage() {
             <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
               Personal
             </h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <Select
                 label="Gender"
                 value={gender}
@@ -345,7 +345,7 @@ export default function ProfileSettingsPage() {
               {saveError}
             </p>
           )}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 max-md:flex-wrap">
             <Button onClick={submit} disabled={busy}>
               {busy ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -364,7 +364,7 @@ export default function ProfileSettingsPage() {
             <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
               Professional
             </h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <Input
                 label="Job title"
                 value={jobTitle}

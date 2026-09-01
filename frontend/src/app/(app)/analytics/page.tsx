@@ -3,14 +3,18 @@
 /**
  * Sales analytics: the deterministic readout of the case's sales exports.
  * Every figure was computed by the backend's pandas — this page only chooses
- * which months are in view. Sales data exports are uploaded separately from the
- * audit documents; running (or re-running) the analysis is an explicit click,
- * and the saved readout is what loads on the next visit.
+ * which months are in view. Sales exports are uploaded separately from the
+ * audit documents, in whatever format the client's software produced; the
+ * analysis runs as soon as an upload lands, and the saved readout is what
+ * loads on the next visit. The readout says how each file was read and
+ * cleaned, and it can leave the product as a workbook.
  */
 
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  ClipboardCheck,
+  Download,
   FileSpreadsheet,
   Loader2,
   RotateCw,
@@ -20,7 +24,10 @@ import {
 } from "lucide-react";
 import {
   ApiError,
+  FIXTURE_MODE,
+  SALES_DATA_ACCEPT,
   deleteSalesData,
+  downloadSalesAnalytics,
   getSalesAnalytics,
   listSalesData,
   runSalesAnalytics,
@@ -30,6 +37,7 @@ import type {
   MonthlyRevenue,
   SalesAnalyticsResult,
   SalesDataUploadSummary,
+  SourceReadReport,
 } from "@/lib/types";
 import { formatDate, formatFileSize, formatTimestamp } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -53,8 +61,24 @@ const RANGES: { key: RangeKey; label: string; days: number | null }[] = [
   { key: "all", label: "All", days: null },
 ];
 
-/** Accepted sales export formats, kept in sync with backend/app/api/analytics.py. */
-const SALES_DATA_ACCEPT = [".xlsx", ".xlsm", ".xls", ".csv"];
+/** Plain words for the reader's skip reasons and canonical field names. */
+const SKIP_LABEL: Record<string, string> = {
+  blank: "blank rows",
+  total_row: "total / subtotal rows",
+  no_date: "rows with no readable date",
+  no_amount: "rows with no readable amount",
+};
+
+const FIELD_LABEL: Record<string, string> = {
+  date: "Date",
+  amount: "Amount",
+  quantity: "Quantity",
+  unit_price: "Unit price",
+  customer_name: "Customer",
+  product: "Product",
+  region: "Region",
+  sales_row_id: "Row id",
+};
 
 /**
  * The months whose last day falls inside the window ending at the case's own
@@ -98,6 +122,8 @@ function AnalyticsScreen() {
   const [running, setRunning] = React.useState(false);
   const [runError, setRunError] = React.useState<string | null>(null);
   const [range, setRange] = React.useState<RangeKey>("all");
+  const [downloading, setDownloading] = React.useState(false);
+  const [downloadError, setDownloadError] = React.useState<string | null>(null);
 
   const [uploads, setUploads] = React.useState<SalesDataUploadSummary[]>([]);
   const [uploadsLoading, setUploadsLoading] = React.useState(false);
@@ -110,59 +136,68 @@ function AnalyticsScreen() {
   const load = React.useCallback(() => {
     setLoadError(null);
     setRunError(null);
+    setDownloadError(null);
     setResult(null);
     setNotRun(false);
     setUploadsError(null);
     setUploadsLoading(true);
 
-    getSalesAnalytics(explicitCaseId)
-      .then(setResult)
-      .catch((caught) => {
-        // 404 means the analysis has never been run for this case — a state,
-        // not a failure: the run button is the way forward.
-        if (caught instanceof ApiError && caught.status === 404) {
+    // The uploads come first: a case with no sales export has no readout by
+    // definition, so the saved-readout lookup is only made when there is one
+    // (fixture mode always has its sample readout to show).
+    listSalesData(explicitCaseId)
+      .then(async (response) => {
+        setUploads(response.uploads);
+        if (response.uploads.length === 0 && !FIXTURE_MODE) {
           setNotRun(true);
           return;
         }
-        setLoadError(
-          caught instanceof ApiError
-            ? caught.message
-            : "Could not load the sales analytics.",
-        );
-      });
-
-    listSalesData(explicitCaseId)
-      .then((response) => setUploads(response.uploads))
+        try {
+          setResult(await getSalesAnalytics(explicitCaseId));
+        } catch (caught) {
+          // 404 means the analysis has not been saved for this case yet — a
+          // state, not a failure: the run button is the way forward.
+          if (caught instanceof ApiError && caught.status === 404) {
+            setNotRun(true);
+            return;
+          }
+          setLoadError(
+            caught instanceof ApiError
+              ? caught.message
+              : "Could not load the sales analytics.",
+          );
+        }
+      })
       .catch((caught) => {
         setUploadsError(
           caught instanceof ApiError
             ? caught.message
             : "Could not load the sales data uploads.",
         );
+        setNotRun(true);
       })
       .finally(() => setUploadsLoading(false));
   }, [explicitCaseId]);
 
   React.useEffect(load, [load]);
 
-  const run = React.useCallback(() => {
-    if (running) return;
+  const run = React.useCallback(async () => {
     setRunning(true);
     setRunError(null);
-    runSalesAnalytics(explicitCaseId)
-      .then((fresh) => {
-        setResult(fresh);
-        setNotRun(false);
-      })
-      .catch((caught) => {
-        setRunError(
-          caught instanceof ApiError
-            ? caught.message
-            : "Could not run the sales analytics.",
-        );
-      })
-      .finally(() => setRunning(false));
-  }, [explicitCaseId, running]);
+    try {
+      const fresh = await runSalesAnalytics(explicitCaseId);
+      setResult(fresh);
+      setNotRun(false);
+    } catch (caught) {
+      setRunError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not run the sales analytics.",
+      );
+    } finally {
+      setRunning(false);
+    }
+  }, [explicitCaseId]);
 
   const handleUpload = React.useCallback(
     async (files: File[]) => {
@@ -181,12 +216,17 @@ function AnalyticsScreen() {
             ? caught.message
             : "Could not upload the sales data file.",
         );
-      } finally {
         setUploading(false);
         setPendingFile(null);
+        return;
       }
+      setUploading(false);
+      setPendingFile(null);
+      // The export was read successfully when it was stored; the readout is
+      // the next thing the auditor wants, so it runs without another click.
+      await run();
     },
-    [explicitCaseId, uploading],
+    [explicitCaseId, run, uploading],
   );
 
   const handleDelete = React.useCallback(
@@ -211,27 +251,47 @@ function AnalyticsScreen() {
     [deletingId, explicitCaseId],
   );
 
+  const download = React.useCallback(
+    async (format: "xlsx" | "json") => {
+      if (downloading) return;
+      setDownloading(true);
+      setDownloadError(null);
+      try {
+        await downloadSalesAnalytics(format, explicitCaseId);
+      } catch (caught) {
+        setDownloadError(
+          caught instanceof ApiError
+            ? caught.message
+            : "Could not download the sales analytics.",
+        );
+      } finally {
+        setDownloading(false);
+      }
+    },
+    [downloading, explicitCaseId],
+  );
+
   const days = RANGES.find((entry) => entry.key === range)?.days ?? null;
   const months = result
     ? monthsInRange(result.monthly_revenue, result.period_end, days)
     : [];
 
-  const canRun = uploads.length > 0 && !running;
-  const loading = uploadsLoading || (result === null && !notRun);
+  const canRun = uploads.length > 0 && !running && !uploading;
+  const loading = uploadsLoading || (result === null && !notRun && !loadError);
 
   if (loadError) {
     return <ErrorState message={loadError} onRetry={load} />;
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20 md:pb-0">
       <div>
         <h1 className="flex items-center gap-2 text-xl font-bold text-ink-900">
           <TrendingUp className="h-5 w-5 text-brand-700" aria-hidden />
           Sales analytics
         </h1>
         <p className="mt-1 text-sm text-ink-600">
-          Deterministic pandas over the case&apos;s sales exports — a separate
+          Deterministic pandas over the case&apos;s sales exports, a separate
           data source from the audit documents.
         </p>
       </div>
@@ -249,6 +309,11 @@ function AnalyticsScreen() {
       {uploadsError && (
         <p className="rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">
           {uploadsError}
+        </p>
+      )}
+      {downloadError && (
+        <p className="rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">
+          {downloadError}
         </p>
       )}
 
@@ -271,17 +336,26 @@ function AnalyticsScreen() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-ink-600">
-              Upload the client&apos;s sales export (Excel or CSV). The analysis
-              reads these files only — they are not audit evidence and do not
-              start the audit pipeline.
+              Upload the client&apos;s sales export in whatever shape their
+              software produced: Excel, OpenDocument, CSV, TSV, or JSON. The
+              reader finds the header under any title rows, maps the
+              client&apos;s own column names, and says exactly what it skipped.
+              The analysis runs as soon as the file lands. These files are not
+              audit evidence and do not start the audit pipeline.
             </p>
             <DropZone
-              label={uploading ? "Uploading sales export..." : "Drop a sales export"}
-              hint="Excel (.xlsx, .xlsm, .xls) or CSV, up to 25 MB"
+              label={
+                uploading
+                  ? "Reading the export…"
+                  : running
+                    ? "Analysing…"
+                    : "Drop a sales export"
+              }
+              hint="Excel (.xlsx, .xls, .xlsm), .ods, .csv, .tsv, .txt, or .json · up to 25 MB"
               accept={SALES_DATA_ACCEPT}
               files={pendingFile ? [pendingFile] : []}
               onFiles={handleUpload}
-              disabled={uploading || uploadsLoading}
+              disabled={uploading || running || uploadsLoading}
             />
             {uploads.length > 0 && (
               <ul className="space-y-2">
@@ -330,7 +404,7 @@ function AnalyticsScreen() {
         </Card>
       )}
 
-      {loading ? (
+      {loading || (running && result === null) ? (
         <div className="space-y-4">
           <Skeleton className="h-8 w-56" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -355,12 +429,12 @@ function AnalyticsScreen() {
           }
           message={
             uploads.length === 0
-              ? "Sales analytics needs at least one sales export before it can compute the readout."
-              : "Run the analysis to read the uploaded exports and save the readout — revenue by month, product, and region, the top customers, and anything anomalous."
+              ? "Drop the client's sales export above. It is read on arrival, and the readout appears here right away: revenue by month, product, and region, the top customers, and anything anomalous."
+              : "Run the analysis to read the uploaded exports and save the readout: revenue by month, product, and region, the top customers, and anything anomalous."
           }
           action={
             uploads.length > 0 ? (
-              <Button onClick={run} disabled={!canRun}>
+              <Button onClick={() => void run()} disabled={!canRun}>
                 {running ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                 ) : (
@@ -379,7 +453,9 @@ function AnalyticsScreen() {
           onRange={setRange}
           running={running}
           canRun={canRun}
-          onRun={run}
+          onRun={() => void run()}
+          downloading={downloading}
+          onDownload={(format) => void download(format)}
         />
       )}
     </div>
@@ -394,6 +470,8 @@ function AnalyticsResult({
   running,
   canRun,
   onRun,
+  downloading,
+  onDownload,
 }: {
   result: SalesAnalyticsResult;
   months: MonthlyRevenue[];
@@ -402,11 +480,14 @@ function AnalyticsResult({
   running: boolean;
   canRun: boolean;
   onRun: () => void;
+  downloading: boolean;
+  onDownload: (format: "xlsx" | "json") => void;
 }) {
   const period =
     result.period_start && result.period_end
       ? `${formatDate(result.period_start)} to ${formatDate(result.period_end)}`
       : null;
+  const reports = result.data_quality ?? [];
 
   return (
     <div className="space-y-4">
@@ -444,6 +525,27 @@ function AnalyticsResult({
             )}
             {running ? "Running…" : "Re-run"}
           </Button>
+          <Button
+            size="sm"
+            onClick={() => onDownload("xlsx")}
+            disabled={downloading}
+            title="Every sheet is copied from this readout; nothing is recomputed"
+          >
+            {downloading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            ) : (
+              <Download className="h-3.5 w-3.5" aria-hidden />
+            )}
+            Download Excel
+          </Button>
+          <button
+            type="button"
+            onClick={() => onDownload("json")}
+            disabled={downloading}
+            className="text-xs font-medium text-brand-700 hover:underline disabled:opacity-50"
+          >
+            JSON
+          </button>
         </div>
       </div>
 
@@ -511,11 +613,94 @@ function AnalyticsResult({
         </CardContent>
       </Card>
 
+      {reports.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardCheck className="h-4 w-4 text-brand-700" aria-hidden />
+              How the data was read
+              <span className="ml-1.5 text-[11px] font-normal text-ink-400">
+                nothing was cleaned silently
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {reports.map((report) => (
+              <ReadReport key={report.document_id} report={report} />
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <p className="text-xs text-ink-400">
         Read from sales exports{" "}
-        {result.document_ids.length > 0 ? result.document_ids.join(", ") : "—"} ·
+        {result.document_ids.length > 0 ? result.document_ids.join(", ") : "-"} ·
         anomalies are suggestions for a human, never verdicts.
       </p>
+    </div>
+  );
+}
+
+/** One export's cleaning report, in plain words. Every number is the backend's. */
+function ReadReport({ report }: { report: SourceReadReport }) {
+  const where = [
+    report.format.toUpperCase(),
+    report.sheet ? `sheet “${report.sheet}”` : null,
+    report.encoding && report.encoding !== "utf-8-sig" ? `decoded as ${report.encoding}` : null,
+    report.delimiter && report.delimiter !== "," ? `split on ${report.delimiter === "\t" ? "tabs" : `“${report.delimiter}”`}` : null,
+    `header on row ${report.header_row}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const skipped = Object.entries(report.skipped);
+  const filled = Object.entries(report.filled_defaults);
+  const columns = Object.entries(report.columns);
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3 text-xs">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <p className="min-w-0 break-all font-medium text-ink-900">{report.filename}</p>
+        <p className="text-ink-500">
+          <span className="font-semibold text-ink-900 tabular-nums">{report.rows_used}</span>{" "}
+          of {report.rows_seen} rows used
+          {report.rows_skipped > 0 ? ` · ${report.rows_skipped} skipped` : ""}
+        </p>
+      </div>
+      <p className="mt-1 text-ink-500">{where}</p>
+
+      {columns.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {columns.map(([canonical, source]) => (
+            <span
+              key={canonical}
+              className="rounded-full bg-white px-2 py-0.5 text-[11px] text-ink-600 ring-1 ring-slate-200"
+            >
+              {FIELD_LABEL[canonical] ?? canonical} ← <span className="font-medium text-ink-900">{source}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <ul className="mt-2 space-y-0.5 text-ink-600">
+        {report.amount_derived && (
+          <li>Amount computed as quantity × unit price, row by row, exactly.</li>
+        )}
+        {skipped.map(([reason, count]) => (
+          <li key={reason}>
+            Skipped {count} {SKIP_LABEL[reason] ?? reason.replace(/_/g, " ")}.
+          </li>
+        ))}
+        {filled.map(([field, count]) => (
+          <li key={field}>
+            {count} row{count === 1 ? "" : "s"} had no {FIELD_LABEL[field]?.toLowerCase() ?? field} and were filed under “Unspecified”.
+          </li>
+        ))}
+        {report.warnings.map((warning) => (
+          <li key={warning} className="text-amber-700">
+            {warning}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

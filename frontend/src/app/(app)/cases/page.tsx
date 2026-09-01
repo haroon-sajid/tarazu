@@ -182,17 +182,17 @@ export default function CasesPage() {
   };
 
   return (
-    <div>
-      <div className="mb-5 flex items-end justify-between">
-        <div>
+    <div className="pb-20 md:pb-0">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-xl font-bold text-ink-900">Cases</h1>
-          <p className="mt-1 text-sm text-ink-600">
+          <p className="mt-1 line-clamp-2 text-sm text-ink-600 sm:line-clamp-none">
             Every engagement in your firm. Open one to point the whole
             workspace (dashboard, documents, review, and reports) at it; rename
             or delete it from the row actions.
           </p>
         </div>
-        <Link href="/upload">
+        <Link href="/upload" className="self-start sm:self-auto">
           <Button size="sm">
             <Plus className="h-3.5 w-3.5" aria-hidden />
             New case
@@ -332,7 +332,7 @@ export default function CasesPage() {
             placeholder="Haroon Textiles"
             hint="The client this engagement audits, shown on every screen and report."
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input
               label="Period start"
               type="date"
@@ -356,8 +356,9 @@ export default function CasesPage() {
               {editError}
             </p>
           )}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
+              className="w-full sm:w-auto"
               variant="outline"
               size="sm"
               onClick={() => setEditing(null)}
@@ -365,7 +366,7 @@ export default function CasesPage() {
             >
               Cancel
             </Button>
-            <Button size="sm" onClick={submitEdit} disabled={editBusy || !editName.trim()}>
+            <Button className="w-full sm:w-auto" size="sm" onClick={submitEdit} disabled={editBusy || !editName.trim()}>
               {editBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
               Save
             </Button>
@@ -380,8 +381,8 @@ export default function CasesPage() {
         title={`Delete “${deleting?.client_name ?? ""}”?`}
       >
         <p className="text-sm text-ink-600">
-          This removes the engagement and its working data — documents,
-          extractions, the review queue, flags, and the Benford analysis — for
+          This removes the engagement and its working data (documents,
+          extractions, the review queue, flags, and the Benford analysis) for
           good. Generated reports and the audit trail are append-only evidence:
           they outlive the case, and the deletion itself is recorded in the
           trail.
@@ -391,8 +392,9 @@ export default function CasesPage() {
             {deleteError}
           </p>
         )}
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button
+            className="w-full sm:w-auto"
             variant="outline"
             size="sm"
             onClick={() => setDeleting(null)}
@@ -400,7 +402,7 @@ export default function CasesPage() {
           >
             Cancel
           </Button>
-          <Button variant="danger" size="sm" onClick={submitDelete} disabled={deleteBusy}>
+          <Button className="w-full sm:w-auto" variant="danger" size="sm" onClick={submitDelete} disabled={deleteBusy}>
             {deleteBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
             Delete case
           </Button>

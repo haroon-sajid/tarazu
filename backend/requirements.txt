@@ -23,6 +23,10 @@ python-dotenv>=1.0,<2.0
 # No AI library appears in this section, and none ever should.
 pandas>=2.2,<3.0
 openpyxl>=3.1,<4.0
+# Legacy .xls and OpenDocument .ods sales exports (analytics/). Both are pure
+# parsers pandas delegates to; neither touches the network.
+xlrd>=2.0,<3.0
+odfpy>=1.4,<2.0
 rapidfuzz>=3.9,<4.0
 
 # --- Documents ---------------------------------------------------------------

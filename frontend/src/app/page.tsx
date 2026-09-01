@@ -517,7 +517,7 @@ function DemoSection() {
           </h2>
           <p className="mx-auto max-w-[600px] text-[15px] opacity-80 md:text-base">
             Watch how Tarazu processes documents, extracts data, matches transactions, flags
-            risks, and generates reports — all in real time.
+            risks, and generates reports, all in real time.
           </p>
         </div>
 
@@ -798,7 +798,7 @@ const WORKFLOW_STEPS: { num: string; title: string; body: string }[] = [
   {
     num: "02",
     title: "Extract & match",
-    body: "Qwen VL reads documents, deterministic Python runs reconciliation and math — no black boxes.",
+    body: "Qwen VL reads documents; deterministic Python runs reconciliation and math. No black boxes.",
   },
   {
     num: "03",
@@ -922,7 +922,7 @@ export default function LandingPage() {
                 with your firm
               </h1>
               <p className="mb-7 max-w-[55ch] text-[17px] text-[#3D4C5E] md:mb-8 md:text-lg">
-                Tarazu (تارازو) ingests bank statements, invoices, and ledgers — matches, flags,
+                Tarazu (تارازو) ingests bank statements, invoices, and ledgers. It matches, flags,
                 and presents a clean review queue with an immutable audit trail.
               </p>
               <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:gap-4 md:mb-8">
@@ -1020,7 +1020,7 @@ export default function LandingPage() {
         <section id="how" className="scroll-mt-16 px-6 py-16 md:py-24 lg:px-10">
           <div className="mx-auto max-w-[1200px]">
             <Eyebrow>Workflow</Eyebrow>
-            <h2 className={H2}>AI suggests, human decides — end to end</h2>
+            <h2 className={H2}>AI suggests, human decides. End to end.</h2>
             <div className="mt-10 grid gap-8 md:mt-14 md:grid-cols-3 md:gap-6 lg:gap-10">
               {WORKFLOW_STEPS.map(({ num, title, body }) => (
                 <div key={num} className="border-l-[3px] border-[#0E7C66] pl-5 md:pl-6">
@@ -1168,7 +1168,7 @@ export default function LandingPage() {
               See your own engagement in Tarazu
             </h2>
             <p className="mb-8 text-[16px] text-[#3D4C5E] md:text-lg">
-              Bring one real (anonymised) engagement to the demo — we&apos;ll show you exactly what
+              Bring one real (anonymised) engagement to the demo, and we&apos;ll show you exactly what
               it automates.
             </p>
             <Link href="/signup" className={BTN_PRIMARY}>

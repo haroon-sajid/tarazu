@@ -54,7 +54,7 @@ function StatCard({
       <CardContent className="flex items-start justify-between gap-2 px-3.5 py-3.5 sm:px-5 sm:py-4">
         <div className="min-w-0">
           <p className="text-xs font-medium leading-tight text-ink-400">{label}</p>
-          <p className="mt-1 text-xl font-bold text-ink-900 tabular-nums sm:text-2xl">
+          <p className="mt-1 break-words text-xl font-bold text-ink-900 tabular-nums sm:text-2xl">
             {value}
           </p>
           {detail && <p className="mt-0.5 text-[11px] leading-snug text-ink-400">{detail}</p>}
@@ -193,7 +193,7 @@ export default function BusinessPage() {
     <div className="space-y-4 pb-20 md:pb-0">
       <div>
         <h1 className="text-xl font-bold text-ink-900">{summary.client_name}</h1>
-        <p className="mt-1 text-sm text-ink-600">
+        <p className="mt-1 break-words text-sm text-ink-600">
           {period} · {summary.case_id}
         </p>
       </div>
@@ -210,7 +210,7 @@ export default function BusinessPage() {
             <CardTitle className="text-base">مختصر جائزہ</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="leading-loose text-ink-800" style={{ fontSize: "1.05rem" }}>
+            <p className="break-words leading-loose text-ink-800" style={{ fontSize: "1.05rem" }}>
               {summary.urdu_summary}
             </p>
           </CardContent>

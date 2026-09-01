@@ -54,7 +54,7 @@ export function AnomalyList({ anomalies }: { anomalies: SalesAnomaly[] }) {
             <p className="text-sm leading-relaxed text-ink-900">
               {anomaly.explanation}
             </p>
-            <p className="mt-0.5 font-mono text-[10px] text-ink-400">
+            <p className="mt-0.5 break-words font-mono text-[10px] text-ink-400">
               {anomaly.anomaly_id} · {anomaly.kind}
               {anomaly.month ? ` · ${formatMonth(anomaly.month)}` : ""}
               {anomaly.related_row_ids.length > 0

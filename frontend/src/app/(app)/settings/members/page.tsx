@@ -139,68 +139,70 @@ export default function MembersSettingsPage() {
           ))}
         </div>
       ) : (
-        <table className="w-full text-left">
-          <thead>
-            <tr className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-              <th className="py-2 pr-4">Member</th>
-              <th className="py-2 pr-4">Role</th>
-              <th className="py-2 pr-4">Joined</th>
-              <th className="py-2 text-right">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {members.map((member) => {
-              const label = member.email ?? member.user_id;
-              const you = member.user_id === session?.userId;
-              return (
-                <tr
-                  key={member.user_id}
-                  className="border-b border-slate-100 text-sm last:border-0"
-                >
-                  <td className="py-3 pr-4">
-                    <span className="flex items-center gap-3">
-                      <span
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-800"
-                        aria-hidden
-                      >
-                        {label.charAt(0).toUpperCase()}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left max-md:min-w-[560px]">
+            <thead>
+              <tr className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                <th className="py-2 pr-4">Member</th>
+                <th className="py-2 pr-4">Role</th>
+                <th className="py-2 pr-4">Joined</th>
+                <th className="py-2 text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {members.map((member) => {
+                const label = member.email ?? member.user_id;
+                const you = member.user_id === session?.userId;
+                return (
+                  <tr
+                    key={member.user_id}
+                    className="border-b border-slate-100 text-sm last:border-0"
+                  >
+                    <td className="py-3 pr-4">
+                      <span className="flex items-center gap-3">
+                        <span
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-800"
+                          aria-hidden
+                        >
+                          {label.charAt(0).toUpperCase()}
+                        </span>
+                        <span>
+                          <p className="font-medium text-ink-900">
+                            {label}
+                            {you && (
+                              <span className="ml-1.5 text-[10px] font-normal text-ink-400">
+                                (you)
+                              </span>
+                            )}
+                          </p>
+                          <p className="font-mono text-[10px] text-ink-400">
+                            {member.user_id}
+                          </p>
+                        </span>
                       </span>
-                      <span>
-                        <p className="font-medium text-ink-900">
-                          {label}
-                          {you && (
-                            <span className="ml-1.5 text-[10px] font-normal text-ink-400">
-                              (you)
-                            </span>
-                          )}
-                        </p>
-                        <p className="font-mono text-[10px] text-ink-400">
-                          {member.user_id}
-                        </p>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span className="inline-flex items-center gap-1 text-sm capitalize text-ink-900">
+                        {member.role === "owner" ? (
+                          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
+                        ) : (
+                          <UserRound className="h-3.5 w-3.5 text-ink-400" aria-hidden />
+                        )}
+                        {member.role}
                       </span>
-                    </span>
-                  </td>
-                  <td className="py-3 pr-4">
-                    <span className="inline-flex items-center gap-1 text-sm capitalize text-ink-900">
-                      {member.role === "owner" ? (
-                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
-                      ) : (
-                        <UserRound className="h-3.5 w-3.5 text-ink-400" aria-hidden />
-                      )}
-                      {member.role}
-                    </span>
-                  </td>
-                  <td className="py-3 pr-4 text-xs text-ink-600">
-                    {formatTimestamp(member.created_at)}
-                  </td>
-                  <td className="py-3 text-right">
-                    <StatePill tone="positive">Active</StatePill>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    </td>
+                    <td className="py-3 pr-4 text-xs text-ink-600">
+                      {formatTimestamp(member.created_at)}
+                    </td>
+                    <td className="py-3 text-right">
+                      <StatePill tone="positive">Active</StatePill>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Invitations — rendered only where the backend let us list them */}
@@ -215,80 +217,82 @@ export default function MembersSettingsPage() {
               they enter it on the signup screen.
             </p>
           ) : (
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-                  <th className="py-2 pr-4">Invited</th>
-                  <th className="py-2 pr-4">Role</th>
-                  <th className="py-2 pr-4">Code</th>
-                  <th className="py-2 pr-4">Created</th>
-                  <th className="py-2 pr-4">Status</th>
-                  <th className="py-2 text-right" aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {invitations.map((invitation) => (
-                  <tr
-                    key={invitation.invite_id}
-                    className="border-b border-slate-100 text-sm last:border-0"
-                  >
-                    <td className="py-2.5 pr-4 font-medium text-ink-900">
-                      {invitation.email}
-                    </td>
-                    <td className="py-2.5 pr-4 capitalize text-ink-600">
-                      {invitation.role}
-                    </td>
-                    <td className="py-2.5 pr-4">
-                      {invitation.accepted ? (
-                        <span className="font-mono text-xs text-ink-400 line-through">
-                          {invitation.code}
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => copyCode(invitation.code)}
-                          title="Copy the join code"
-                          className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 font-mono text-xs text-ink-900 transition-colors hover:bg-slate-200"
-                        >
-                          {invitation.code}
-                          {copiedCode === invitation.code ? (
-                            <Check className="h-3 w-3 text-emerald-600" aria-hidden />
-                          ) : (
-                            <Copy className="h-3 w-3 text-ink-400" aria-hidden />
-                          )}
-                        </button>
-                      )}
-                    </td>
-                    <td className="py-2.5 pr-4 text-xs text-ink-600">
-                      {formatTimestamp(invitation.created_at)}
-                    </td>
-                    <td className="py-2.5 pr-4">
-                      {invitation.accepted ? (
-                        <StatePill tone="positive">Accepted</StatePill>
-                      ) : (
-                        <StatePill tone="neutral">Open</StatePill>
-                      )}
-                    </td>
-                    <td className="py-2.5 text-right">
-                      {!invitation.accepted && (
-                        <button
-                          onClick={() => revoke(invitation)}
-                          disabled={revokeBusy === invitation.invite_id}
-                          title="Revoke this invitation"
-                          aria-label={`Revoke the invitation for ${invitation.email}`}
-                          className="rounded-md p-1.5 text-ink-400 transition-colors hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40"
-                        >
-                          {revokeBusy === invitation.invite_id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                          ) : (
-                            <Ban className="h-4 w-4" aria-hidden />
-                          )}
-                        </button>
-                      )}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left max-md:min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                    <th className="py-2 pr-4">Invited</th>
+                    <th className="py-2 pr-4">Role</th>
+                    <th className="py-2 pr-4">Code</th>
+                    <th className="py-2 pr-4">Created</th>
+                    <th className="py-2 pr-4">Status</th>
+                    <th className="py-2 text-right" aria-label="Actions" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {invitations.map((invitation) => (
+                    <tr
+                      key={invitation.invite_id}
+                      className="border-b border-slate-100 text-sm last:border-0"
+                    >
+                      <td className="py-2.5 pr-4 font-medium text-ink-900">
+                        {invitation.email}
+                      </td>
+                      <td className="py-2.5 pr-4 capitalize text-ink-600">
+                        {invitation.role}
+                      </td>
+                      <td className="py-2.5 pr-4">
+                        {invitation.accepted ? (
+                          <span className="font-mono text-xs text-ink-400 line-through">
+                            {invitation.code}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => copyCode(invitation.code)}
+                            title="Copy the join code"
+                            className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 font-mono text-xs text-ink-900 transition-colors hover:bg-slate-200"
+                          >
+                            {invitation.code}
+                            {copiedCode === invitation.code ? (
+                              <Check className="h-3 w-3 text-emerald-600" aria-hidden />
+                            ) : (
+                              <Copy className="h-3 w-3 text-ink-400" aria-hidden />
+                            )}
+                          </button>
+                        )}
+                      </td>
+                      <td className="py-2.5 pr-4 text-xs text-ink-600">
+                        {formatTimestamp(invitation.created_at)}
+                      </td>
+                      <td className="py-2.5 pr-4">
+                        {invitation.accepted ? (
+                          <StatePill tone="positive">Accepted</StatePill>
+                        ) : (
+                          <StatePill tone="neutral">Open</StatePill>
+                        )}
+                      </td>
+                      <td className="py-2.5 text-right">
+                        {!invitation.accepted && (
+                          <button
+                            onClick={() => revoke(invitation)}
+                            disabled={revokeBusy === invitation.invite_id}
+                            title="Revoke this invitation"
+                            aria-label={`Revoke the invitation for ${invitation.email}`}
+                            className="rounded-md p-1.5 text-ink-400 transition-colors hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40"
+                          >
+                            {revokeBusy === invitation.invite_id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                            ) : (
+                              <Ban className="h-4 w-4" aria-hidden />
+                            )}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}

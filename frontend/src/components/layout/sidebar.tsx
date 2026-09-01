@@ -34,15 +34,15 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/upload", label: "Upload", icon: Upload },
   { href: "/review", label: "Review", icon: TableProperties },
-  { href: "/clients", label: "Clients", icon: Users },
   { href: "/cases", label: "Cases", icon: Briefcase },
+  { href: "/clients", label: "Clients", icon: Users },
   { href: "/documents", label: "Documents", icon: Files },
   { href: "/sampling", label: "Sampling", icon: Dices },
   { href: "/assistant", label: "Assistant", icon: MessageSquare },
   { href: "/audit-trail", label: "Audit trail", icon: ShieldCheck },
   { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/analytics", label: "Analytics", icon: BarChart2 },
   { href: "/insights", label: "Insights", icon: TrendingUp },
+  { href: "/analytics", label: "Analytics", icon: BarChart2 },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

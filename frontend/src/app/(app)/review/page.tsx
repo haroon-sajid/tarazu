@@ -179,16 +179,16 @@ function ReviewScreen() {
   const visible = items ? tabFilter(items, tab) : [];
 
   return (
-    <div>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
+    <div className="pb-20 md:pb-0">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-xl font-bold text-ink-900">Review queue</h1>
-          <p className="mt-1 text-sm text-ink-600">
+          <p className="mt-1 line-clamp-2 text-sm text-ink-600 sm:line-clamp-none">
             The AI suggests, you decide. Every row needs your explicit approve or
             reject, and each decision lands in the immutable audit trail.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 sm:justify-end">
           {items && (
             <p className="text-xs text-ink-400">
               {items.filter((item) => item.decision === "pending").length} of{" "}
@@ -205,7 +205,7 @@ function ReviewScreen() {
       </div>
 
       {/* Filter tabs */}
-      <div className="mb-4 flex gap-1 border-b border-slate-200">
+      <div className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 md:overflow-x-visible">
         {TABS.map(({ key, label }) => {
           const count = items ? tabFilter(items, key).length : null;
           return (
@@ -213,7 +213,7 @@ function ReviewScreen() {
               key={key}
               onClick={() => setTab(key)}
               className={cn(
-                "-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors",
+                "shrink-0 border-b-2 px-4 py-2 text-sm font-medium transition-colors md:-mb-px md:shrink",
                 tab === key
                   ? "border-brand-800 text-brand-900"
                   : "border-transparent text-ink-400 hover:text-ink-600",
@@ -341,6 +341,7 @@ function ReviewScreen() {
                               disabled={busy}
                               onClick={() => approve(item)}
                               aria-label={`Approve ${item.review_item_id}`}
+                              className="px-2.5 text-xs sm:px-3 sm:text-xs"
                             >
                               {busy ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -358,6 +359,7 @@ function ReviewScreen() {
                                 setRejecting(item);
                               }}
                               aria-label={`Reject ${item.review_item_id}`}
+                              className="px-2.5 text-xs sm:px-3 sm:text-xs"
                             >
                               <X className="h-3.5 w-3.5" aria-hidden />
                               Reject
@@ -369,9 +371,10 @@ function ReviewScreen() {
                           variant="outline"
                           onClick={() => setViewing(item)}
                           aria-label={`View evidence for ${item.review_item_id}`}
+                          className="px-2 sm:px-3"
                         >
                           <Eye className="h-3.5 w-3.5" aria-hidden />
-                          Evidence
+                          <span className="hidden sm:inline">Evidence</span>
                         </Button>
                       </div>
                     </td>
@@ -400,11 +403,12 @@ function ReviewScreen() {
           placeholder="Why is this item rejected?"
           className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-ink-900 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600"
         />
-        <div className="mt-3 flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={() => setRejecting(null)}>
+        <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button className="w-full sm:w-auto" variant="outline" size="sm" onClick={() => setRejecting(null)}>
             Cancel
           </Button>
           <Button
+            className="w-full sm:w-auto"
             variant="danger"
             size="sm"
             disabled={!rejectReason.trim() || rejectSubmitting}

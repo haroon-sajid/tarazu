@@ -755,6 +755,45 @@ class Anomaly(TarazuModel):
     source: Provenance | None = None
 
 
+class SourceReadReport(TarazuModel):
+    """What the reader did to one sales export, so the readout can say how the
+    data was cleaned before it was counted.
+
+    An audit layer never cleans silently: every row that was not counted is
+    here with the reason, every column the reader guessed is named against the
+    client's own header, and a derived amount (quantity × unit price) says so.
+    One report per export; `SalesAnalyticsResult.data_quality` carries them.
+    """
+
+    document_id: str = Field(min_length=1)
+    filename: str = Field(min_length=1)
+    #: `csv`, `tsv`, `excel`, `ods`, or `json`.
+    format: str = Field(min_length=1)
+    #: The worksheet the table was read from, for workbooks with several.
+    sheet: str | None = None
+    #: The text encoding a delimited file was decoded with.
+    encoding: str | None = None
+    #: The delimiter a delimited file was split on.
+    delimiter: str | None = None
+    #: The spreadsheet row (1-based) the header was found on. Title rows and
+    #: blank lines above it were skipped.
+    header_row: int = Field(ge=1)
+    #: Canonical field → the client's own column header it was read from.
+    columns: dict[str, str] = Field(default_factory=dict)
+    #: True when there was no amount column and it was computed as
+    #: quantity × unit price, row by row, in Decimal.
+    amount_derived: bool = False
+    rows_seen: int = Field(ge=0)
+    rows_used: int = Field(ge=0)
+    rows_skipped: int = Field(ge=0)
+    #: Why rows were skipped: `blank`, `total_row`, `no_date`, `no_amount`.
+    skipped: dict[str, int] = Field(default_factory=dict)
+    #: How many rows had no customer or no product and were filed under
+    #: "Unspecified" rather than dropped.
+    filled_defaults: dict[str, int] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class SalesAnalyticsResult(TarazuModel):
     """The whole sales-analytics readout for one case. Pure arithmetic, no AI.
 
@@ -776,6 +815,9 @@ class SalesAnalyticsResult(TarazuModel):
     #: The documents the records were read from, so the readout names its
     #: sources. Derived from the records' provenance, sorted for determinism.
     document_ids: list[str] = Field(default_factory=list)
+    #: How each export was read and cleaned — one report per file. Empty on
+    #: readouts saved before the reader started reporting.
+    data_quality: list[SourceReadReport] = Field(default_factory=list)
     generated_at: datetime
 
     @model_validator(mode="after")

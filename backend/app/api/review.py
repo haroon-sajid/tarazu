@@ -300,7 +300,7 @@ async def correct_value(
             f"{body.field} on {body.document_id}: model read "
             f"{body.ai_value if body.ai_value is not None else '(nothing)'!r}, "
             f"corrected to {body.corrected_value!r}"
-            + (f" — {body.note}" if body.note else "")
+            + (f"; note: {body.note}" if body.note else "")
         ),
     )
     return CorrectionResponse(correction=correction, audit_record=record)

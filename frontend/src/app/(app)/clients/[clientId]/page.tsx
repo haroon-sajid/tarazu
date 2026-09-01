@@ -319,7 +319,7 @@ export default function ClientDetailPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-20 md:pb-0">
       <div>
         <Link
           href="/clients"
@@ -329,7 +329,7 @@ export default function ClientDetailPage() {
           All clients
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h1 className="text-xl font-bold text-ink-900">{client.name}</h1>
+          <h1 className="min-w-0 break-words text-xl font-bold text-ink-900">{client.name}</h1>
           {client.reference && (
             <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-ink-600 ring-1 ring-slate-200">
               {client.reference}
@@ -366,7 +366,7 @@ export default function ClientDetailPage() {
               <div className="flex items-baseline justify-between gap-3">
                 <dt className="text-xs text-ink-400">Language</dt>
                 <dd className="text-ink-900">
-                  {client.language === "ur" ? "اردو — Urdu" : "English"}
+                  {client.language === "ur" ? "اردو (Urdu)" : "English"}
                 </dd>
               </div>
               <div className="flex items-baseline justify-between gap-3">
@@ -495,7 +495,7 @@ export default function ClientDetailPage() {
 
               <RuleField
                 label="Round-number floor"
-                explanation="At or above this amount, a suspiciously round figure — a whole multiple of 1,000 — is flagged for a look. Below it, round numbers are ordinary and are left alone."
+                explanation="At or above this amount, a suspiciously round figure (a whole multiple of 1,000) is flagged for a look. Below it, round numbers are ordinary and are left alone."
               >
                 <Input
                   type="number"

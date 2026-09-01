@@ -37,7 +37,7 @@ function caseLabel(summary: CaseSummary): string {
     summary.period_start && summary.period_end
       ? `${formatDate(summary.period_start)} to ${formatDate(summary.period_end)}`
       : "period not set";
-  return `${summary.client_name} — ${period}`;
+  return `${summary.client_name} · ${period}`;
 }
 
 /** The header card above each column. Counts are the case's, as the backend
@@ -234,7 +234,7 @@ export default function ComparePage() {
           message={
             cases.length === 0
               ? "There is nothing to compare yet. Upload a bank statement, invoices, and a ledger to run the first period."
-              : "There is one period so far. Run a second — the same client's next month is the comparison this screen was built for — and it will appear here."
+              : "There is one period so far. Run a second and it will appear here. The same client's next month is the comparison this screen was built for."
           }
           action={
             <Link href="/upload">
@@ -337,7 +337,7 @@ export default function ComparePage() {
               <CardTitle>Measure by measure</CardTitle>
               <p className="mt-1 text-xs leading-relaxed text-ink-600">
                 Highlighted rows are the movements the backend marks as worth
-                stopping on — a large swing either way, or any rise in a count
+                stopping on: a large swing either way, or any rise in a count
                 where a rise is itself the news. What the difference means is
                 yours to decide.
               </p>
@@ -348,59 +348,121 @@ export default function ComparePage() {
                   There is nothing measurable in these two periods yet.
                 </p>
               ) : (
-                <div className="overflow-x-auto rounded-lg border border-slate-200">
-                  <table className="w-full min-w-[560px] text-left">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-                        <th className="px-4 py-2.5">Measure</th>
-                        <th className="px-4 py-2.5 text-right">Earlier</th>
-                        <th className="px-4 py-2.5 text-right">Later</th>
-                        <th className="px-4 py-2.5 text-right">Change</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {comparison.deltas.map((delta) => (
-                        <tr
-                          key={delta.label}
-                          className={cn(
-                            "border-b border-slate-100 text-sm last:border-0",
-                            delta.notable && "bg-amber-50/60",
-                          )}
-                        >
-                          <td className="px-4 py-3 text-ink-900">
-                            <span className="flex items-center gap-2">
-                              {delta.label}
-                              {delta.notable && (
-                                <span
-                                  className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-amber-300"
-                                  title="The backend marked this movement as worth a look"
-                                >
-                                  Notable
-                                </span>
-                              )}
+                <>
+                  {/* Below md the table's columns stack: one block per measure,
+                      the earlier and later readings and the change under its
+                      label, so a row reads without scrolling sideways. Same
+                      rows, same values, same tones as the table. */}
+                  <ul className="space-y-2 md:hidden">
+                    {comparison.deltas.map((delta) => (
+                      <li
+                        key={delta.label}
+                        className={cn(
+                          "rounded-lg border border-slate-200 px-3 py-2.5",
+                          delta.notable && "border-amber-200 bg-amber-50/60",
+                        )}
+                      >
+                        <span className="flex flex-wrap items-center gap-2 text-sm text-ink-900">
+                          {delta.label}
+                          {delta.notable && (
+                            <span
+                              className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-amber-300"
+                              title="The backend marked this movement as worth a look"
+                            >
+                              Notable
                             </span>
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-ink-600">
-                            {delta.left}
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-ink-900">
-                            {delta.right}
-                          </td>
-                          <td
+                          )}
+                        </span>
+                        <dl className="mt-1.5 space-y-1 text-sm">
+                          <div className="flex items-baseline justify-between gap-3">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                              Earlier
+                            </dt>
+                            <dd className="min-w-0 break-words text-right tabular-nums text-ink-600">
+                              {delta.left}
+                            </dd>
+                          </div>
+                          <div className="flex items-baseline justify-between gap-3">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                              Later
+                            </dt>
+                            <dd className="min-w-0 break-words text-right tabular-nums text-ink-900">
+                              {delta.right}
+                            </dd>
+                          </div>
+                          <div className="flex items-baseline justify-between gap-3">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                              Change
+                            </dt>
+                            <dd
+                              className={cn(
+                                "min-w-0 break-words text-right tabular-nums",
+                                delta.notable
+                                  ? "font-semibold text-amber-800"
+                                  : "text-ink-600",
+                              )}
+                            >
+                              {delta.change || "-"}
+                            </dd>
+                          </div>
+                        </dl>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="hidden overflow-x-auto rounded-lg border border-slate-200 md:block">
+                    <table className="w-full min-w-[560px] text-left">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                          <th className="px-4 py-2.5">Measure</th>
+                          <th className="px-4 py-2.5 text-right">Earlier</th>
+                          <th className="px-4 py-2.5 text-right">Later</th>
+                          <th className="px-4 py-2.5 text-right">Change</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {comparison.deltas.map((delta) => (
+                          <tr
+                            key={delta.label}
                             className={cn(
-                              "whitespace-nowrap px-4 py-3 text-right tabular-nums",
-                              delta.notable
-                                ? "font-semibold text-amber-800"
-                                : "text-ink-600",
+                              "border-b border-slate-100 text-sm last:border-0",
+                              delta.notable && "bg-amber-50/60",
                             )}
                           >
-                            {delta.change || "-"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                            <td className="px-4 py-3 text-ink-900">
+                              <span className="flex items-center gap-2">
+                                {delta.label}
+                                {delta.notable && (
+                                  <span
+                                    className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-amber-300"
+                                    title="The backend marked this movement as worth a look"
+                                  >
+                                    Notable
+                                  </span>
+                                )}
+                              </span>
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-ink-600">
+                              {delta.left}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-ink-900">
+                              {delta.right}
+                            </td>
+                            <td
+                              className={cn(
+                                "whitespace-nowrap px-4 py-3 text-right tabular-nums",
+                                delta.notable
+                                  ? "font-semibold text-amber-800"
+                                  : "text-ink-600",
+                              )}
+                            >
+                              {delta.change || "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>

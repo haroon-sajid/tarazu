@@ -35,7 +35,7 @@ export default function IntegrationsSettingsPage() {
             </li>
             <li>
               Schedule requests to the endpoints you need, for example{" "}
-              <span className="font-mono text-xs">
+              <span className="font-mono text-xs max-md:break-all">
                 GET /v1/review-items?decision=pending&amp;flagged=true
               </span>{" "}
               to retrieve items awaiting review.

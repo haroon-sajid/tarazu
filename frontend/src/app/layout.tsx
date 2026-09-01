@@ -3,7 +3,7 @@ import { AuthProvider } from "@/lib/auth";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Tarazu — AI Audit Assistant",
+  title: "Tarazu · AI Audit Assistant",
   description:
     "The AI weighs the evidence, the auditor delivers the verdict. Upload, review, and sign off with a full audit trail.",
 };

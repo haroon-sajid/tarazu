@@ -58,7 +58,7 @@ const METHODS: {
     value: "monetary_unit",
     label: "Monetary-unit (probability proportional to size)",
     line:
-      "The sampling unit is one rupee, not one row, so an item's chance of selection is proportional to its amount — and any item larger than the sampling interval is near-certain to be picked, which is how you test the money rather than the rows. Items with a zero or negative amount are excluded; the note says how many.",
+      "The sampling unit is one rupee, not one row, so an item's chance of selection is proportional to its amount. Any item larger than the sampling interval is near-certain to be picked, which is how you test the money rather than the rows. Items with a zero or negative amount are excluded; the note says how many.",
     statistical: true,
   },
   {
@@ -72,7 +72,7 @@ const METHODS: {
     value: "high_value",
     label: "High value (largest amounts)",
     line:
-      "The largest amounts, in descending order. Legitimate, targeted work — and not a statistical sample: the items were chosen because they are large, so nothing observed in them may be projected over the items that were not chosen.",
+      "The largest amounts, in descending order. Legitimate, targeted work, but not a statistical sample: the items were chosen because they are large, so nothing observed in them may be projected over the items that were not chosen.",
     statistical: false,
   },
 ];
@@ -201,7 +201,7 @@ export default function SamplingPage() {
         <p className="mt-1 max-w-3xl text-sm text-ink-600">
           Draw a subset of the case's population for substantive testing, and
           keep the record of how it was drawn. The selection, the totals, and
-          the coverage are computed by deterministic code — never by a model —
+          the coverage are computed by deterministic code, never by a model,
           and every draw comes back with the seed that reproduces it.
         </p>
       </div>
@@ -245,7 +245,7 @@ export default function SamplingPage() {
               max={500}
               value={size}
               onChange={(event) => setSize(event.target.value)}
-              hint="1 to 500. A size at or above the population tests all of it — a census, and the note will say so."
+              hint="1 to 500. A size at or above the population tests all of it: a census, and the note will say so."
             />
             <Input
               label="Seed (optional)"
@@ -346,7 +346,7 @@ export default function SamplingPage() {
                   value={METHOD_LABEL[sample.method]}
                   detail={
                     sample.method === "high_value"
-                      ? "Judgemental — not a statistical sample"
+                      ? "Judgemental, not a statistical sample"
                       : "Statistical selection"
                   }
                 />
@@ -364,7 +364,7 @@ export default function SamplingPage() {
                       Put this seed back in the field on the left, with the same
                       method and size, and the same population returns this
                       exact sample. That reproducibility is what makes the
-                      selection defensible rather than an anecdote — record it
+                      selection defensible rather than an anecdote. Record it
                       in the working paper.
                     </p>
                   </div>
@@ -382,8 +382,8 @@ export default function SamplingPage() {
                     {sample.method_note}
                   </p>
                   <p className="mt-2 text-[11px] text-ink-400">
-                    Written by the sampling module and shown word for word —
-                    this is the paragraph that belongs in the file.
+                    Written by the sampling module and shown word for word.
+                    This is the paragraph that belongs in the file.
                   </p>
                 </CardContent>
               </Card>
@@ -392,7 +392,7 @@ export default function SamplingPage() {
               {sample.items.length === 0 ? (
                 <EmptyState
                   title="Nothing was selected"
-                  message="The draw returned no items. The note above says why — usually an empty population, or a monetary-unit draw over a population with no positive amounts."
+                  message="The draw returned no items. The note above says why: usually an empty population, or a monetary-unit draw over a population with no positive amounts."
                 />
               ) : (
                 <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">

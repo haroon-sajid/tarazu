@@ -116,7 +116,7 @@ way every time.
 | Scope | Grants |
 |---|---|
 | `read` | Every `GET`: the review queue, the dashboard, an item's audit trail, the case list, the case trail, documents and their pages, the saved sales-analytics readout, reports and their files. Also `POST /v1/reports` and `POST /v1/assistant/chat` — both *derive* from decided data and change nothing about the case, and the monthly-report automation should not need a credential that can approve items. Each still lands in the trail under the key's name. |
-| `write` | `POST /v1/upload`, `POST /v1/review-items/{id}/approve`, `.../reject`, `POST /v1/cases/{case_id}/analytics` |
+| `write` | `POST /v1/upload`, `POST /v1/review-items/{id}/approve`, `.../reject`, `POST /v1/cases/{case_id}/analytics`, `POST` and `DELETE /v1/cases/{case_id}/sales-data` |
 
 Scopes are fixed for a key's lifetime: to change them, revoke and create
 another. A key omitting `scopes` on creation gets `["read"]` — a key that can
@@ -457,8 +457,12 @@ highlights the matching text instead.
 | `GET` | `/v1/reports` | Every report generated for a case, newest first | Live |
 | `GET` | `/v1/reports/{id}/download` | Download a report file (`?format=pdf\|excel`) | Live |
 | `POST` | `/v1/assistant/chat` | Ask Tarazu: a grounded answer with citations and facts | Live |
-| `POST` | `/v1/cases/{case_id}/analytics` | Run the deterministic sales analytics; replace the saved readout | Live |
-| `GET` | `/v1/cases/{case_id}/analytics` | The saved sales-analytics readout | Live |
+| `POST` | `/v1/cases/{case_id}/sales-data` | Upload a sales export (Excel, ODS, CSV, TSV, JSON); read on arrival, refused with the reason if unreadable | Live |
+| `GET` | `/v1/cases/{case_id}/sales-data` | The case's uploaded sales exports, newest first | Live |
+| `DELETE` | `/v1/cases/{case_id}/sales-data/{sales_data_id}` | Remove a sales export from the case | Live |
+| `POST` | `/v1/cases/{case_id}/analytics` | Run the deterministic sales analytics over the uploaded exports; replace the saved readout | Live |
+| `GET` | `/v1/cases/{case_id}/analytics` | The saved sales-analytics readout, with one data-quality report per export | Live |
+| `GET` | `/v1/cases/{case_id}/analytics/download` | The saved readout as a workbook (`?format=xlsx`, default) or JSON | Live |
 | `GET` | `/v1/clients` | The firm's recurring clients (`?include_archived=`) | Live |
 | `POST` | `/v1/clients` | Add a recurring client | Live |
 | `GET` | `/v1/clients/{client_id}` | One client and every period run for it | Live |
@@ -1313,16 +1317,65 @@ firm's case, `422` for a blank or over-long question or an unknown language.
 
 ---
 
+### `POST /v1/cases/{case_id}/sales-data`
+
+Uploads one sales export for the case — a separate data source from the audit
+documents; it never becomes a case document and never starts the audit
+pipeline. Multipart, one `file` field. `write` scope.
+
+The export may be in whatever shape the client's software produced:
+`.xlsx`, `.xlsm`, `.xls`, `.ods`, `.csv`, `.tsv`, `.txt` (any common
+delimiter), or `.json` (a list of objects, or an object holding one under a key
+such as `data`). It is **read once on arrival**, before it is stored: the
+reader decodes non-UTF-8 text, finds the header under any title rows, picks the
+worksheet that holds the table, and maps the client's own column names. A file
+it cannot make sense of is refused now, with the reason, instead of failing a
+later run. The response is the stored upload's metadata; the Analytics screen
+runs `POST /analytics` straight after.
+
+**Response `201`**
+
+```json
+{
+  "sales_data_id": "SLS-3f9a2c1b",
+  "case_id": "CASE-90472590af",
+  "filename": "june-sales.xlsx",
+  "size_bytes": 18422,
+  "uploaded_by": "807150f1-2205-4a35-b89f-f3912053615f",
+  "uploaded_at": "2026-09-01T04:40:12.118Z"
+}
+```
+
+**Errors** — `401`, `403` (no organization, or no `write` scope), `404` for no
+case or another firm's case, `413` over 25 MB, `415` for a suffix outside the
+list above, `422` for an empty file or one the reader cannot use: no header
+naming a date and an amount (or a quantity and a unit price), a delimited row
+wider than its header (an amount like `Rs. 45,900` must be quoted), or no
+usable rows. The `detail` says which.
+
+### `GET /v1/cases/{case_id}/sales-data`
+
+The case's uploaded sales exports, newest first, as `{ "uploads": [...] }` of
+the object above. `read` scope.
+
+### `DELETE /v1/cases/{case_id}/sales-data/{sales_data_id}`
+
+Removes an export from the case; `204`. The next `POST /analytics` reads only
+what remains, and refuses with `422` when nothing does rather than saving a
+readout of zeros. `404` for an id that is not on this case. `write` scope.
+
+---
+
 ### `POST /v1/cases/{case_id}/analytics`
 
-Runs the deterministic sales analytics over the case's `sales_data` documents
-and saves the readout. Every sales export in the case is re-read from storage
-and concatenated — a month split across two files still sums whole — and the
+Runs the deterministic sales analytics over the case's uploaded sales exports
+and saves the readout. Every export is re-read from storage in upload order and
+concatenated — a month split across two files still sums whole — and the
 result replaces whatever an earlier run saved. `write` scope, unlike
 `POST /v1/reports`: a report appends an immutable record, this rewrites a
 persisted readout. The run lands in the trail as `sales_analytics_run` under
-the caller's name; one computed by the pipeline at upload time reads
-`system`/`analytics.service` instead.
+the caller's name, with the record, file, anomaly, and skipped-row counts in
+its detail.
 
 No model is on the path. A sales export is already structured, so pandas reads
 it and the arithmetic is sums and counts over `Decimal` money — the same no-AI
@@ -1331,10 +1384,13 @@ monthly and product entries each sum back to `total_revenue` and count back to
 `record_count`, the response is validated against that, and money never passes
 through a float.
 
-The case needs at least one `sales_data` document. `POST /v1/upload` has no
-sales slot yet, so today they reach a case through the pipeline — a seeding
-script or an integration calling it — which runs this same analysis at upload
-time.
+The cleaning is never silent. Each export contributes one `data_quality`
+report: which sheet and header row the table came from, how the client's
+columns were mapped onto `date`, `amount`, `customer_name`, `product`,
+`region`, and the row id, whether the amount was derived as quantity × unit
+price, and every skipped row by reason (`blank`, `total_row`, `no_date`,
+`no_amount`). Rows with no customer or product are counted under
+`"Unspecified"` — reported in `filled_defaults` — rather than dropped.
 
 **Response `201`** (three sales rows from one export)
 
@@ -1361,7 +1417,32 @@ time.
     { "region": "Sindh", "revenue": 12000.0, "transaction_count": 1, "share": 13.65 }
   ],
   "anomalies": [],
-  "document_ids": ["DOC-SLS-001"],
+  "document_ids": ["SLS-3f9a2c1b"],
+  "data_quality": [
+    {
+      "document_id": "SLS-3f9a2c1b",
+      "filename": "june-sales.xlsx",
+      "format": "excel",
+      "sheet": "Sales",
+      "encoding": null,
+      "delimiter": null,
+      "header_row": 3,
+      "columns": {
+        "date": "Sale Date",
+        "amount": "Net Amount",
+        "customer_name": "Customer",
+        "product": "Item",
+        "region": "City"
+      },
+      "amount_derived": false,
+      "rows_seen": 5,
+      "rows_used": 3,
+      "rows_skipped": 2,
+      "skipped": { "blank": 1, "total_row": 1 },
+      "filled_defaults": {},
+      "warnings": ["sheet 'Notes' has no header naming a date and an amount; skipped"]
+    }
+  ],
   "generated_at": "2026-08-31T09:14:02.118Z"
 }
 ```
@@ -1381,8 +1462,8 @@ a sentence a human can read.
 |---|---|
 | `401` | No credential, or an unknown/revoked API key |
 | `403` | No organization; or the key lacks the `write` scope |
-| `404` | No case with that id **in your organization** — another firm's is indistinguishable from a nonexistent one; or the export file is no longer in storage |
-| `422` | The case has no `sales_data` document; or an export cannot be read — a missing column, a CSV whose rows are wider than its header (an amount like `Rs. 45,900` must be quoted), or no usable rows |
+| `404` | No case with that id **in your organization** — another firm's is indistinguishable from a nonexistent one; or an export file is no longer in storage |
+| `422` | The case has no sales export uploaded; or an export cannot be read — no header naming a date and an amount, a delimited row wider than its header (an amount like `Rs. 45,900` must be quoted), or no usable rows. The upload route already refuses such files, so this is rare after the fact |
 
 ---
 
@@ -1390,10 +1471,24 @@ a sentence a human can read.
 
 The saved readout exactly as persisted: no recomputation, no file reads, no
 trail entry — a dashboard can poll it for free. `read` scope. `404` until the
-analysis has run, through the `POST` above or at upload time by the pipeline.
+analysis has run through the `POST` above. The Analytics screen checks the
+case's uploads first and only asks for the readout when there is at least one,
+so a case with no sales data never produces this `404` in the browser.
 
 **Errors** — `401`, `403` (no organization), `404` for another firm's case,
 or one with no saved readout yet.
+
+### `GET /v1/cases/{case_id}/analytics/download`
+
+The saved readout as a file. `?format=xlsx` (the default) is a workbook with
+one sheet per breakdown — Summary, Monthly revenue, By product, By region,
+Top customers, Anomalies, and Data quality (one row per export) — and
+`?format=json` is the readout exactly as the `GET` above returns it. Nothing is
+recomputed; every figure is copied from the persisted readout. Sent as an
+attachment named `tarazu-{case_id}-sales-analytics.{xlsx|json}`. `read` scope.
+
+**Errors** — `401`, `403`, `404` for another firm's case or one with no saved
+readout yet, `422` for a format outside `xlsx` / `json`.
 
 ---
 
@@ -1403,9 +1498,12 @@ or one with no saved readout yet.
 `document_uploaded`, `extraction_completed`, `second_opinion_completed`,
 `matching_completed`, `flag_raised`, `item_approved`, `item_rejected`,
 `report_generated`, `assistant_question_asked`, `assistant_answered`,
-`sales_analytics_run`. The authoritative list is `AuditAction` in
-`backend/app/shared/schemas.py`; the Postgres check constraint is re-stated
-with the same full list in `0006-sales-analytics.sql`.
+`sales_analytics_run`, plus the Phase 1 actions (`value_corrected`,
+`case_signed_off`, `evidence_requested` / `_answered` / `_resolved` /
+`_cancelled`, `client_created` / `_updated` / `_archived`, `job_queued`,
+`job_failed`, `sample_drawn`, `bundle_exported`). The authoritative list is
+`AuditAction` in `backend/app/shared/schemas.py`; the Postgres check
+constraint is re-stated with the same full list in `0008-sales-analytics.sql`.
 
 ---
 

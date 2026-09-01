@@ -76,7 +76,7 @@ export default function SettingsLayout({
       ?.group ?? "Settings";
 
   return (
-    <div className="-m-4 flex min-h-full md:-m-6">
+    <div className="-m-4 flex min-h-full overflow-x-hidden md:-m-6">
       {/* Desktop rail */}
       <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-slate-50/70 px-4 py-6 md:block">
         <nav className="sticky top-6">
@@ -118,13 +118,13 @@ export default function SettingsLayout({
       </aside>
 
       {/* Content column */}
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 overflow-x-hidden">
         {/* Narrow screens: heading + scrollable tab bar */}
         <div className="border-b border-slate-200 bg-white px-4 pt-4 md:hidden">
           <h1 className="mb-3 text-base font-semibold tracking-tight text-ink-900">
             Settings
           </h1>
-          <nav className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-3">
+          <nav className="-mx-1 flex gap-1 overflow-x-auto overflow-y-hidden px-1 pb-3">
             {NAV.flatMap(({ items }) => items).map(({ href, label }) => {
               const active = pathname.startsWith(href);
               return (

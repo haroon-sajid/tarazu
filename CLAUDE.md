@@ -153,11 +153,16 @@ password), tenancy, the **full upload pipeline** — extraction (stubbed by
 `DEMO_MODE`), deterministic matching, red-flag rules, Benford, review queue
 assembly; a deterministic-step failure marks the case `failed` with the
 reason — review queue with approve/reject and audit trail, dashboard with
-Benford, **sales analytics** (`POST/GET /v1/cases/{case_id}/analytics`: the
-deterministic pandas readout over a case's `sales_data` exports — revenue by
-month, product, region, top five customers, anomaly findings — saved beside
-the Benford result, replaced by a re-run, every run in the trail; the pipeline
-computes it at upload time when a sales export rides along), **documents** (`GET /v1/documents`, `/file`, `/pages/{n}`: the
+Benford, **sales analytics** (`/v1/cases/{case_id}/sales-data` +
+`POST/GET /v1/cases/{case_id}/analytics` + `/analytics/download`: a separate
+data source from the audit documents — the client's sales export in whatever
+shape it arrives, Excel / ODS / CSV / TSV / JSON, read on upload with title
+rows, worksheets, column names, encodings, and quantity × price handled and
+every cleaning decision reported as `data_quality`; the deterministic pandas
+readout — revenue by month, product, region, top five customers, anomaly
+findings — is saved beside the Benford result, replaced by a re-run, every run
+in the trail, downloadable as a workbook; the Analytics screen runs it
+automatically after an upload; the case pipeline does not run it), **documents** (`GET /v1/documents`, `/file`, `/pages/{n}`: the
 evidence viewer and `/documents` draw provenance on the real page),
 **reports** (`POST/GET /v1/reports`, `/download`: PDF + Excel from decided
 items with provenance and the trail; append-only `reports` history in both

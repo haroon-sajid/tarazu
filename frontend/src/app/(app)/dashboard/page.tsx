@@ -112,7 +112,7 @@ function SalesOverview({ analytics }: { analytics: SalesAnalyticsResult }) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card className="hover-lift">
           <CardContent className="flex items-start justify-between px-5 py-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-medium text-ink-400">Total Revenue</p>
               <p className="mt-1 text-2xl font-bold text-ink-900 tabular-nums">
                 {formatCurrency(analytics.total_revenue)}
@@ -132,10 +132,10 @@ function SalesOverview({ analytics }: { analytics: SalesAnalyticsResult }) {
 
         <Card className="hover-lift">
           <CardContent className="flex items-start justify-between px-5 py-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-medium text-ink-400">Top Product</p>
-              <p className="mt-1 text-2xl font-bold text-ink-900">
-                {topProduct ? topProduct.product : "—"}
+              <p className="mt-1 break-words text-2xl font-bold text-ink-900">
+                {topProduct ? topProduct.product : "-"}
               </p>
               {topProduct && (
                 <p className="mt-0.5 text-[11px] text-ink-400">
@@ -151,7 +151,7 @@ function SalesOverview({ analytics }: { analytics: SalesAnalyticsResult }) {
 
         <Card className="hover-lift">
           <CardContent className="flex items-start justify-between px-5 py-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-medium text-ink-400">Anomalies</p>
               <p className="mt-1 text-2xl font-bold text-ink-900 tabular-nums">
                 {anomalyCount}
@@ -195,8 +195,8 @@ function SalesOverview({ analytics }: { analytics: SalesAnalyticsResult }) {
                       aria-hidden
                     />
                     <span>
-                      <span className="font-medium text-ink-900">{anomaly.kind}</span>{" "}
-                      — {anomaly.explanation}
+                      <span className="font-medium text-ink-900">{anomaly.kind}</span>:{" "}
+                      {anomaly.explanation}
                     </span>
                   </li>
                 ))}

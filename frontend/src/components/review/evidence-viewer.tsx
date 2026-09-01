@@ -53,8 +53,8 @@ function DocumentPane({ provenance }: { provenance: Provenance }) {
   const pageNumber = page ?? 1;
   return (
     <div className="flex h-full flex-col">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-xs font-medium text-ink-600">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 md:flex-nowrap">
+        <p className="min-w-0 break-words text-xs font-medium text-ink-600">
           {document_id} · page {pageNumber}
         </p>
         <Link
@@ -304,9 +304,9 @@ export function EvidenceViewer({
     >
       <div className="flex h-full w-[880px] max-w-[92vw] flex-col overflow-y-auto border-l border-slate-200 bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-          <div>
-            <h2 className="text-sm font-bold text-ink-900">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 md:gap-0 md:px-6">
+          <div className="min-w-0">
+            <h2 className="break-words text-sm font-bold text-ink-900">
               Evidence: {ledger.party_name}
             </h2>
             <p className="mt-0.5 text-xs text-ink-400">
@@ -314,7 +314,7 @@ export function EvidenceViewer({
               {formatMoney(ledger.amount, ledger.currency)}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-3">
             <StatusBadge status={match.status} />
             <button
               onClick={onClose}
@@ -326,67 +326,69 @@ export function EvidenceViewer({
           </div>
         </div>
 
-        <div className="grid flex-1 grid-cols-2 gap-6 p-6">
+        <div className="grid flex-1 grid-cols-1 gap-4 p-4 md:grid-cols-2 md:gap-6 md:p-6">
           {/* Left: the comparison */}
           <div className="space-y-5">
             <section>
               <h3 className="mb-2 text-xs font-semibold tracking-wide text-ink-600 uppercase">
                 Ledger vs documents
               </h3>
-              <table className="w-full">
-                <thead>
-                  <tr>
-                    <th className="w-24" />
-                    {sourceHeaders.map((header) => (
-                      <th
-                        key={header}
-                        className="pb-1.5 pr-3 text-left text-[10px] font-semibold tracking-wide text-ink-400 uppercase"
-                      >
-                        {header}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <ComparisonRow
-                    label="Date"
-                    highlight={datesDiffer}
-                    values={[
-                      formatDate(ledger.date),
-                      ...(bank ? [formatDate(bank.date)] : []),
-                      ...(invoice ? [formatDate(invoice.date)] : []),
-                    ]}
-                  />
-                  <ComparisonRow
-                    label="Amount"
-                    highlight={amountsDiffer}
-                    values={[
-                      formatMoney(ledger.amount, ledger.currency),
-                      ...(bank ? [formatMoney(bank.amount, bank.currency)] : []),
-                      ...(invoice ? [formatMoney(invoice.amount, invoice.currency)] : []),
-                    ]}
-                  />
-                  <ComparisonRow
-                    label="Party"
-                    highlight={false}
-                    values={[
-                      ledger.party_name,
-                      ...(bank ? [bank.description] : []),
-                      ...(invoice ? [invoice.party_name] : []),
-                    ]}
-                  />
-                  {invoice && (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr>
+                      <th className="w-24" />
+                      {sourceHeaders.map((header) => (
+                        <th
+                          key={header}
+                          className="pb-1.5 pr-3 text-left text-[10px] font-semibold tracking-wide text-ink-400 uppercase"
+                        >
+                          {header}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
                     <ComparisonRow
-                      label="Invoice #"
-                      highlight={false}
-                      values={[ledger.description ?? null, null, invoice.invoice_number].slice(
-                        0,
-                        sourceHeaders.length + 1,
-                      )}
+                      label="Date"
+                      highlight={datesDiffer}
+                      values={[
+                        formatDate(ledger.date),
+                        ...(bank ? [formatDate(bank.date)] : []),
+                        ...(invoice ? [formatDate(invoice.date)] : []),
+                      ]}
                     />
-                  )}
-                </tbody>
-              </table>
+                    <ComparisonRow
+                      label="Amount"
+                      highlight={amountsDiffer}
+                      values={[
+                        formatMoney(ledger.amount, ledger.currency),
+                        ...(bank ? [formatMoney(bank.amount, bank.currency)] : []),
+                        ...(invoice ? [formatMoney(invoice.amount, invoice.currency)] : []),
+                      ]}
+                    />
+                    <ComparisonRow
+                      label="Party"
+                      highlight={false}
+                      values={[
+                        ledger.party_name,
+                        ...(bank ? [bank.description] : []),
+                        ...(invoice ? [invoice.party_name] : []),
+                      ]}
+                    />
+                    {invoice && (
+                      <ComparisonRow
+                        label="Invoice #"
+                        highlight={false}
+                        values={[ledger.description ?? null, null, invoice.invoice_number].slice(
+                          0,
+                          sourceHeaders.length + 1,
+                        )}
+                      />
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </section>
 
             <section className="rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -450,7 +452,7 @@ export function EvidenceViewer({
               ) : (
                 <ul className="space-y-1.5">
                   {audit.map((record) => (
-                    <li key={record.audit_id} className="text-xs text-ink-600">
+                    <li key={record.audit_id} className="break-words text-xs text-ink-600">
                       <span className="font-medium text-ink-900">
                         {record.action.replace(/_/g, " ")}
                       </span>{" "}
