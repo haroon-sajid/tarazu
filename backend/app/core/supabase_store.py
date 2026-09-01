@@ -48,6 +48,7 @@ from app.shared.schemas import (
     ReportRecord,
     ReviewItem,
     SalesAnalyticsResult,
+    SalesDataUpload,
     SignOff,
     UserProfile,
     ValueCorrection,
@@ -680,6 +681,79 @@ class SupabaseCaseRepository:
             {"case_id": f"eq.{case_id}", "org_id": f"eq.{org_id}", "limit": "1"},
         )
         return SalesAnalyticsResult.model_validate(rows[0]["payload"]) if rows else None
+
+    # -- sales data uploads -------------------------------------------------- #
+
+    def add_sales_data_upload(
+        self, org_id: str, case_id: str, upload: SalesDataUpload
+    ) -> None:
+        self._rest.insert(
+            "sales_data_uploads",
+            [
+                {
+                    "sales_data_id": upload.sales_data_id,
+                    "org_id": org_id,
+                    "case_id": case_id,
+                    "filename": upload.filename,
+                    "storage_path": upload.storage_path,
+                    "size_bytes": upload.size_bytes,
+                    "uploaded_by": upload.uploaded_by,
+                    "created_at": _iso(upload.uploaded_at),
+                }
+            ],
+        )
+
+    def list_sales_data_uploads(
+        self, org_id: str, case_id: str
+    ) -> list[SalesDataUpload]:
+        return [
+            self._sales_data_upload(row)
+            for row in self._rest.select(
+                "sales_data_uploads",
+                {
+                    "case_id": f"eq.{case_id}",
+                    "org_id": f"eq.{org_id}",
+                    "order": "created_at.desc",
+                },
+            )
+        ]
+
+    def get_sales_data_upload(
+        self, org_id: str, sales_data_id: str
+    ) -> SalesDataUpload | None:
+        rows = self._rest.select(
+            "sales_data_uploads",
+            {
+                "sales_data_id": f"eq.{sales_data_id}",
+                "org_id": f"eq.{org_id}",
+                "limit": "1",
+            },
+        )
+        return self._sales_data_upload(rows[0]) if rows else None
+
+    def delete_sales_data_upload(
+        self, org_id: str, sales_data_id: str
+    ) -> bool:
+        if self.get_sales_data_upload(org_id, sales_data_id) is None:
+            return False
+        self._rest.delete(
+            "sales_data_uploads",
+            {"sales_data_id": f"eq.{sales_data_id}", "org_id": f"eq.{org_id}"},
+        )
+        return True
+
+    @staticmethod
+    def _sales_data_upload(row: dict) -> SalesDataUpload:
+        return SalesDataUpload(
+            sales_data_id=row["sales_data_id"],
+            org_id=row["org_id"],
+            case_id=row["case_id"],
+            filename=row["filename"],
+            size_bytes=row["size_bytes"],
+            storage_path=row["storage_path"],
+            uploaded_by=row["uploaded_by"],
+            uploaded_at=row["created_at"],
+        )
 
     # -- reports ------------------------------------------------------------ #
     # Table from infra/supabase/0006-reports-and-assistant.sql. Insert only:

@@ -93,6 +93,18 @@ export default function ProfileSettingsPage() {
         setJobTitle(loaded.job_title ?? "");
         setPhone(loaded.phone ?? "");
         setAvatar(loaded.avatar);
+        // Keep a lightweight local copy so the picture survives refreshes even
+        // if the backend GET is momentarily empty. Removed avatars clear it.
+        try {
+          const cached = window.localStorage.getItem("tarazu.profile-avatar-cache");
+          if (loaded.avatar) {
+            window.localStorage.setItem("tarazu.profile-avatar-cache", loaded.avatar);
+          } else if (cached) {
+            setAvatar(cached);
+          }
+        } catch {
+          // Storage may be unavailable; the API copy is the source of truth.
+        }
         setGender(loaded.gender ?? "");
         setDateOfBirth(loaded.date_of_birth ?? "");
         setLocation(loaded.location ?? "");
@@ -111,6 +123,64 @@ export default function ProfileSettingsPage() {
 
   React.useEffect(load, [load]);
 
+  const persist = React.useCallback(
+    async (avatarValue: string | null) => {
+      if (busy) return;
+      setBusy(true);
+      setSaveError(null);
+      setSaved(false);
+      try {
+        const stored = await saveProfile({
+          full_name: fullName,
+          job_title: jobTitle,
+          phone,
+          avatar: avatarValue,
+          gender,
+          date_of_birth: dateOfBirth || null,
+          location,
+          license_number: licenseNumber,
+          language: language || null,
+          notify_case_ready: notifyCaseReady,
+          notify_high_severity: notifyHighSeverity,
+          notify_weekly_digest: notifyWeeklyDigest,
+        });
+        setProfile(stored);
+        setAvatar(stored.avatar);
+        setSaved(true);
+        window.dispatchEvent(new Event(PROFILE_UPDATED_EVENT));
+        window.setTimeout(() => setSaved(false), 2500);
+        try {
+          window.localStorage.setItem(
+            "tarazu.profile-avatar-cache",
+            stored.avatar ?? "",
+          );
+        } catch {
+          // Ignore storage failures.
+        }
+      } catch (caught) {
+        setSaveError(
+          caught instanceof ApiError ? caught.message : "Could not save your profile.",
+        );
+      } finally {
+        setBusy(false);
+      }
+    },
+    [
+      busy,
+      fullName,
+      jobTitle,
+      phone,
+      gender,
+      dateOfBirth,
+      location,
+      licenseNumber,
+      language,
+      notifyCaseReady,
+      notifyHighSeverity,
+      notifyWeeklyDigest,
+    ],
+  );
+
   const pickFile = async (file: File | undefined) => {
     if (!file) return;
     setSaveError(null);
@@ -119,44 +189,15 @@ export default function ProfileSettingsPage() {
       return;
     }
     try {
-      setAvatar(await fileToAvatar(file));
+      const dataUrl = await fileToAvatar(file);
+      setAvatar(dataUrl);
+      await persist(dataUrl);
     } catch {
       setSaveError("That image could not be read. Try a different file.");
     }
   };
 
-  const submit = async () => {
-    if (busy) return;
-    setBusy(true);
-    setSaveError(null);
-    setSaved(false);
-    try {
-      const stored = await saveProfile({
-        full_name: fullName,
-        job_title: jobTitle,
-        phone,
-        avatar,
-        gender,
-        date_of_birth: dateOfBirth || null,
-        location,
-        license_number: licenseNumber,
-        language: language || null,
-        notify_case_ready: notifyCaseReady,
-        notify_high_severity: notifyHighSeverity,
-        notify_weekly_digest: notifyWeeklyDigest,
-      });
-      setProfile(stored);
-      setSaved(true);
-      window.dispatchEvent(new Event(PROFILE_UPDATED_EVENT));
-      window.setTimeout(() => setSaved(false), 2500);
-    } catch (caught) {
-      setSaveError(
-        caught instanceof ApiError ? caught.message : "Could not save your profile.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
+  const submit = () => persist(avatar);
 
   const initial = (session?.email[0] ?? "A").toUpperCase();
 
@@ -193,12 +234,26 @@ export default function ProfileSettingsPage() {
             )}
             <div>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
-                  <Upload className="h-3.5 w-3.5" aria-hidden />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  {busy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <Upload className="h-3.5 w-3.5" aria-hidden />
+                  )}
                   {avatar ? "Change photo" : "Upload photo"}
                 </Button>
                 {avatar && (
-                  <Button size="sm" variant="outline" onClick={() => setAvatar(null)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => persist(null)}
+                  >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden />
                     Remove
                   </Button>

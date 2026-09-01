@@ -3,11 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Check, ChevronsUpDown, FolderOpen } from "lucide-react";
+import { Check, ChevronsUpDown, FolderOpen, Menu } from "lucide-react";
 import { FIXTURE_MODE, getActiveCaseId, listCases, setActiveCaseId } from "@/lib/api";
 import { useActiveCaseVersion } from "@/lib/use-active-case";
 import type { CaseStatus, CaseSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { Notifications } from "@/components/layout/notifications";
 
 const STATUS_DOT: Record<CaseStatus, string> = {
   uploaded: "bg-slate-400",
@@ -31,7 +32,7 @@ const STATUS_DOT: Record<CaseStatus, string> = {
  * the Cases screen. With no case yet, no chip: nothing is invented
  * client-side.
  */
-export function Header() {
+export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
   const pathname = usePathname();
   const caseVersion = useActiveCaseVersion();
   const [cases, setCases] = React.useState<CaseSummary[] | null>(null);
@@ -118,6 +119,14 @@ export function Header() {
     // the page content no matter how high its own z-index is.
     <header className="relative z-30 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 px-4 backdrop-blur-sm sm:px-6">
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+        <button
+          type="button"
+          onClick={onMenuToggle}
+          aria-label="Open menu"
+          className="mr-1 inline-flex h-9 w-9 items-center justify-center rounded-md text-ink-900 transition-colors hover:bg-slate-100 md:hidden"
+        >
+          <Menu className="h-5 w-5" aria-hidden />
+        </button>
         {active && cases && cases.length > 0 && (
           <>
             <span className="hidden text-xs font-medium text-ink-400 sm:inline">Case:</span>
@@ -215,6 +224,9 @@ export function Header() {
             FIXTURE DATA
           </span>
         )}
+      </div>
+      <div className="flex items-center gap-1">
+        <Notifications />
       </div>
     </header>
   );

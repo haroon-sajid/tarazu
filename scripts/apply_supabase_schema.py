@@ -42,6 +42,7 @@ MIGRATIONS = (
     ("0006-reports-and-assistant.sql", "append-only reports, assistant audit actions"),
     ("0007-clients-and-periods.sql", "clients, jobs, corrections, evidence requests, sign-offs, org profiles"),
     ("0008-sales-analytics.sql", "sales_analytics readout, sales_analytics_run action"),
+    ("0009-sales-data-uploads.sql", "standalone sales data upload metadata"),
 )
 
 #: What each migration should leave behind, so --check can say where a project is.
@@ -60,6 +61,7 @@ EXPECTED_TABLES = {
     "0007-clients-and-periods.sql": ("clients", "jobs", "value_corrections",
                                      "evidence_requests", "sign_offs", "org_profiles"),
     "0008-sales-analytics.sql": ("sales_analytics",),
+    "0009-sales-data-uploads.sql": ("sales_data_uploads",),
 }
 
 #: Migrations whose effect is a privilege or a trigger rather than a table.

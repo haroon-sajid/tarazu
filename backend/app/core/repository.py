@@ -44,6 +44,7 @@ from app.shared.schemas import (
     ReportRecord,
     ReviewItem,
     SalesAnalyticsResult,
+    SalesDataUpload,
     SignOff,
     UserProfile,
     ValueCorrection,
@@ -271,6 +272,28 @@ class CaseRepository(Protocol):
     ) -> SalesAnalyticsResult | None:
         """The saved readout, or None if this case has none yet (or is another
         firm's — the lookup is scoped by `org_id` like every other read)."""
+
+    # -- sales data uploads -------------------------------------------------- #
+
+    def add_sales_data_upload(
+        self, org_id: str, case_id: str, upload: SalesDataUpload
+    ) -> None:
+        """Persist the metadata for a sales data export."""
+
+    def list_sales_data_uploads(
+        self, org_id: str, case_id: str
+    ) -> list[SalesDataUpload]:
+        """All sales data exports for the case, newest first."""
+
+    def get_sales_data_upload(
+        self, org_id: str, sales_data_id: str
+    ) -> SalesDataUpload | None:
+        """One upload, or None if missing or belongs to another firm."""
+
+    def delete_sales_data_upload(
+        self, org_id: str, sales_data_id: str
+    ) -> bool:
+        """Remove an upload's metadata. Returns False if it did not exist here."""
 
     # -- reports ------------------------------------------------------------ #
     #

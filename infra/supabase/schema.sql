@@ -63,6 +63,38 @@ create table if not exists public.documents (
 create index if not exists documents_case_idx on public.documents (case_id);
 
 -- ---------------------------------------------------------------------------
+-- sales_data_uploads — analytical exports, separate from audit evidence.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.sales_data_uploads (
+  sales_data_id text        primary key,
+  org_id        uuid        not null references public.organizations (org_id),
+  case_id       text        not null references public.cases (case_id) on delete cascade,
+  filename      text        not null,
+  storage_path  text        not null,
+  size_bytes    bigint      not null default 0,
+  uploaded_by   uuid        not null references auth.users (id),
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists sales_data_uploads_case_idx
+  on public.sales_data_uploads (case_id);
+
+revoke update, delete, truncate on public.sales_data_uploads from anon;
+grant insert, select, delete on public.sales_data_uploads to service_role;
+
+alter table public.sales_data_uploads enable row level security;
+alter table public.sales_data_uploads force  row level security;
+
+drop policy if exists sales_data_uploads_org_members on public.sales_data_uploads;
+create policy sales_data_uploads_org_members
+  on public.sales_data_uploads
+  for all
+  to authenticated
+  using (org_id in (select public.current_user_org_ids()))
+  with check (org_id in (select public.current_user_org_ids()));
+
+-- ---------------------------------------------------------------------------
 -- extractions — the ExtractionResult for one document.
 --
 -- The whole schema object is stored as jsonb, with only the columns we filter

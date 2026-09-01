@@ -58,6 +58,7 @@ from app.shared.schemas import (
     ReportRecord,
     ReviewItem,
     SalesAnalyticsResult,
+    SalesDataUpload,
     SignOff,
     UserProfile,
     ValueCorrection,
@@ -220,6 +221,20 @@ create table if not exists documents (
   uploaded_by   text not null,
   created_at    text not null
 );
+
+create table if not exists sales_data_uploads (
+  sales_data_id text primary key,
+  org_id        text not null,
+  case_id       text not null references cases (case_id) on delete cascade,
+  filename      text not null,
+  storage_path  text not null,
+  size_bytes    integer not null default 0,
+  uploaded_by   text not null,
+  created_at    text not null
+);
+
+create index if not exists sales_data_uploads_case_idx
+  on sales_data_uploads (case_id);
 
 create table if not exists extractions (
   document_id        text primary key,
@@ -1440,6 +1455,84 @@ class SqliteCaseRepository:
             if rows
             else None
         )
+
+    # -- sales data uploads -------------------------------------------------- #
+
+    def add_sales_data_upload(
+        self, org_id: str, case_id: str, upload: SalesDataUpload
+    ) -> None:
+        self._write(
+            [
+                (
+                    "insert into sales_data_uploads (sales_data_id, org_id, case_id, "
+                    "filename, storage_path, size_bytes, uploaded_by, created_at) "
+                    "values (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        upload.sales_data_id,
+                        org_id,
+                        case_id,
+                        upload.filename,
+                        upload.storage_path,
+                        upload.size_bytes,
+                        upload.uploaded_by,
+                        _iso(upload.uploaded_at),
+                    ),
+                )
+            ]
+        )
+
+    def list_sales_data_uploads(
+        self, org_id: str, case_id: str
+    ) -> list[SalesDataUpload]:
+        return [
+            SalesDataUpload(
+                sales_data_id=row["sales_data_id"],
+                org_id=row["org_id"],
+                case_id=row["case_id"],
+                filename=row["filename"],
+                size_bytes=row["size_bytes"],
+                storage_path=row["storage_path"],
+                uploaded_by=row["uploaded_by"],
+                uploaded_at=datetime.fromisoformat(row["created_at"]),
+            )
+            for row in self._rows(
+                "select * from sales_data_uploads where org_id = ? and case_id = ? "
+                "order by created_at desc",
+                (org_id, case_id),
+            )
+        ]
+
+    def get_sales_data_upload(
+        self, org_id: str, sales_data_id: str
+    ) -> SalesDataUpload | None:
+        rows = self._rows(
+            "select * from sales_data_uploads where sales_data_id = ? and org_id = ?",
+            (sales_data_id, org_id),
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        return SalesDataUpload(
+            sales_data_id=row["sales_data_id"],
+            org_id=row["org_id"],
+            case_id=row["case_id"],
+            filename=row["filename"],
+            size_bytes=row["size_bytes"],
+            storage_path=row["storage_path"],
+            uploaded_by=row["uploaded_by"],
+            uploaded_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+    def delete_sales_data_upload(
+        self, org_id: str, sales_data_id: str
+    ) -> bool:
+        with self._lock:
+            cursor = self._connection.execute(
+                "delete from sales_data_uploads where sales_data_id = ? and org_id = ?",
+                (sales_data_id, org_id),
+            )
+            self._connection.commit()
+            return cursor.rowcount > 0
 
     # -- reports ------------------------------------------------------------ #
 

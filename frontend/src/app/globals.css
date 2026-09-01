@@ -37,6 +37,17 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Pointer cursor on all interactive elements. */
+a,
+button,
+[role="button"],
+[type="button"],
+[type="submit"],
+[type="reset"],
+summary {
+  cursor: pointer;
+}
+
 /* Landing page (src/app/page.tsx): demo activity chips fading in. */
 @keyframes fade-slide {
   from {

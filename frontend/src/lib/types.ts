@@ -580,13 +580,21 @@ export interface UploadFiles {
   bankStatement: File;
   ledger: File;
   invoices: File[];
-  /** Optional: a sales data export (Excel or CSV). */
-  salesData?: File;
   clientName?: string;
   /** Run this period against a recurring client's own rule thresholds. */
   clientId?: string;
   /** Queue the processing and return a job to poll instead of blocking. */
   background?: boolean;
+}
+
+/** Metadata for a sales data export uploaded separately from audit documents. */
+export interface SalesDataUploadSummary {
+  sales_data_id: string;
+  case_id: string;
+  filename: string;
+  size_bytes: number;
+  uploaded_by: string;
+  uploaded_at: string; // RFC 3339 UTC
 }
 
 // --------------------------------------------------------------------------

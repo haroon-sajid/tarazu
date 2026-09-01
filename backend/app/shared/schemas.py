@@ -90,6 +90,7 @@ __all__ = [
     "ReviewDecision",
     "ReviewItem",
     "SalesAnalyticsResult",
+    "SalesDataUpload",
     "SalesRecord",
     "SecondOpinion",
     "SeverityBreakdown",
@@ -649,8 +650,27 @@ class Flag(TarazuModel):
 # --------------------------------------------------------------------------- #
 
 
+class SalesDataUpload(TarazuModel):
+    """A sales data export uploaded separately from the audit documents.
+
+    These live in their own table so the sales-analytics data source is not
+    mixed up with the bank statement, ledger, and invoices that form the audit
+    evidence. The bytes are still stored in the same document store, but the
+    row that names them is case-scoped and independent.
+    """
+
+    sales_data_id: str = Field(min_length=1)
+    org_id: str = Field(min_length=1)
+    case_id: str = Field(min_length=1)
+    filename: str = Field(min_length=1)
+    size_bytes: int = Field(ge=0)
+    storage_path: str = Field(min_length=1)
+    uploaded_by: str = Field(min_length=1)
+    uploaded_at: datetime
+
+
 class SalesRecord(TarazuModel):
-    """One sale row read out of a SALES_DATA export (Excel or CSV).
+    """One sale row read out of a sales data export (Excel or CSV).
 
     Pandas reads it, the same no-AI path as the ledger, so its provenance is a
     spreadsheet row. `region` is optional because sales exports vary in what

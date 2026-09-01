@@ -40,6 +40,7 @@ from app.shared.schemas import (
     OrgRole,
     ReportRecord,
     ReviewItem,
+    SalesDataUpload,
     Severity,
     SignOff,
     TarazuModel,
@@ -114,6 +115,8 @@ __all__ = [
     "UploadResponse",
     "UploadedDocument",
     "UserProfileResponse",
+    "SalesDataUploadResponse",
+    "SalesDataUploadListResponse",
 ]
 
 
@@ -137,6 +140,23 @@ class UploadedDocument(TarazuModel):
     filename: str
     size_bytes: int = Field(ge=0)
     storage_path: str
+
+
+class SalesDataUploadResponse(TarazuModel):
+    """`POST /v1/cases/{case_id}/sales-data` and `GET` responses."""
+
+    sales_data_id: str
+    case_id: str
+    filename: str
+    size_bytes: int = Field(ge=0)
+    uploaded_by: str
+    uploaded_at: datetime
+
+
+class SalesDataUploadListResponse(TarazuModel):
+    """`GET /v1/cases/{case_id}/sales-data`."""
+
+    uploads: list[SalesDataUploadResponse]
 
 
 class UploadResponse(TarazuModel):

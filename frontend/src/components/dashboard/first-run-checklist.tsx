@@ -116,18 +116,18 @@ export function FirstRunChecklist({
 
   const doneCount = steps.filter((step) => step.done).length;
 
+  const progress = Math.round((doneCount / steps.length) * 100);
+
   return (
-    <Card className="border-brand-200 bg-white">
+    <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
       <CardContent className="px-4 py-4 sm:px-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-ink-900">Finish your first case</h2>
-            <p className="mt-0.5 text-xs text-ink-600">
-              Four steps from an upload to a signed report.{" "}
-              <span className="tabular-nums">
-                {doneCount} of {steps.length} done
-              </span>
-              .
+            <h2 className="text-base font-semibold text-ink-900">Finish your first case</h2>
+            <p className="mt-0.5 text-xs text-ink-500">
+              {doneCount === steps.length
+                ? "All set — your first case is complete."
+                : `Four steps from an upload to a signed report. ${doneCount} of ${steps.length} complete.`}
             </p>
           </div>
           <button
@@ -140,24 +140,44 @@ export function FirstRunChecklist({
           </button>
         </div>
 
-        <ol className="mt-3 space-y-1.5">
+        {/* Progress bar */}
+        <div className="mt-3 flex items-center gap-2">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <span className="text-[10px] font-medium tabular-nums text-ink-500">
+            {progress}%
+          </span>
+        </div>
+
+        <ol className="relative mt-4 space-y-1">
           {steps.map((step, index) => {
             const active = index === activeIndex;
+            const last = index === steps.length - 1;
             return (
-              <li key={step.title}>
+              <li key={step.title} className="relative">
+                {!last && (
+                  <span
+                    aria-hidden
+                    className="absolute left-[9px] top-6 h-[calc(100%+4px)] w-px bg-slate-100"
+                  />
+                )}
                 <Link
                   href={step.href}
                   className={cn(
-                    "group flex items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+                    "group flex items-start gap-3 rounded-lg px-2 py-2 transition-colors",
                     active
-                      ? "border-brand-600 bg-brand-50/50"
-                      : "border-transparent hover:border-slate-200 hover:bg-slate-50",
+                      ? "bg-brand-50 ring-1 ring-brand-200"
+                      : "hover:bg-slate-50",
                   )}
                   aria-current={active ? "step" : undefined}
                 >
                   <span
                     className={cn(
-                      "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums",
+                      "relative z-10 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums",
                       step.done
                         ? "bg-emerald-100 text-emerald-700"
                         : active
@@ -175,34 +195,39 @@ export function FirstRunChecklist({
                     )}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
+                    <span className="flex items-center justify-between gap-2">
                       <span
                         className={cn(
                           "text-sm font-medium",
-                          step.done ? "text-ink-400" : "text-ink-900",
+                          step.done
+                            ? "text-ink-500"
+                            : active
+                              ? "text-ink-900"
+                              : "text-ink-400",
                         )}
                       >
                         {step.title}
                       </span>
                       {active && (
-                        <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-900">
-                          Next
-                        </span>
+                        <ArrowRight className="h-4 w-4 shrink-0 text-brand-700" aria-hidden />
+                      )}
+                      {step.done && !active && (
+                        <Check className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
                       )}
                     </span>
                     <span
                       className={cn(
                         "mt-0.5 block text-[11px] leading-relaxed",
-                        step.done ? "text-ink-400" : "text-ink-600",
+                        step.done
+                          ? "text-ink-400"
+                          : active
+                            ? "text-ink-600"
+                            : "text-ink-400",
                       )}
                     >
                       {step.why}
                     </span>
                   </span>
-                  <ArrowRight
-                    className="mt-0.5 h-4 w-4 shrink-0 text-ink-400 group-hover:text-brand-700"
-                    aria-hidden
-                  />
                 </Link>
               </li>
             );

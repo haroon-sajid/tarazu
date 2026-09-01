@@ -24,6 +24,7 @@ import { IBM_Plex_Sans, Sora } from "next/font/google";
 import {
   ArrowLeftRight,
   ArrowRight,
+  Bot,
   Building2,
   Check,
   CheckCircle2,
@@ -88,7 +89,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
   );
 }
 
-/* Sticky header with the desktop nav and a hamburger panel below `md`. */
+/* Sticky header with the desktop nav and a side-drawer mobile menu. */
 function SiteHeader() {
   const [menuOpen, setMenuOpen] = React.useState(false);
   const closeMenu = () => setMenuOpen(false);
@@ -112,91 +113,126 @@ function SiteHeader() {
     };
   }, [menuOpen]);
 
+  // Prevent background scrolling while the mobile drawer is open.
+  React.useEffect(() => {
+    if (!menuOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [menuOpen]);
+
   return (
-    <header className="sticky top-0 z-50 border-b border-[#E1E7E4] bg-white/95 px-6! py-0! backdrop-blur lg:px-10!">
-      <div className="mx-auto flex h-16 max-w-[1200px] flex-nowrap! items-center justify-between gap-4">
-        <a
-          href="#hero"
-          className={`${sora.className} flex shrink-0 items-center gap-1.5 text-[20px] font-bold tracking-tight text-[#10243A] md:text-[22px]`}
-        >
-          <Scale className="h-5 w-5 text-[#0E7C66] md:h-6 md:w-6" aria-hidden />
-          <span>
-            Tara<span className="text-[#0E7C66]">zu</span>
-          </span>
-        </a>
-        <nav className="hidden items-center gap-8 md:flex" aria-label="Primary">
-          {NAV_LINKS.map(({ label, href }) => (
-            <NavLink key={href} href={href}>
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="flex items-center gap-2 sm:gap-4 md:gap-5">
-          <Link
-            href="/login"
-            className="hidden text-sm font-medium text-[#3D4C5E] transition-colors hover:text-[#10243A] md:block"
+    <>
+      <header className="sticky top-0 z-50 border-b border-[#E1E7E4] bg-white/95 px-6! py-0! backdrop-blur lg:px-10!">
+        <div className="mx-auto flex h-16 max-w-[1200px] flex-nowrap! items-center justify-between gap-4">
+          <a
+            href="#hero"
+            className={`${sora.className} flex shrink-0 items-center gap-1.5 text-[20px] font-bold tracking-tight text-[#10243A] md:text-[22px]`}
           >
-            Sign in
-          </Link>
-          <Link
-            href="/signup"
-            className="whitespace-nowrap rounded-md bg-[#0E7C66] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#0A5F4F] sm:px-6 md:text-sm"
-          >
-            Get started
-          </Link>
-          <button
-            type="button"
-            onClick={() => setMenuOpen((open) => !open)}
-            aria-expanded={menuOpen}
-            aria-controls="landing-mobile-nav"
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-            className="-mr-2 inline-flex h-10 w-10 items-center justify-center rounded-md text-[#10243A] transition-colors hover:bg-[#F2F6F4] md:hidden"
-          >
-            {menuOpen ? (
-              <X className="h-5 w-5" aria-hidden />
-            ) : (
+            <Scale className="h-5 w-5 text-[#0E7C66] md:h-6 md:w-6" aria-hidden />
+            <span>
+              Tara<span className="text-[#0E7C66]">zu</span>
+            </span>
+          </a>
+          <nav className="hidden items-center gap-8 md:flex" aria-label="Primary">
+            {NAV_LINKS.map(({ label, href }) => (
+              <NavLink key={href} href={href}>
+                {label}
+              </NavLink>
+            ))}
+          </nav>
+          <div className="flex items-center gap-2 sm:gap-4 md:gap-5">
+            <Link
+              href="/login"
+              className="hidden text-sm font-medium text-[#3D4C5E] transition-colors hover:text-[#10243A] md:block"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/signup"
+              className="hidden whitespace-nowrap rounded-md bg-[#0E7C66] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#0A5F4F] sm:px-6 md:inline-flex md:text-sm"
+            >
+              Get started
+            </Link>
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              aria-expanded={menuOpen}
+              aria-controls="landing-mobile-nav"
+              aria-label="Open menu"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md text-[#10243A] transition-colors hover:bg-[#F2F6F4] md:hidden"
+            >
               <Menu className="h-5 w-5" aria-hidden />
-            )}
-          </button>
+            </button>
+          </div>
         </div>
-      </div>
+      </header>
 
       {menuOpen && (
-        <div
-          id="landing-mobile-nav"
-          className="absolute inset-x-0 top-full border-b border-[#E1E7E4] bg-white shadow-[0_16px_32px_-12px_rgba(16,36,58,0.15)] md:hidden"
-        >
-          <nav className="mx-auto flex max-w-[1200px] flex-col px-6 py-3" aria-label="Mobile">
-            {NAV_LINKS.map(({ label, href }) => (
+        <>
+          <div
+            onClick={closeMenu}
+            aria-hidden
+            className="fixed inset-0 z-40 bg-[#10243A]/50 transition-opacity duration-300 md:hidden"
+          />
+          <div
+            id="landing-mobile-nav"
+            className="fixed inset-y-0 left-0 z-50 flex w-[280px] max-w-[80vw] flex-col bg-white shadow-2xl motion-safe:animate-[slideInLeft_0.25s_ease-out] md:hidden"
+          >
+            <div className="flex h-16 items-center justify-between border-b border-[#E1E7E4] px-6">
               <a
-                key={href}
-                href={href}
+                href="#hero"
                 onClick={closeMenu}
-                className="rounded-md px-3 py-3 text-[15px] font-medium text-[#10243A] transition-colors hover:bg-[#F2F6F4]"
+                className={`${sora.className} flex items-center gap-1.5 text-[20px] font-bold tracking-tight text-[#10243A]`}
               >
-                {label}
+                <Scale className="h-5 w-5 text-[#0E7C66]" aria-hidden />
+                <span>
+                  Tara<span className="text-[#0E7C66]">zu</span>
+                </span>
               </a>
-            ))}
-            <div className="mt-2 grid grid-cols-2 gap-3 border-t border-[#E1E7E4] pt-4">
+              <button
+                type="button"
+                onClick={closeMenu}
+                aria-label="Close menu"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-md text-[#10243A] transition-colors hover:bg-[#F2F6F4]"
+              >
+                <X className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
+            <nav className="flex flex-1 flex-col px-6 py-6" aria-label="Mobile">
+              {NAV_LINKS.map(({ label, href }) => (
+                <a
+                  key={href}
+                  href={href}
+                  onClick={closeMenu}
+                  className="border-b border-[#E1E7E4] px-3 py-4 text-[17px] font-medium text-[#10243A] transition-colors last:border-b-0 hover:text-[#0E7C66]"
+                >
+                  {label}
+                </a>
+              ))}
+            </nav>
+            <div className="space-y-3 border-t border-[#E1E7E4] p-6">
               <Link
                 href="/login"
                 onClick={closeMenu}
-                className="rounded-[10px] border-[1.5px] border-[#E1E7E4] py-2.5 text-center text-[15px] font-semibold text-[#10243A] transition-colors hover:border-[#10243A]"
+                className={`${BTN_GHOST} w-full`}
               >
                 Sign in
               </Link>
               <Link
                 href="/signup"
                 onClick={closeMenu}
-                className="rounded-[10px] bg-[#0E7C66] py-2.5 text-center text-[15px] font-semibold text-white transition-colors hover:bg-[#0A5F4F]"
+                className={`${BTN_PRIMARY} w-full`}
               >
                 Get started
               </Link>
             </div>
-          </nav>
-        </div>
+          </div>
+        </>
       )}
-    </header>
+    </>
   );
 }
 
@@ -737,9 +773,19 @@ const SOLUTION_STEPS: { icon: LandingIcon; title: string; body: string }[] = [
     body: "Deterministic Python code (not AI) reconciles rows, runs your audit rules, flags anomalies. Every number is traceable.",
   },
   {
+    icon: Flag,
+    title: "4. We flag",
+    body: "Built-in rules catch duplicates, round numbers, weekend entries, and split payments. Each flag links straight to evidence.",
+  },
+  {
     icon: UserCheck,
-    title: "4. You decide",
+    title: "5. You decide",
     body: "Review queue shows matches, flags, and risks. You approve or reject each one. Every decision is logged.",
+  },
+  {
+    icon: Lock,
+    title: "6. You sign off",
+    body: "Export-ready reports and an immutable audit trail back every judgment. Defend your work in the room or in court.",
   },
 ];
 
@@ -786,9 +832,46 @@ const FOOTER_GROUPS: { heading: string; links: [string, string][] }[] = [
       ["FAQ", "#faq"],
     ],
   },
+  {
+    heading: "Legal",
+    links: [
+      ["Privacy", "#"],
+      ["Terms", "#"],
+      ["Cookies", "#"],
+    ],
+  },
 ];
 
 const H2 = `${sora.className} text-[26px] font-bold leading-tight tracking-tight text-[#10243A] sm:text-[30px] md:text-4xl`;
+
+const AGENTS: { phase: string; title: string; body: string }[] = [
+  {
+    phase: "Prepare",
+    title: "Ingestion",
+    body: "Client acceptance, document intake, and mapping.",
+  },
+  {
+    phase: "Plan",
+    title: "Risk assessment",
+    body: "Materiality, risk scoring, and strategy suggestions.",
+  },
+  {
+    phase: "Evaluate",
+    title: "Testing & sampling",
+    body: "Automated workpapers and evidence collection.",
+  },
+  {
+    phase: "Report",
+    title: "Review & sign-off",
+    body: "Final report with full audit trail export.",
+  },
+];
+
+const STATS: { value: string; label: string }[] = [
+  { value: "100%", label: "deterministic math" },
+  { value: "+40%", label: "faster reviews" },
+  { value: "🔒", label: "SOC2 ready" },
+];
 
 export default function LandingPage() {
   const { session } = useAuth();
@@ -808,54 +891,57 @@ export default function LandingPage() {
       {/* `p-0!` cancels the app shell's mobile `main` padding (globals.css) so
           the full-bleed section backgrounds reach the viewport edges. */}
       <main className="p-0!">
+        <style>{`
+          @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes slideInLeft {
+            from { opacity: 0; transform: translateX(-100%); }
+            to { opacity: 1; transform: translateX(0); }
+          }
+        `}</style>
         {/* ===== Hero ===== */}
         <section
           id="hero"
-          className="relative flex scroll-mt-16 items-center overflow-hidden bg-white px-6 py-12 sm:py-16 lg:min-h-[calc(100vh-140px)] lg:px-10"
+          className="relative flex scroll-mt-16 items-center overflow-hidden bg-[#F8FAF9] px-6 py-12 sm:py-16 lg:min-h-[calc(100vh-140px)] lg:px-10"
         >
           <div className="relative z-[1] mx-auto grid w-full max-w-[1200px] items-center gap-10 lg:grid-cols-2 lg:gap-12">
             <div className="max-w-[640px] lg:max-w-none">
               <Eyebrow>
-                <Scale className="mr-1.5 inline h-4 w-4 align-[-2px]" aria-hidden />
-                The scales never lie
+                <Bot className="mr-1.5 inline h-4 w-4 align-[-2px]" aria-hidden />
+                AI SUGGESTS · HUMAN DECIDES
               </Eyebrow>
               <h1
                 className={`${sora.className} mb-5 text-[32px] font-bold leading-[1.15] tracking-tight text-[#10243A] sm:text-[40px] md:mb-6 md:text-5xl`}
               >
-                Stop wasting days on audit reconciliation
+                Audit intelligence{" "}
+                <span className="text-[#0E7C66] underline decoration-[#0E7C66] decoration-4 underline-offset-8">
+                  that scales
+                </span>{" "}
+                with your firm
               </h1>
-              <p className="mb-2 text-[17px] text-[#3D4C5E] md:text-lg">
-                Your auditors are smart. Why spend weeks matching invoices by hand?
-              </p>
-              <p className="mb-7 max-w-[55ch] text-[15px] text-[#6B7A8A] md:mb-8 md:text-base">
-                Tarazu handles the tedious part: extracting from documents, matching rows,
-                flagging anomalies. You handle the judgment calls. Clean review queue.
-                Immutable trail. Your firm, your rules.
+              <p className="mb-7 max-w-[55ch] text-[17px] text-[#3D4C5E] md:mb-8 md:text-lg">
+                Tarazu (تارازو) ingests bank statements, invoices, and ledgers — matches, flags,
+                and presents a clean review queue with an immutable audit trail.
               </p>
               <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:gap-4 md:mb-8">
                 <Link href="/signup" className={BTN_PRIMARY}>
-                  Try it free
+                  Book a demo
                 </Link>
                 <a href="#demo" className={BTN_GHOST}>
-                  Watch it work
-                  <ArrowRight className="h-4 w-4" aria-hidden />
+                  See how it works
                 </a>
               </div>
               <p className="text-[13px] text-[#6B7A8A] md:text-sm">
-                No setup fees · Starts with a test case · Full API
+                SOC 2 ready · Deterministic math · Multi-tenant
               </p>
             </div>
             <div
               role="group"
               aria-label="Product preview"
-              className="w-full max-w-[600px] rounded-2xl border border-[#E1E7E4] bg-gradient-to-br from-white to-slate-50 p-5 shadow-md sm:p-8 lg:max-w-none"
+              className="w-full max-w-[600px] rounded-2xl border border-[#E1E7E4] bg-white p-5 shadow-md sm:p-8 lg:max-w-none"
             >
-              <div className="mb-4 flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-emerald-500 motion-safe:animate-pulse" />
-                <span className="text-[13px] font-medium text-[#3D4C5E] md:text-sm">
-                  Real engagement, anonymized
-                </span>
-              </div>
               <HeroCardRow icon={FileText} label="Invoice #INV-1024" pill="Extracted" tone="done" />
               <HeroCardRow icon={Landmark} label="Bank statement Q1" pill="Matched" tone="done" />
               <HeroCardRow icon={Table} label="Ledger (CSV)" pill="Flagged risk" tone="flag" />
@@ -890,10 +976,14 @@ export default function LandingPage() {
         <section className="bg-[#f8fafc] px-6 py-14 md:py-20 lg:px-10">
           <div className="mx-auto max-w-[1200px]">
             <h2 className={`${H2} mb-8 text-center md:mb-12`}>What we actually do</h2>
-            <div className="grid gap-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-10 lg:gap-16">
-              {SOLUTION_STEPS.map(({ icon: Icon, title, body }) => (
-                <div key={title}>
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0E7C66] text-white">
+            <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-3 sm:gap-x-8 sm:gap-y-10 lg:gap-10">
+              {SOLUTION_STEPS.map(({ icon: Icon, title, body }, index) => (
+                <div
+                  key={title}
+                  className="group rounded-2xl p-5 opacity-0 transition-all duration-300 hover:-translate-y-1 hover:bg-white hover:shadow-lg motion-safe:animate-[fadeInUp_0.6s_ease-out_forwards]"
+                  style={{ animationDelay: `${index * 100}ms` }}
+                >
+                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0E7C66] text-white transition-transform duration-300 group-hover:scale-110">
                     <Icon className="h-6 w-6" aria-hidden />
                   </div>
                   <h3
@@ -912,7 +1002,7 @@ export default function LandingPage() {
         <div className="border-y border-[#E1E7E4] px-6 py-8 md:py-10 lg:px-10">
           <div className="mx-auto max-w-[1200px]">
             <p className="mb-5 text-center text-[12px] uppercase tracking-[0.1em] text-[#7B8794] md:mb-6 md:text-[13px]">
-              Built for real auditors at
+              Trusted by audit and assurance teams at
             </p>
             <div
               className={`${sora.className} flex flex-wrap justify-center gap-x-8 gap-y-3 text-[16px] font-semibold text-[#9AA7B2] sm:gap-x-10 md:gap-x-14 md:gap-y-4 md:text-[19px]`}
@@ -988,6 +1078,48 @@ export default function LandingPage() {
         {/* ===== Live demo pipeline ===== */}
         <DemoSection />
 
+        {/* ===== Agent suites ===== */}
+        <section id="agents" className="scroll-mt-16 bg-white px-6 py-14 md:py-20 lg:px-10">
+          <div className="mx-auto max-w-[1200px]">
+            <Eyebrow>Agent suites</Eyebrow>
+            <h2 className={`${H2} mb-8 md:mb-12`}>Purpose-built agents for every phase</h2>
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {AGENTS.map(({ phase, title, body }) => (
+                <div
+                  key={title}
+                  className="rounded-[10px] border border-[#E1E7E4] bg-white p-6 text-center transition-all duration-200 hover:-translate-y-1 hover:border-[#0E7C66] hover:shadow-md"
+                >
+                  <span className="mb-2 block text-[12px] font-semibold uppercase tracking-[0.08em] text-[#0E7C66]">
+                    {phase}
+                  </span>
+                  <h3 className={`${sora.className} mb-1 text-[20px] font-bold text-[#10243A]`}>
+                    {title}
+                  </h3>
+                  <p className="text-[14px] text-[#6B7A8A]">{body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ===== Stats ===== */}
+        <section className="bg-[#10243A] px-6 py-14 md:py-20 lg:px-10">
+          <div className="mx-auto max-w-[1200px]">
+            <div className="grid gap-10 text-center sm:grid-cols-3 md:gap-12">
+              {STATS.map(({ value, label }) => (
+                <div key={label}>
+                  <b
+                    className={`${sora.className} block text-[46px] leading-none tracking-tight text-[#7ED9C3]`}
+                  >
+                    {value}
+                  </b>
+                  <span className="mt-2 block text-[15px] text-[#B9C6D2]">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* ===== FAQ ===== */}
         <section id="faq" className="scroll-mt-16 px-6 py-14 md:py-20 lg:px-10">
           <div className="mx-auto max-w-[1020px]">
@@ -1027,24 +1159,21 @@ export default function LandingPage() {
         {/* ===== CTA ===== */}
         <section
           id="cta"
-          className="scroll-mt-16 bg-[#10243A] px-6 py-16 text-white md:py-24 lg:px-10"
+          className="scroll-mt-16 bg-white px-6 py-16 md:py-24 lg:px-10"
         >
           <div className="mx-auto max-w-[800px] text-center">
             <h2
-              className={`${sora.className} mb-4 text-[28px] font-bold leading-tight tracking-tight sm:text-[32px] md:text-[42px]`}
+              className={`${sora.className} mb-4 text-[28px] font-bold leading-tight tracking-tight text-[#10243A] sm:text-[32px] md:text-[42px]`}
             >
-              Stop wasting weeks. Get control back.
+              See your own engagement in Tarazu
             </h2>
-            <p className="mb-8 text-[16px] text-[#B9C6D2] md:text-lg">
-              Try Tarazu with your own real (anonymized) engagement for free. No credit card. No
-              sales calls. Just a clean review queue and an immutable trail.
+            <p className="mb-8 text-[16px] text-[#3D4C5E] md:text-lg">
+              Bring one real (anonymised) engagement to the demo — we&apos;ll show you exactly what
+              it automates.
             </p>
             <Link href="/signup" className={BTN_PRIMARY}>
-              Get started free
+              Book a demo
             </Link>
-            <p className="mt-6 text-[13px] text-[#6B7A8A] md:text-sm">
-              Takes 2 minutes to set up. Your audit firm, your rules, your way forward.
-            </p>
           </div>
         </section>
       </main>
@@ -1052,7 +1181,7 @@ export default function LandingPage() {
       {/* ===== Footer ===== */}
       <footer className="bg-[#10243A] px-6 pb-8 pt-12 text-[14px] text-[#B9C6D2] md:pt-16 md:text-[15px] lg:px-10">
         <div className="mx-auto max-w-[1200px]">
-          <div className="mb-10 flex flex-col gap-10 md:mb-12 lg:grid lg:grid-cols-[2fr_1fr_1fr_1fr]">
+          <div className="mb-10 flex flex-col gap-10 md:mb-12 lg:grid lg:grid-cols-[2fr_1fr_1fr_1fr_1fr]">
             <div>
               <a
                 href="#hero"
@@ -1067,9 +1196,9 @@ export default function LandingPage() {
                 AI-powered audit automation for modern assurance teams.
               </p>
             </div>
-            {/* Two link columns on phones, three from `sm`; at `lg` the wrapper
+            {/* Two link columns on phones, four from `sm`; at `lg` the wrapper
                 dissolves (`contents`) so the groups sit in the outer grid. */}
-            <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:contents">
+            <div className="grid grid-cols-2 gap-8 sm:grid-cols-4 lg:contents">
               {FOOTER_GROUPS.map(({ heading, links }) => (
                 <div key={heading}>
                   <h4 className="mb-4 text-[13px] font-semibold uppercase tracking-[0.08em] text-white md:text-sm">

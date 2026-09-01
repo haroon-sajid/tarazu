@@ -17,6 +17,7 @@ import { Workspace } from "@/components/layout/workspace";
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { session } = useAuth();
   const router = useRouter();
+  const [mobileOpen, setMobileOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (session === null) router.replace("/login");
@@ -32,9 +33,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileOpen} onMobileOpenChange={setMobileOpen} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Header />
+        <Header onMenuToggle={() => setMobileOpen((open) => !open)} />
         <main className="flex-1 overflow-hidden px-4 py-4 md:px-6 md:py-6">
           <div className="h-full w-full overflow-y-auto">
             <Workspace>{children}</Workspace>

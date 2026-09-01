@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart2,
   BarChart3,
   Briefcase,
   ChevronLeft,
@@ -11,7 +12,6 @@ import {
   Dices,
   Files,
   FileText,
-  Menu,
   MessageSquare,
   Scale,
   Settings,
@@ -20,7 +20,6 @@ import {
   TrendingUp,
   Upload,
   Users,
-  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProfileMenu } from "@/components/layout/profile-menu";
@@ -33,15 +32,16 @@ import { ProfileMenu } from "@/components/layout/profile-menu";
  */
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/clients", label: "Clients", icon: Users },
-  { href: "/cases", label: "Cases", icon: Briefcase },
   { href: "/upload", label: "Upload", icon: Upload },
   { href: "/review", label: "Review", icon: TableProperties },
+  { href: "/clients", label: "Clients", icon: Users },
+  { href: "/cases", label: "Cases", icon: Briefcase },
   { href: "/documents", label: "Documents", icon: Files },
   { href: "/sampling", label: "Sampling", icon: Dices },
   { href: "/assistant", label: "Assistant", icon: MessageSquare },
   { href: "/audit-trail", label: "Audit trail", icon: ShieldCheck },
   { href: "/reports", label: "Reports", icon: FileText },
+  { href: "/analytics", label: "Analytics", icon: BarChart2 },
   { href: "/insights", label: "Insights", icon: TrendingUp },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -69,10 +69,15 @@ function readCollapsed() {
  * The saved choice is read during the first render, not in an effect, so the
  * rail paints at its final width instead of snapping a frame later.
  */
-export function Sidebar() {
+export function Sidebar({
+  mobileOpen,
+  onMobileOpenChange,
+}: {
+  mobileOpen: boolean;
+  onMobileOpenChange: (open: boolean) => void;
+}) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = React.useState(readCollapsed);
-  const [mobileOpen, setMobileOpen] = React.useState(false);
   // Width and transform animate on a real interaction, never on first paint.
   const [animate, setAnimate] = React.useState(false);
 
@@ -87,17 +92,17 @@ export function Sidebar() {
   React.useEffect(() => {
     const query = window.matchMedia(MOBILE_QUERY);
     const sync = () => {
-      if (!query.matches) setMobileOpen(false);
+      if (!query.matches) onMobileOpenChange(false);
     };
     sync();
     query.addEventListener("change", sync);
     return () => query.removeEventListener("change", sync);
-  }, []);
+  }, [onMobileOpenChange]);
 
   // Navigating is what the drawer is for; it closes once it has done its job.
   React.useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
+    onMobileOpenChange(false);
+  }, [pathname, onMobileOpenChange]);
 
   React.useEffect(() => {
     if (!mobileOpen) return;
@@ -123,7 +128,7 @@ export function Sidebar() {
     <>
       {/* Drawer backdrop — mobile only, and only while the drawer is open. */}
       <div
-        onClick={() => setMobileOpen(false)}
+        onClick={() => onMobileOpenChange(false)}
         aria-hidden
         className={cn(
           "fixed inset-0 z-40 bg-ink-900/50 transition-opacity duration-300 md:hidden",
@@ -234,20 +239,6 @@ export function Sidebar() {
         </div>
       </aside>
 
-      {/* Drawer handle — mobile only. */}
-      <button
-        type="button"
-        onClick={() => setMobileOpen((current) => !current)}
-        aria-label={mobileOpen ? "Close menu" : "Open menu"}
-        aria-expanded={mobileOpen}
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-brand-800 text-white shadow-lg transition-colors hover:bg-brand-900 md:hidden"
-      >
-        {mobileOpen ? (
-          <X className="h-6 w-6" aria-hidden />
-        ) : (
-          <Menu className="h-6 w-6" aria-hidden />
-        )}
-      </button>
     </>
   );
 }

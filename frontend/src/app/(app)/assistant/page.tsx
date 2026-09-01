@@ -255,11 +255,8 @@ export default function AssistantPage() {
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-ink-900">Assistant</h1>
-          <p className="mt-1 text-sm text-ink-600">
-            Ask about this audit in plain language, English or Urdu.
-            Answers are computed in code from the uploaded documents, the
-            audit trail, and every case in the organization — with the source
-            cited on every claim.
+          <p className="mt-1 truncate text-sm leading-relaxed text-ink-600">
+            Ask about this audit in plain language, English or Urdu. Answers are computed in code from the uploaded documents, the audit trail, and every case in the organization — with the source cited on every claim.
           </p>
         </div>
         <span

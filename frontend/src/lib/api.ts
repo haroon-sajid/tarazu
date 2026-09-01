@@ -69,6 +69,7 @@ import type {
   ReviewItemFilters,
   ReviewItemsResponse,
   SalesAnalyticsResult,
+  SalesDataUploadSummary,
   SampleRequest,
   SampleResponse,
   SignOffListResponse,
@@ -560,7 +561,6 @@ export async function uploadDocuments(files: UploadFiles): Promise<UploadRespons
     form.append("bank_statement", files.bankStatement);
     form.append("ledger", files.ledger);
     for (const invoice of files.invoices) form.append("invoices", invoice);
-    if (files.salesData) form.append("sales_data", files.salesData);
     if (files.clientName) form.append("client_name", files.clientName);
     if (files.clientId) form.append("client_id", files.clientId);
     const token = authToken();
@@ -625,17 +625,6 @@ export async function uploadDocuments(files: UploadFiles): Promise<UploadRespons
         size_bytes: invoice.size,
         storage_path: `${reviewItemsFixture.case_id}/DOC-INV-${index + 1}/${invoice.name}`,
       })),
-      ...(files.salesData
-        ? [
-            {
-              document_id: "DOC-SLS-001",
-              document_type: "sales_data" as const,
-              filename: files.salesData.name,
-              size_bytes: files.salesData.size,
-              storage_path: `${reviewItemsFixture.case_id}/DOC-SLS-001/${files.salesData.name}`,
-            },
-          ]
-        : []),
     ],
     status: "ready_for_review",
     review_item_count: fixtureStore.items.length,
@@ -752,6 +741,136 @@ export async function runSalesAnalytics(
   await sleep(1400);
   const result = clone(salesAnalyticsFixture) as unknown as SalesAnalyticsResult;
   return { ...result, generated_at: new Date().toISOString() };
+}
+
+// --------------------------------------------------------------------------
+// Sales data uploads — separate source for sales analytics
+// --------------------------------------------------------------------------
+
+const SALES_DATA_CACHE_KEY = "tarazu.fixture-sales-data";
+
+function readFixtureSalesData(): SalesDataUploadSummary[] {
+  try {
+    const raw = window.localStorage.getItem(SALES_DATA_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as SalesDataUploadSummary[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeFixtureSalesData(uploads: SalesDataUploadSummary[]) {
+  try {
+    window.localStorage.setItem(SALES_DATA_CACHE_KEY, JSON.stringify(uploads));
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+/**
+ * GET /v1/cases/{case_id}/sales-data — list the sales exports uploaded to a
+ * case. These are separate from audit documents.
+ */
+export async function listSalesData(
+  caseId?: string,
+): Promise<{ uploads: SalesDataUploadSummary[] }> {
+  const effective = analyticsCaseId(caseId);
+  if (!FIXTURE_MODE) {
+    return request<{ uploads: SalesDataUploadSummary[] }>(
+      `/v1/cases/${encodeURIComponent(effective)}/sales-data`,
+    );
+  }
+  await sleep(FIXTURE_LATENCY_MS / 3);
+  return { uploads: readFixtureSalesData().filter((u) => u.case_id === effective) };
+}
+
+/**
+ * POST /v1/cases/{case_id}/sales-data — upload a sales export for later
+ * analysis. This does not create a case document and does not run the pipeline.
+ */
+export async function uploadSalesData(
+  file: File,
+  caseId?: string,
+): Promise<SalesDataUploadSummary> {
+  const effective = analyticsCaseId(caseId);
+  if (!FIXTURE_MODE) {
+    const form = new FormData();
+    form.append("file", file);
+    const token = authToken();
+    const headers: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
+      : {};
+    let response: Response;
+    try {
+      response = await fetch(
+        `${API_URL}/v1/cases/${encodeURIComponent(effective)}/sales-data`,
+        { method: "POST", body: form, headers },
+      );
+    } catch {
+      throw new ApiError(0, "Could not reach the Tarazu backend. Is it running?");
+    }
+    if (!response.ok) {
+      let detail = response.statusText;
+      try {
+        const body = await response.json();
+        if (typeof body?.detail === "string") detail = body.detail;
+      } catch {
+        // keep statusText
+      }
+      throw new ApiError(response.status, detail);
+    }
+    return response.json() as Promise<SalesDataUploadSummary>;
+  }
+  await sleep(FIXTURE_LATENCY_MS);
+  const upload: SalesDataUploadSummary = {
+    sales_data_id: `SLS-${Math.random().toString(36).slice(2, 10)}`,
+    case_id: effective,
+    filename: file.name,
+    size_bytes: file.size,
+    uploaded_by: "fixture-user",
+    uploaded_at: new Date().toISOString(),
+  };
+  writeFixtureSalesData([...readFixtureSalesData(), upload]);
+  return upload;
+}
+
+/**
+ * DELETE /v1/cases/{case_id}/sales-data/{sales_data_id} — remove a sales export.
+ */
+export async function deleteSalesData(
+  salesDataId: string,
+  caseId?: string,
+): Promise<void> {
+  const effective = analyticsCaseId(caseId);
+  if (!FIXTURE_MODE) {
+    const token = authToken();
+    const headers: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
+      : {};
+    let response: Response;
+    try {
+      response = await fetch(
+        `${API_URL}/v1/cases/${encodeURIComponent(effective)}/sales-data/${encodeURIComponent(salesDataId)}`,
+        { method: "DELETE", headers },
+      );
+    } catch {
+      throw new ApiError(0, "Could not reach the Tarazu backend. Is it running?");
+    }
+    if (!response.ok && response.status !== 404) {
+      let detail = response.statusText;
+      try {
+        const body = await response.json();
+        if (typeof body?.detail === "string") detail = body.detail;
+      } catch {
+        // keep statusText
+      }
+      throw new ApiError(response.status, detail);
+    }
+    return;
+  }
+  await sleep(FIXTURE_LATENCY_MS / 2);
+  writeFixtureSalesData(
+    readFixtureSalesData().filter((u) => u.sales_data_id !== salesDataId),
+  );
 }
 
 // --------------------------------------------------------------------------
