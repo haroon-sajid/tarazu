@@ -1,13 +1,13 @@
 # modules/assistant/
 
-**Purpose:** Ask Tarazu — grounded answers about one case, in English and
+**Purpose:** Ask Tarazu: grounded answers about one case, in English and
 Urdu, computed from the case's persisted results and worded with citations
 and the computed facts shown. Anything the audit holds is answerable: the
 results as a whole, one row, invoice, bank line, or flag by its identifier,
 the evidence behind the rows, a day or a month, the case itself, and the
 engagement's wider record. A Qwen model, when configured, may choose *which*
 of the fixed queries runs for a question the keywords miss (under checks),
-and may rephrase the wording — nothing else. See ADR 0006.
+and may rephrase the wording, nothing else. See ADR 0006.
 
 **Inputs:** The question, the case, its review items, its Benford result,
 and a `WorkspaceContext` carrying every case, document, extraction, decision,
@@ -27,25 +27,25 @@ this package.
 | File | Role |
 |---|---|
 | `service.py` | `answer_question(...)`: runs the five steps below. |
-| `planner.py` | Step 1–2: deterministic keyword routing (EN/UR) to an intent and its parameters — a rule, a party, an amount, an identifier (`RI-0005`, `invoice 0087`, `row 16`), a day or month. Unplaceable questions are refused, in words that say whether they read as being about the audit. |
+| `planner.py` | Step 1–2: deterministic keyword routing (EN/UR) to an intent and its parameters: a rule, a party, an amount, an identifier (`RI-0005`, `invoice 0087`, `row 16`), a day or month. Unplaceable questions are refused, in words that say whether they read as being about the audit. |
 | `classifier.py` | Step 1b, only with a model: for a question the keywords could not place, asks the model *which* fixed query it is asking for. Every parameter it names is checked against the question and the case (a party the ledger names; an amount, date, or identifier written in the question); a reply that fails leaves the question refused. Never answers. |
-| `queries.py` | Step 3: the deterministic queries — `Decimal` counts, sums, groupings by party and month, amount and date search, one item's full detail, the invoices and bank lines, every row, confidence readout, Benford readout, the case record. Produces the facts. |
+| `queries.py` | Step 3: the deterministic queries: `Decimal` counts, sums, groupings by party and month, amount and date search, one item's full detail, the invoices and bank lines, every row, confidence readout, Benford readout, the case record. Produces the facts. |
 | `composer.py` | Step 4: templates in both languages over the computed values. Works with no model. |
 | `qwen_chat.py` | The optional text-only client used by the classifier and to rephrase the template. Owned here, not shared with `extraction/`. |
-| `concepts.py` | Beginner glossary — 15 audit topics with EN/UR definitions, keyword vocabularies, and `DEDICATED_TOPICS`. Shared verbatim with the frontend fixture router. |
+| `concepts.py` | Beginner glossary: 15 audit topics with EN/UR definitions, keyword vocabularies, and `DEDICATED_TOPICS`. Shared verbatim with the frontend fixture router. |
 | `settings.py` | `ASSISTANT_*` configuration. |
 
 ## The pipeline
 
-1. Understand the intent — by keywords; when they fail and a key is set,
+1. Understand the intent, by keywords; when they fail and a key is set,
 the classifier may choose the query, and the answer then carries the fact
 `Question understood by: <model>` with its confidence one step lower.
-2. Plan the query. 3. Run the calculation in code. 4. Word the result — and,
+2. Plan the query. 3. Run the calculation in code. 4. Word the result, and,
 if a key is set and `DEMO_MODE` is off, ask the model to rephrase it given
 the facts, then **check** that every number in the reply already appears in
 the facts or the template; otherwise the template stands. 5. Show the sources.
 
-Question types today — the results: summary, match results (all, or one
+Question types today. The results: summary, match results (all, or one
 status), unmatched items, missing evidence, flags, one rule explained,
 duplicates, Benford, extraction confidence; the data: one item by any
 identifier it carries (review item, ledger row or sheet row, bank line,
@@ -71,7 +71,7 @@ records payments only.
 **Must never do:**
 
 - **Never answer from external or world knowledge.** Answers come only from the case's persisted results. If the data does not contain the answer, say so.
-- **Never let the model compute.** The model receives the question, the computed facts, and the template — never a document — and may only rephrase. A reply that introduces a number is discarded.
+- **Never let the model compute.** The model receives the question, the computed facts, and the template (never a document) and may only rephrase. A reply that introduces a number is discarded.
 - **Never let the model answer by choosing.** The classifier may pick which fixed query runs; it cannot name a party the ledger lacks, or an amount, date, or identifier the question does not contain. Anything it names is checked, and a failed check is a refusal.
 - Never approve, reject, or modify any item. The assistant explains; humans decide.
 - Never emit an answer without `answer_confidence`, and never cite a document on an answer that is not grounded (the schema refuses it).

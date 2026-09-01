@@ -46,7 +46,7 @@ spreadsheet path cannot drift into the model path by accident.
 
 **Documents go to Qwen VL.** A bank statement PDF or a photo of an invoice needs
 a model. Every field comes back with `extraction_confidence` and a `Provenance`
-naming the page and the region — that provenance is what the evidence viewer
+naming the page and the region; that provenance is what the evidence viewer
 highlights, and a field without it is dropped rather than emitted.
 
 **The ledger goes to pandas.** An Excel file is already structured. Sending it to
@@ -74,11 +74,11 @@ It runs only on fields at or below `EXTRACTION_CONFIDENCE_THRESHOLD`
 | Situation | What happens |
 |---|---|
 | Timeout, 429, or 5xx | Retried with exponential backoff, honouring `Retry-After` |
-| 401, 403, 422 | Raised immediately — retrying will not fix a bad key |
+| 401, 403, 422 | Raised immediately; retrying will not fix a bad key |
 | Unparseable JSON | One repair round-trip, then `QwenResponseError` |
 | Unusable or missing bbox | Falls back to page + `text_snippet` |
 | No provenance at all | The field is dropped, not emitted |
-| Unrecognised confidence word | Treated as `low` — "unknown" must never read as "high" |
+| Unrecognised confidence word | Treated as `low`; "unknown" must never read as "high" |
 | Model reports a value it could not read | Forced to `unreadable=True`, `value=None` |
 
 ## Must never do

@@ -19,7 +19,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeftRight, MinusCircle, PlusCircle } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, MinusCircle, PlusCircle } from "lucide-react";
 import { ApiError, comparePeriods, listCases } from "@/lib/api";
 import type { CaseSummary, CompareResponse } from "@/lib/types";
 import { formatDate, formatTimestamp } from "@/lib/format";
@@ -193,6 +193,13 @@ export default function ComparePage() {
 
   const header = (
     <div className="mb-5">
+      <Link
+        href="/insights"
+        className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+        Back to insights
+      </Link>
       <h1 className="text-xl font-bold text-ink-900">Compare periods</h1>
       <p className="mt-1 text-sm text-ink-600">
         Two engagements side by side, measure by measure, plus the parties who

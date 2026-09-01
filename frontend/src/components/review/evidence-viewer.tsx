@@ -164,7 +164,7 @@ function CorrectionForm({
           {field.value === null ? "nothing" : String(field.value)}
         </span>{" "}
         for <span className="font-medium">{field.field}</span>. Record what the
-        source actually says — both readings are kept.
+        source actually says. Both readings are kept.
       </p>
       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
         <input

@@ -69,6 +69,16 @@ summary {
   }
 }
 
+/* Upload page: light sweep across the progress bar while processing. */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 /* Money and ids read better tabular. */
 .tabular-nums {
   font-variant-numeric: tabular-nums;

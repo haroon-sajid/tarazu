@@ -254,18 +254,18 @@ export default function ApiKeysSettingsPage() {
               message="No API key matches the current search and filter."
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] text-left">
+            <div>
+              <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-                    <th className="whitespace-nowrap py-2 pr-4">Name</th>
-                    <th className="whitespace-nowrap py-2 pr-4">Status</th>
-                    <th className="whitespace-nowrap py-2 pr-4">Key id</th>
-                    <th className="whitespace-nowrap py-2 pr-4">Secret key</th>
-                    <th className="whitespace-nowrap py-2 pr-4">Permissions</th>
-                    <th className="whitespace-nowrap py-2 pr-4">Created</th>
-                    <th className="whitespace-nowrap py-2 pr-4">Last used</th>
-                    <th className="whitespace-nowrap py-2 pr-4">Created by</th>
+                    <th className="py-2 pr-4">Name</th>
+                    <th className="py-2 pr-4">Status</th>
+                    <th className="hidden py-2 pr-4 lg:table-cell">Key id</th>
+                    <th className="hidden py-2 pr-4 md:table-cell">Secret key</th>
+                    <th className="py-2 pr-4">Permissions</th>
+                    <th className="hidden py-2 pr-4 sm:table-cell">Created</th>
+                    <th className="hidden py-2 pr-4 lg:table-cell">Last used</th>
+                    <th className="hidden py-2 pr-4 xl:table-cell">Created by</th>
                     <th className="py-2 text-right" aria-label="Actions" />
                   </tr>
                 </thead>
@@ -295,10 +295,10 @@ export default function ApiKeysSettingsPage() {
                           <StatePill tone="positive">Active</StatePill>
                         )}
                       </td>
-                      <td className="whitespace-nowrap py-2.5 pr-4 font-mono text-xs text-ink-600">
+                      <td className="hidden break-all py-2.5 pr-4 font-mono text-xs text-ink-600 lg:table-cell">
                         {key.key_id}
                       </td>
-                      <td className="whitespace-nowrap py-2.5 pr-4 font-mono text-xs text-ink-600">
+                      <td className="hidden break-all py-2.5 pr-4 font-mono text-xs text-ink-600 md:table-cell">
                         {key.key_prefix}…
                       </td>
                       <td className="py-2.5 pr-4">
@@ -308,13 +308,13 @@ export default function ApiKeysSettingsPage() {
                           ))}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap py-2.5 pr-4 text-xs text-ink-600">
+                      <td className="hidden py-2.5 pr-4 text-xs text-ink-600 sm:table-cell">
                         {formatTimestamp(key.created_at)}
                       </td>
-                      <td className="whitespace-nowrap py-2.5 pr-4 text-xs text-ink-600">
+                      <td className="hidden py-2.5 pr-4 text-xs text-ink-600 lg:table-cell">
                         {key.last_used_at ? formatTimestamp(key.last_used_at) : "Never"}
                       </td>
-                      <td className="whitespace-nowrap py-2.5 pr-4 text-xs text-ink-600">
+                      <td className="hidden break-words py-2.5 pr-4 text-xs text-ink-600 xl:table-cell">
                         {createdBy(key.created_by)}
                       </td>
                       <td className="py-2.5 text-right">

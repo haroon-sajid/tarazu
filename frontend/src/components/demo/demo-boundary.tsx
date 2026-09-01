@@ -37,7 +37,7 @@ const DID: { title: string; body: string }[] = [
   },
   {
     title: "Explained the case in plain language",
-    body: "The assistant words answers in English or Urdu — but only over figures the deterministic code already computed, and only from your uploaded files.",
+    body: "The assistant words answers in English or Urdu, but only over figures the deterministic code already computed, and only from your uploaded files.",
   },
 ];
 
@@ -52,7 +52,7 @@ const DID_NOT: { title: string; body: string }[] = [
   },
   {
     title: "Decide anything",
-    body: "There is no auto-approval path anywhere in the product. Ten rows in this sample, ten explicit human decisions — each written to an append-only audit trail.",
+    body: "There is no auto-approval path anywhere in the product. Ten rows in this sample, ten explicit human decisions, each written to an append-only audit trail.",
   },
   {
     title: "Learn from the client data",
@@ -131,7 +131,7 @@ export function DemoBoundary() {
               {POSITIONING}
             </p>
             <p className="mt-1.5 text-xs leading-relaxed text-ink-600">
-              Tarazu is an audit layer over the records a client already keeps — never a
+              Tarazu is an audit layer over the records a client already keeps: never a
               book-keeping system, never a verdict. It flags items that need review and
               hands you the evidence to judge them by.
             </p>

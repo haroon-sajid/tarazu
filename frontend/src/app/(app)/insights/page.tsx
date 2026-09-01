@@ -232,7 +232,7 @@ export default function InsightsPage() {
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Link
-          href="/business"
+          href="/insights/business"
           className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition-colors hover:border-brand-600 hover:bg-slate-50"
         >
           <div className="flex items-center gap-3">
@@ -250,7 +250,7 @@ export default function InsightsPage() {
         </Link>
 
         <Link
-          href="/compare"
+          href="/insights/compare"
           className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition-colors hover:border-brand-600 hover:bg-slate-50"
         >
           <div className="flex items-center gap-3">

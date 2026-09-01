@@ -181,11 +181,11 @@ def test_the_refused_question_now_lists_the_invoices_with_their_match_results(ca
         "2 invoices in the evidence, totalling PKR 409,280.00; 7 ledger rows have no invoice behind them:"
     )
     assert (
-        "• INV-2026-0087 — Karachi Packaging Co., PKR 96,400.00, dated 2026-06-03 (document DOC-INV-0087, page 1): "
-        "settled by 2 ledger rows — RI-0002 on 2026-06-05 (matched, pending), RI-0008 on 2026-06-16 (matched, pending) "
-        "— the same invoice paid more than once" in answer.text
+        "• INV-2026-0087: Karachi Packaging Co., PKR 96,400.00, dated 2026-06-03 (document DOC-INV-0087, page 1); "
+        "settled by 2 ledger rows: RI-0002 on 2026-06-05 (matched, pending), RI-0008 on 2026-06-16 (matched, pending)"
+        "; the same invoice paid more than once" in answer.text
     )
-    assert "• SMW/2026/0431 — Sialkot Metal Works, PKR 312,880.00, dated 2026-06-15" in answer.text
+    assert "• SMW/2026/0431: Sialkot Metal Works, PKR 312,880.00, dated 2026-06-15" in answer.text
     assert "Name an invoice by its number" in answer.text
     assert {"DOC-INV-0087", "DOC-INV-0431"} <= {c.document_id for c in answer.citations}
     assert facts(answer)["Invoices in the evidence"] == "2"
@@ -196,11 +196,11 @@ def test_an_invoice_number_returns_every_row_that_settles_it(case_data) -> None:
     answer = ask(case_data, "tell me about invoice INV-2026-0087")
     assert answer.intent is AssistantIntent.ITEM
     assert answer.text.startswith('"INV-2026-0087" matches 2 items:')
-    assert "RI-0002 — Karachi Packaging Co., PKR 96,400.00 on 2026-06-05." in answer.text
-    assert "RI-0008 — Karachi Packaging Co., PKR 96,400.00 on 2026-06-16." in answer.text
+    assert "RI-0002: Karachi Packaging Co., PKR 96,400.00 on 2026-06-05." in answer.text
+    assert "RI-0008: Karachi Packaging Co., PKR 96,400.00 on 2026-06-16." in answer.text
     assert "• Invoice: INV-2026-0087 dated 2026-06-03, PKR 96,400.00, Karachi Packaging Co. (page 1)." in answer.text
     assert "• Bank statement: BNK-0031 on 2026-06-05, PKR 96,400.00, \"CHQ 004412 KARACHI PACKAGING CO\" (page 1)." in answer.text
-    assert "• Flags (1): duplicate-invoice (high) — Invoice INV-2026-0087 is paid twice" in answer.text
+    assert "• Flags (1): duplicate-invoice (high): Invoice INV-2026-0087 is paid twice" in answer.text
     assert facts(answer)["Items found"] == "2"
     assert facts(answer)["RI-0002 invoice"].startswith("INV-2026-0087 dated 2026-06-03")
     assert {c.review_item_id for c in answer.citations} == {"RI-0002", "RI-0008"}
@@ -209,19 +209,19 @@ def test_an_invoice_number_returns_every_row_that_settles_it(case_data) -> None:
 def test_a_sheet_row_number_finds_the_ledger_row(case_data) -> None:
     answer = ask(case_data, "row 16")
     assert answer.intent is AssistantIntent.ITEM
-    assert answer.text.startswith("RI-0005 — Hussain Brothers & Sons, PKR 49,500.00 on 2026-06-11.")
+    assert answer.text.startswith("RI-0005: Hussain Brothers & Sons, PKR 49,500.00 on 2026-06-11.")
     assert "• Ledger: LED-0014 (sheet row 16), \"Dyeing services - part 1\", account 5040." in answer.text
     assert "• Invoice: none attached." in answer.text
     assert "• Match: matched (high strength) by rule exact-amount-exact-date" in answer.text
     assert "structuring (high)" in answer.text and "near-limit (high)" in answer.text
-    assert "• Decision: pending — awaiting an explicit human decision on the Review screen." in answer.text
+    assert "• Decision: pending, awaiting an explicit human decision on the Review screen." in answer.text
 
 
 def test_an_invoice_named_by_its_digits_shows_the_weakest_reading(case_data) -> None:
     answer = ask(case_data, "invoice 0431")
-    assert answer.text.startswith("RI-0009 — Sialkot Metal Works, PKR 312,880.00 on 2026-06-17.")
+    assert answer.text.startswith("RI-0009: Sialkot Metal Works, PKR 312,880.00 on 2026-06-17.")
     assert "• Invoice: SMW/2026/0431 dated 2026-06-15, PKR 312,880.00, Sialkot Metal Works (page 1)." in answer.text
-    assert "• Extraction confidence: low — 2 readings, 0 unreadable; weakest reading: amount = 312880.0 (low) from DOC-INV-0431 page 1." in answer.text
+    assert "• Extraction confidence: low (2 readings, 0 unreadable); weakest reading: amount = 312880.0 (low) from DOC-INV-0431 page 1." in answer.text
     assert any(c.document_id == "DOC-INV-0431" for c in answer.citations)
 
 
@@ -229,7 +229,7 @@ def test_an_item_card_shows_the_decision_and_its_reason(case_data) -> None:
     answer = ask(case_data, "RI-0004")
     assert "• Match: partial (low strength) by rule same-party-same-date-amount-mismatch" in answer.text
     assert (
-        "• Decision: rejected by user-demo-auditor at 2026-06-19 10:02 — Ledger amount is wrong. "
+        "• Decision: rejected by user-demo-auditor at 2026-06-19 10:02. Reason: Ledger amount is wrong. "
         "The bank shows 49,500.00. Returned to the client for correction." in answer.text
     )
     assert "correction.." not in answer.text
@@ -252,10 +252,10 @@ def test_match_results_name_the_rule_and_the_counterpart_of_every_row(case_data)
         "The rows total PKR 2,685,830.00."
     )
     assert (
-        "(RI-0002): matched (high) by exact-amount-exact-date — bank line BNK-0031 (2026-06-05, p.1); invoice INV-2026-0087."
+        "(RI-0002): matched (high) by exact-amount-exact-date, with bank line BNK-0031 (2026-06-05, p.1); invoice INV-2026-0087."
         in answer.text
     )
-    assert "(RI-0010): unmatched (low) by no-candidate-found — no bank line and no invoice." in answer.text
+    assert "(RI-0010): unmatched (low) by no-candidate-found, with no bank line and no invoice." in answer.text
     assert "Matching is deterministic code" in answer.text
     assert facts(answer)["Match results (matched / partial / unmatched)"] == "8 / 1 / 1"
     assert len(answer.citations) == 8
@@ -268,7 +268,7 @@ def test_match_results_can_be_narrowed_to_one_status(case_data) -> None:
 
     partial = ask(case_data, "partial matches")
     assert partial.text.startswith("1 partial row, totalling PKR 45,900.00:")
-    assert "(RI-0004): partial (low) by same-party-same-date-amount-mismatch — bank line BNK-0044 (2026-06-10, p.2)." in partial.text
+    assert "(RI-0004): partial (low) by same-party-same-date-amount-mismatch, with bank line BNK-0044 (2026-06-10, p.2)." in partial.text
 
 
 def test_the_bank_statement_lines_are_listed_with_their_pages(case_data, workspace) -> None:
@@ -279,7 +279,7 @@ def test_the_bank_statement_lines_are_listed_with_their_pages(case_data, workspa
         "1 ledger row has no bank line."
     )
     assert (
-        "• BNK-0012 — 2026-06-02, PKR 284,000.00, \"IBFT GULBERG TRADERS PVT LTD\" (page 1, balance PKR 4,821,330.00) "
+        "• BNK-0012: 2026-06-02, PKR 284,000.00, \"IBFT GULBERG TRADERS PVT LTD\" (page 1, balance PKR 4,821,330.00) "
         "→ pays RI-0001 Gulberg Traders (Pvt) Ltd" in answer.text
     )
     # The statement's pages are cited first (one citation per page region);
@@ -302,9 +302,9 @@ def test_every_ledger_row_is_listed_in_date_order(case_data) -> None:
     )
     lines = [line for line in answer.text.splitlines() if line.startswith("•")]
     assert len(lines) == 10
-    assert lines[0] == "• 2026-06-02 — Gulberg Traders (Pvt) Ltd, PKR 284,000.00 (RI-0001, sheet row 5): matched, approved — Yarn purchase - June lot 1"
-    assert lines[4] == "• 2026-06-11 — Hussain Brothers & Sons, PKR 49,500.00 (RI-0005, sheet row 16): matched, pending, 2 flags — Dyeing services - part 1"
-    assert lines[-1].startswith("• 2026-06-18 — Shalimar Trading Co, PKR 187,500.00 (RI-0010, sheet row 33): unmatched, pending")
+    assert lines[0] == "• 2026-06-02, Gulberg Traders (Pvt) Ltd, PKR 284,000.00 (RI-0001, sheet row 5): matched, approved, \"Yarn purchase - June lot 1\""
+    assert lines[4] == "• 2026-06-11, Hussain Brothers & Sons, PKR 49,500.00 (RI-0005, sheet row 16): matched, pending, 2 flags, \"Dyeing services - part 1\""
+    assert lines[-1].startswith("• 2026-06-18, Shalimar Trading Co, PKR 187,500.00 (RI-0010, sheet row 33): unmatched, pending")
 
 
 def test_a_day_is_searched_across_ledger_bank_invoices_and_decisions(case_data) -> None:
@@ -323,7 +323,7 @@ def test_a_day_is_searched_across_ledger_bank_invoices_and_decisions(case_data) 
     )
     assert "• BNK-0079: PKR 312,880.00, \"IBFT SIALKOT METAL WORKS\" (page 3) → pays RI-0009" in nineteenth.text
     assert "• RI-0001: approved by user-demo-auditor at 2026-06-19 09:41" in nineteenth.text
-    assert "• RI-0004: rejected by user-demo-auditor at 2026-06-19 10:02 — Ledger amount is wrong." in nineteenth.text
+    assert "• RI-0004: rejected by user-demo-auditor at 2026-06-19 10:02. Reason: Ledger amount is wrong." in nineteenth.text
 
 
 def test_a_month_is_searched_and_an_invoice_is_counted_once(case_data) -> None:
@@ -345,7 +345,7 @@ def test_a_day_with_nothing_on_it_says_so_and_gives_the_range(case_data) -> None
 def test_the_case_itself_is_described(case_data, workspace) -> None:
     answer = ask(case_data, "who is the client?")
     assert answer.intent is AssistantIntent.CASE_INFO
-    assert answer.text.startswith("Haroon Textiles — case CASE-2026-06-STX, status ready for review.")
+    assert answer.text.startswith("Haroon Textiles: case CASE-2026-06-STX, status ready for review.")
     assert "Period 2026-06-02 to 2026-06-18 (taken from the ledger rows; the case record sets no period)." in answer.text
     assert (
         "10 ledger rows totalling PKR 2,685,830.00 across 8 parties: 8 matched, 1 partial, 1 unmatched; "
@@ -355,7 +355,7 @@ def test_the_case_itself_is_described(case_data, workspace) -> None:
     assert facts(answer)["Client"] == "Haroon Textiles"
 
     with_context = ask(case_data, "who is the client?", context=workspace)
-    assert "Documents: 3 — 1 bank statement, 1 invoice, 1 ledger. Reports generated: 1." in with_context.text
+    assert "Documents: 3 (1 bank statement, 1 invoice, 1 ledger). Reports generated: 1." in with_context.text
 
 
 def test_extraction_confidence_is_read_out_per_item(case_data) -> None:
@@ -365,8 +365,8 @@ def test_extraction_confidence_is_read_out_per_item(case_data) -> None:
         "Extraction confidence across 10 items: 8 high, 1 medium, 1 low; 0 source values unreadable."
     )
     assert "The 2 items below high confidence:" in answer.text
-    assert "(RI-0009): low confidence — weakest reading: amount = 312880.0 (low) from DOC-INV-0431 page 1" in answer.text
-    assert "(RI-0003): medium confidence — weakest reading: amount = 63750.0 (medium) from DOC-BNK-001 page 2" in answer.text
+    assert "(RI-0009): low confidence; weakest reading: amount = 312880.0 (low) from DOC-INV-0431 page 1" in answer.text
+    assert "(RI-0003): medium confidence; weakest reading: amount = 63750.0 (medium) from DOC-BNK-001 page 2" in answer.text
     assert "match strength is a separate, deterministic score" in answer.text
     assert facts(answer)["Items by extraction confidence (high / medium / low)"] == "8 / 1 / 1"
 
@@ -375,7 +375,7 @@ def test_a_permission_question_is_answered_yes_with_the_shapes_that_work(case_da
     answer = ask(case_data, "can i ask you a question?")
     assert answer.intent is AssistantIntent.HELP
     assert answer.grounded is True
-    assert answer.text.startswith("Yes — ask away.")
+    assert answer.text.startswith("Yes, ask away.")
     assert "\"invoice INV-2026-0087\"" in answer.text
 
 

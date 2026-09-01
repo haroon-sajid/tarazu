@@ -17,7 +17,7 @@ export function RegionChart({ regions }: { regions: RegionSummary[] }) {
   if (regions.length === 0) {
     return (
       <p className="py-12 text-center text-sm text-ink-400">
-        No region column in this export — rows without one never reach this chart.
+        No region column in this export. Rows without one never reach this chart.
       </p>
     );
   }

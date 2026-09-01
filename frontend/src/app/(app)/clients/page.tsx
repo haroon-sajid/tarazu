@@ -20,15 +20,16 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, Loader2, Plus } from "lucide-react";
+import { Archive, ArchiveRestore, Loader2, Pencil, Plus } from "lucide-react";
 import {
   ApiError,
   archiveClient,
   createClient,
   listClients,
   restoreClient,
+  updateClient,
 } from "@/lib/api";
-import type { AssistantLanguage, ClientSummary } from "@/lib/types";
+import type { AssistantLanguage, ClientSummary, UpdateClientRequest } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,15 @@ export default function ClientsPage() {
   const [newNotes, setNewNotes] = React.useState("");
   const [createBusy, setCreateBusy] = React.useState(false);
   const [createError, setCreateError] = React.useState<string | null>(null);
+
+  const [editing, setEditing] = React.useState<ClientSummary | null>(null);
+  const [editName, setEditName] = React.useState("");
+  const [editReference, setEditReference] = React.useState("");
+  const [editCurrency, setEditCurrency] = React.useState("PKR");
+  const [editLanguage, setEditLanguage] = React.useState<AssistantLanguage>("en");
+  const [editNotes, setEditNotes] = React.useState("");
+  const [editBusy, setEditBusy] = React.useState(false);
+  const [editError, setEditError] = React.useState<string | null>(null);
 
   const [confirming, setConfirming] = React.useState<ClientSummary | null>(null);
   const [confirmBusy, setConfirmBusy] = React.useState(false);
@@ -108,6 +118,46 @@ export default function ClientsPage() {
       );
     } finally {
       setCreateBusy(false);
+    }
+  };
+
+  const openEdit = (client: ClientSummary) => {
+    setEditError(null);
+    setEditName(client.name);
+    setEditReference(client.reference ?? "");
+    setEditCurrency(client.currency);
+    setEditLanguage(client.language);
+    setEditNotes(client.notes ?? "");
+    setEditing(client);
+  };
+
+  const submitEdit = async () => {
+    if (!editing || editBusy || !editName.trim()) return;
+    setEditBusy(true);
+    setEditError(null);
+    try {
+      const body: UpdateClientRequest = {
+        name: editName.trim(),
+        reference: editReference.trim() || null,
+        currency: editCurrency,
+        language: editLanguage,
+        notes: editNotes.trim() || null,
+      };
+      const updated = await updateClient(editing.client_id, body);
+      setEditing(null);
+      setClients((current) =>
+        current
+          ? current.map((item) =>
+              item.client_id === updated.client_id ? updated : item,
+            )
+          : current,
+      );
+    } catch (caught) {
+      setEditError(
+        caught instanceof ApiError ? caught.message : "Could not save the client.",
+      );
+    } finally {
+      setEditBusy(false);
     }
   };
 
@@ -263,30 +313,43 @@ export default function ClientsPage() {
                     )}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
-                    <button
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setConfirmError(null);
-                        setConfirming(client);
-                      }}
-                      title={
-                        client.archived
-                          ? `Restore “${client.name}” to the pickers`
-                          : `Archive “${client.name}”. Nothing is deleted`
-                      }
-                      aria-label={
-                        client.archived
-                          ? `Restore ${client.name}`
-                          : `Archive ${client.name}`
-                      }
-                      className="rounded-md p-1.5 text-ink-600 transition-colors hover:bg-slate-100 hover:text-ink-900"
-                    >
-                      {client.archived ? (
-                        <ArchiveRestore className="h-4 w-4" aria-hidden />
-                      ) : (
-                        <Archive className="h-4 w-4" aria-hidden />
-                      )}
-                    </button>
+                    <span className="inline-flex items-center gap-1">
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openEdit(client);
+                        }}
+                        title={`Edit “${client.name}”`}
+                        aria-label={`Edit ${client.name}`}
+                        className="rounded-md p-1.5 text-ink-600 transition-colors hover:bg-slate-100 hover:text-ink-900"
+                      >
+                        <Pencil className="h-4 w-4" aria-hidden />
+                      </button>
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setConfirmError(null);
+                          setConfirming(client);
+                        }}
+                        title={
+                          client.archived
+                            ? `Restore “${client.name}” to the pickers`
+                            : `Archive “${client.name}”. Nothing is deleted`
+                        }
+                        aria-label={
+                          client.archived
+                            ? `Restore ${client.name}`
+                            : `Archive ${client.name}`
+                        }
+                        className="rounded-md p-1.5 text-ink-600 transition-colors hover:bg-slate-100 hover:text-ink-900"
+                      >
+                        {client.archived ? (
+                          <ArchiveRestore className="h-4 w-4" aria-hidden />
+                        ) : (
+                          <Archive className="h-4 w-4" aria-hidden />
+                        )}
+                      </button>
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -403,6 +466,104 @@ export default function ClientsPage() {
             >
               {createBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
               Add client
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Edit an existing client */}
+      <Dialog
+        open={editing !== null}
+        onClose={() => !editBusy && setEditing(null)}
+        title={`Edit “${editing?.name ?? ""}”`}
+      >
+        <div className="space-y-4">
+          <Input
+            label="Client name"
+            autoFocus
+            maxLength={200}
+            value={editName}
+            onChange={(event) => setEditName(event.target.value)}
+            placeholder="Haroon Textiles"
+            hint="The business you audit. It appears on every period and report."
+          />
+          <Input
+            label="Reference (optional)"
+            maxLength={100}
+            value={editReference}
+            onChange={(event) => setEditReference(event.target.value)}
+            placeholder="HT-2026"
+            hint="Your own client code, if your practice uses one."
+          />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Select
+              label="Currency"
+              value={editCurrency}
+              onChange={(event) => setEditCurrency(event.target.value)}
+              hint="What this client's books are denominated in."
+            >
+              {CURRENCIES.map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+            </Select>
+            <Select
+              label="Language"
+              value={editLanguage}
+              onChange={(event) =>
+                setEditLanguage(event.target.value as AssistantLanguage)
+              }
+              hint="The language explanations are written in for this client."
+            >
+              <option value="en">English</option>
+              <option value="ur">اردو — Urdu</option>
+            </Select>
+          </div>
+          <div>
+            <label
+              htmlFor="edit-client-notes"
+              className="mb-1 block text-xs font-medium text-ink-600"
+            >
+              Notes (optional)
+            </label>
+            <textarea
+              id="edit-client-notes"
+              rows={3}
+              maxLength={2000}
+              value={editNotes}
+              onChange={(event) => setEditNotes(event.target.value)}
+              placeholder="Textile exporter, Faisalabad. Quarterly review, two bank accounts."
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600"
+            />
+            <p className="mt-1 text-[11px] text-ink-400">
+              Context for whoever picks the engagement up next. Not shown to the
+              client.
+            </p>
+          </div>
+          {editError && (
+            <p className="rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">
+              {editError}
+            </p>
+          )}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              className="w-full sm:w-auto"
+              variant="outline"
+              size="sm"
+              onClick={() => setEditing(null)}
+              disabled={editBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="w-full sm:w-auto"
+              size="sm"
+              onClick={submitEdit}
+              disabled={editBusy || !editName.trim()}
+            >
+              {editBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+              Save changes
             </Button>
           </div>
         </div>

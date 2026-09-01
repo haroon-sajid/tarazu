@@ -1,7 +1,7 @@
 # modules/analytics/
 
 **Purpose:** Deterministic sales analytics over a client's sales exports:
-pandas reads the file — in whatever shape the client's software produced it —
+pandas reads the file, in whatever shape the client's software produced it,
 cleans it the way an auditor would by hand while saying exactly what it did,
 and the readout (revenue by month, product, and region, the top customers, and
 anomaly findings) is sums and counts over `Decimal` money. The saved readout
@@ -16,8 +16,8 @@ right there in a cell.
 **Outputs:** `SalesRecord` rows with spreadsheet-row provenance and one
 `SourceReadReport` per file; one `SalesAnalyticsResult` per case, carrying the
 reports as `data_quality`; workbook bytes. The breakdowns partition the
-records — by month and by product they sum back to `total_revenue` and count
-back to `record_count` — and the schema rejects a result where that stops
+records: by month and by product they sum back to `total_revenue` and count
+back to `record_count`, and the schema rejects a result where that stops
 being true.
 
 **Public interface:** `service.py` only. Other modules import nothing else from
@@ -43,7 +43,7 @@ What it does with the table, in order, all of it reported:
    / `Invoice Date`…, `Amount` / `Total` / `Net Amount` / `Line Total`…,
    `Customer` / `Party` / `Client`…, `Product` / `Item` / `SKU` /
    `Description`…, `Region` / `City` / `Province` / `Branch`…), then substring
-   hints for what is left — and a money-looking hint never lands on a tax,
+   hints for what is left, and a money-looking hint never lands on a tax,
    discount, cost, or balance column. `columns` in the report names the
    client's own header behind each field.
 3. **Reads the money and the dates.** `Rs. 45,900/-` is 45900; accounting
@@ -53,7 +53,7 @@ What it does with the table, in order, all of it reported:
    format are converted. With no amount column, the amount is quantity × unit
    price in Decimal, row by row, and `amount_derived` is true.
 4. **Skips what is not a sale, and counts it.** Blank rows, total and subtotal
-   lines, rows with no readable date, rows with no readable amount — each
+   lines, rows with no readable date, rows with no readable amount, each
    under its reason in `skipped`. A delimited row wider than its header is
    refused outright with instructions (an amount containing the delimiter must
    be quoted), because pandas would otherwise shift every column or drop the
@@ -71,7 +71,7 @@ findings for a human, exactly like flags: never verdicts, never suppressed.
 
 | `kind` | Fires when |
 |---|---|
-| `negative-amount` | a sale's amount is below zero — a refund, a correction, or a sign error |
+| `negative-amount` | a sale's amount is below zero: a refund, a correction, or a sign error |
 | `duplicate-transaction` | the same date, customer, product, and amount appears more than once; `related_row_ids` names the whole group |
 | `revenue-spike` | with at least 3 months, a month's revenue is more than double the median month, or under half of it |
 | `large-transaction` | with at least 10 sales, one sale is more than 10× the median sale |
@@ -95,7 +95,7 @@ recomputed on the way out.
   a human, who weighs them.
 - Never clean silently. Every skipped row, every guessed column, every derived
   amount is in the `SourceReadReport`.
-- Never import another module — not even another module's `service.py`. The
+- Never import another module, not even another module's `service.py`. The
   package is self-contained beside `app.shared/`; `test_analytics.py` checks
   this too.
 - Never touch the network, the stores, or the filesystem. It receives bytes

@@ -46,19 +46,19 @@ CONCEPTS: dict[str, dict[str, str]] = {
             "amounts, about 30% start with the digit 1 and only about 5% start with 9. Made-up "
             "numbers tend not to follow that shape, so when the first digits of a ledger's "
             "amounts stray far from it, that is worth a look. It is a screening test, never "
-            "proof — small samples wobble, and honest books can deviate. Ask \"Benford "
+            "proof: small samples wobble, and honest books can deviate. Ask \"Benford "
             "summary\" to see this case's own result."
         ),
         "ur": (
             "بینفورڈ کا قانون قدرتی اعداد کے بارے میں ایک مشاہدہ ہے: حقیقی رقوم میں تقریباً 30% کا آغاز ہندسہ 1 سے ہوتا ہے "
             "اور صرف 5% کا آغاز 9 سے۔ گھڑے ہوئے اعداد عموماً یہ ساخت نہیں رکھتے، اس لیے جب لیجر کی رقوم کے پہلے ہندسے اس سے بہت ہٹ جائیں "
-            "تو دیکھنے کے قابل ہے۔ یہ ایک جانچ ہے، ثبوت کبھی نہیں — چھوٹا نمونہ ہل سکتا ہے اور ایماندار کتابیں بھی ہٹ سکتی ہیں۔ "
+            "تو دیکھنے کے قابل ہے۔ یہ ایک جانچ ہے، ثبوت کبھی نہیں: چھوٹا نمونہ ہل سکتا ہے اور ایماندار کتابیں بھی ہٹ سکتی ہیں۔ "
             "اپنے کیس کا نتیجہ دیکھنے کے لیے پوچھیں: \"بینفورڈ خلاصہ\"۔"
         ),
     },
     "red-flag": {
         "en": (
-            "A red flag is a pattern that experience says deserves a closer look — not proof "
+            "A red flag is a pattern that experience says deserves a closer look, not proof "
             "of wrongdoing. A round amount, a payment on a Sunday, two payments just under "
             "an approval limit: each can have an innocent explanation, and each is where an "
             "auditor looks first. In Tarazu every flag is raised by a fixed, published rule "
@@ -66,7 +66,7 @@ CONCEPTS: dict[str, dict[str, str]] = {
             "were raised?\" for this case's list."
         ),
         "ur": (
-            "سرخ نشانی (ریڈ فلیگ) وہ نمونہ ہے جسے تجربہ کہتا ہے زیادہ غور سے دیکھو — غلط کام کا ثبوت نہیں۔ "
+            "سرخ نشانی (ریڈ فلیگ) وہ نمونہ ہے جسے تجربہ کہتا ہے زیادہ غور سے دیکھو، غلط کام کا ثبوت نہیں۔ "
             "گول رقم، اتوار کی ادائیگی، منظوری کی حد سے تھوڑا نیچے دو ادائیگیاں: ہر ایک کی معقول وضاحت ہو سکتی ہے، "
             "اور ہر ایک وہ جگہ ہے جہاں آڈیٹر پہلے دیکھتا ہے۔ ترازو میں ہر نشانی ایک متعین، طے شدہ اصول سے اٹھتی ہے اور صرف تجویز ہے؛ "
             "فیصلہ ہمیشہ آڈیٹر کا ہے۔ اپنے کیس کی فہرست کے لیے پوچھیں: \"کون سی نشانیاں اٹھیں؟\""
@@ -74,14 +74,14 @@ CONCEPTS: dict[str, dict[str, str]] = {
     },
     "approval-limit": {
         "en": (
-            "An approval limit is the amount above which a payment needs a second signature "
-            "— a control firms set so no one person can move large sums alone. The audit "
+            "An approval limit is the amount above which a payment needs a second signature: "
+            "a control firms set so no one person can move large sums alone. The audit "
             "interest is in payments sized to sit just under it: one payment at 98% of the "
             "limit may be chance, a pattern of them suggests someone knows the limit and is "
             "steering under it. Tarazu's near-limit rule flags amounts within 2% below a limit."
         ),
         "ur": (
-            "منظوری کی حد وہ رقم ہے جس سے اوپر ادائیگی کو دوسرا دستخط درکار ہوتا ہے — یہ کنٹرول فرم اس لیے رکھتی ہے "
+            "منظوری کی حد وہ رقم ہے جس سے اوپر ادائیگی کو دوسرا دستخط درکار ہوتا ہے۔ یہ کنٹرول فرم اس لیے رکھتی ہے "
             "کہ کوئی اکیلا بڑی رقم نہ ہلا سکے۔ آڈٹ کی دلچسپی ان ادائیگیوں میں ہے جو عین اس حد سے نیچے رکھی گئی ہوں: "
             "حد کے 98% پر ایک ادائیگی اتفاق ہو سکتی ہے، مگر ان کا سلسلہ بتاتا ہے کہ کوئی حد جانتا ہے اور اس سے بچ رہا ہے۔ "
             "ترازو کا \"حد کے قریب\" اصول حد سے 2% نیچے کی رقوم نشان زد کرتا ہے۔"
@@ -89,14 +89,14 @@ CONCEPTS: dict[str, dict[str, str]] = {
     },
     "duplicate-payment": {
         "en": (
-            "A duplicate payment is the same bill paid twice — usually by accident: an "
+            "A duplicate payment is the same bill paid twice, usually by accident: an "
             "invoice entered twice, a re-send mistaken for a new bill. It costs the client "
             "real money and is easy to miss by eye, which is why it is checked mechanically. "
             "Tarazu flags the same amount to the same party within a few days, and one "
             "invoice settled by two ledger rows. Ask \"any duplicate payments?\" to see yours."
         ),
         "ur": (
-            "دوہری ادائیگی ایک ہی بل کی دو بار ادائیگی ہے — عموماً غلطی سے: انوائس دو بار درج ہو گئی، "
+            "دوہری ادائیگی ایک ہی بل کی دو بار ادائیگی ہے، عموماً غلطی سے: انوائس دو بار درج ہو گئی، "
             "یا دوبارہ بھیجی گئی انوائس کو نیا بل سمجھ لیا گیا۔ اس سے کلائنٹ کی اصل رقم جاتی ہے اور نظر سے چھپنا آسان ہے، "
             "اسی لیے یہ مشینی طریقے سے جانچی جاتی ہے۔ ترازو ایک ہی فریق کو چند دنوں کے اندر ایک ہی رقم، "
             "اور ایک انوائس جو دو لیجر قطاروں سے کلی ہو، نشان زد کرتا ہے۔ اپنے کیس کے لیے پوچھیں: \"کوئی دوہری ادائیگی؟\""
@@ -107,7 +107,7 @@ CONCEPTS: dict[str, dict[str, str]] = {
             "Matching is the comparison at the heart of reconciliation. Tarazu matches each "
             "ledger row against the bank statement and the invoices: matched means amount "
             "and date both agree; partial means the right counterpart exists but something "
-            "differs (a date off by days, a small amount gap) — look, but it may be timing; "
+            "differs (a date off by days, a small amount gap): look, but it may be timing; "
             "unmatched means nothing behind the row at all, which is where fictitious "
             "payments hide. Ask \"which items are unmatched?\" to start with the sharpest "
             "question first."
@@ -115,31 +115,31 @@ CONCEPTS: dict[str, dict[str, str]] = {
         "ur": (
             "میلان (میچنگ) وہ موازنہ ہے جو مطابقت کے مرکز میں ہے۔ ترازو لیجر کی ہر قطار کو بینک اسٹیٹمنٹ اور انوائسز سے ملاتا ہے: "
             "مماثل کا مطلب رقم اور تاریخ دونوں متفق ہیں؛ جزوی کا مطلب صحیح ہم منصب موجود ہے مگر کچھ فرق ہے "
-            "(کچھ دن کی تاریخ، تھوڑا رقم کا فرق) — دیکھیں، مگر یہ ٹائمنگ بھی ہو سکتی ہے؛ "
+            "(کچھ دن کی تاریخ، تھوڑا رقم کا فرق): دیکھیں، مگر یہ ٹائمنگ بھی ہو سکتی ہے؛ "
             "غیر مماثل کا مطلب قطار کے پیچھے کچھ بھی نہیں، اور فرضی ادائیگیاں وہیں چھپتی ہیں۔ "
             "سب سے تیز سوال پہلے پوچھنے کے لیے کہیں: \"کون سے آئٹم غیر مماثل ہیں؟\""
         ),
     },
     "audit-trail": {
         "en": (
-            "An audit trail is the unbroken record of who did what, and when — the thing "
+            "An audit trail is the unbroken record of who did what, and when: the thing "
             "that lets a third party re-verify the work months later. Tarazu's trail is "
             "append-only: every upload, every flag, every decision, every question you ask "
-            "here is written to it, and nothing — not you, not the system — can edit or "
+            "here is written to it, and nothing (not you, not the system) can edit or "
             "delete an entry. That is enforced in the database itself, not by good "
             "behaviour. Ask \"what happened in this case?\" to read this engagement's own "
             "history."
         ),
         "ur": (
-            "آڈٹ ٹریل اس کام کا مسلسل ریکارڈ ہے کہ کس نے کیا کیا اور کب — یہی چیز تیسرے شخص کو مہینوں بعد کام دوبارہ جانچنے دیتی ہے۔ "
+            "آڈٹ ٹریل اس کام کا مسلسل ریکارڈ ہے کہ کس نے کیا کیا اور کب۔ یہی چیز تیسرے شخص کو مہینوں بعد کام دوبارہ جانچنے دیتی ہے۔ "
             "ترازو کا ٹریل صرف جمع ہونے والا ہے: ہر اپ لوڈ، ہر نشانی، ہر فیصلہ، آپ کا یہاں پوچھا گیا ہر سوال اس میں لکھا جاتا ہے، "
-            "اور کچھ بھی — نہ آپ، نہ سسٹم — کوئی اندراج بدل یا مٹ نہیں سکتا۔ یہ بات ڈیٹابیس خود پر لاگو کرتی ہے، دیانت پر نہیں۔ "
+            "اور کچھ بھی (نہ آپ، نہ سسٹم) کوئی اندراج بدل یا مٹ نہیں سکتا۔ یہ بات ڈیٹابیس خود پر لاگو کرتی ہے، دیانت پر نہیں۔ "
             "اس کیس کی اپنی تاریخ پڑھنے کے لیے پوچھیں: \"اس کیس میں کیا ہوا؟\""
         ),
     },
     "evidence": {
         "en": (
-            "Evidence, in an audit, is the independent document behind a claim — the bank "
+            "Evidence, in an audit, is the independent document behind a claim: the bank "
             "line proves the money moved; the invoice proves it was owed; the ledger alone "
             "proves nothing, because the client writes it. That is why Tarazu never takes a "
             "ledger row on trust: each one is matched against those independent sources, and "
@@ -147,7 +147,7 @@ CONCEPTS: dict[str, dict[str, str]] = {
             "are missing evidence?\" for this case's gaps."
         ),
         "ur": (
-            "آڈٹ میں ثبوت کسی دعوے کے پیچھے کی آزاد دستاویز ہے — بینک کی قطار ثابت کرتی ہے کہ رقم گئی؛ "
+            "آڈٹ میں ثبوت کسی دعوے کے پیچھے کی آزاد دستاویز ہے: بینک کی قطار ثابت کرتی ہے کہ رقم گئی؛ "
             "انوائس ثابت کرتی ہے کہ ادائیگی واجب الادا تھی؛ لیجر اکیلے کچھ ثابت نہیں کرتا، کیونکہ وہ کلائنٹ خود لکھتا ہے۔ "
             "اسی لیے ترازو لیجر کی قطار پر بھروسہ نہیں کرتا: ہر قطار ان آزاد مآخذ سے ملائی جاتی ہے، "
             "اور جو قطاریں ثبوت سے خالی ہیں وہ چھپائی نہیں جاتیں۔ اپنے کیس کے خلا دیکھنے کے لیے پوچھیں: \"کون سی قطاریں ثبوت سے خالی ہیں؟\""
@@ -155,7 +155,7 @@ CONCEPTS: dict[str, dict[str, str]] = {
     },
     "ledger": {
         "en": (
-            "A ledger is the client's own book of payments — usually a spreadsheet — and it "
+            "A ledger is the client's own book of payments, usually a spreadsheet, and it "
             "is the starting point of this audit, not the truth. The client writes it, so a "
             "dishonest client can write anything into it; the bank statement and the "
             "invoices are the independent voices it is checked against. In Tarazu the "
@@ -163,7 +163,7 @@ CONCEPTS: dict[str, dict[str, str]] = {
             "the sheet row it came from."
         ),
         "ur": (
-            "لیجر کلائنٹ کی اپنی ادائیگیوں کی کتاب ہے — عموماً ایک اسپریڈ شیٹ — اور یہ اس آڈٹ کا نقطہ آغاز ہے، سچ نہیں۔ "
+            "لیجر کلائنٹ کی اپنی ادائیگیوں کی کتاب ہے، عموماً ایک اسپریڈ شیٹ، اور یہ اس آڈٹ کا نقطہ آغاز ہے، سچ نہیں۔ "
             "یہ کلائنٹ خود لکھتا ہے، اس لیے بے ایمان کلائنٹ اس میں کچھ بھی لکھ سکتا ہے؛ "
             "بینک اسٹیٹمنٹ اور انوائسز وہ آزاد آوازیں ہیں جن سے اس کی جانچ ہوتی ہے۔ "
             "ترازو میں لیجر سادہ اسپریڈ شیٹ کوڈ سے پڑھا جاتا ہے، کوئی AI شامل نہیں، اور ہر قطار اپنی شیٹ قطار نمبر ساتھ رکھتی ہے۔"
@@ -171,7 +171,7 @@ CONCEPTS: dict[str, dict[str, str]] = {
     },
     "bank-statement": {
         "en": (
-            "A bank statement is the bank's own record of the account — the closest thing "
+            "A bank statement is the bank's own record of the account, the closest thing "
             "to an independent witness an audit has. Money that left the account is on it, "
             "money that only exists on paper is not, which is why the statement is the "
             "anchor every ledger row is matched against. Tarazu reads it with a vision "
@@ -179,7 +179,7 @@ CONCEPTS: dict[str, dict[str, str]] = {
             "so you can check the machine against the paper."
         ),
         "ur": (
-            "بینک اسٹیٹمنٹ بینک کا اکاؤنٹ کا اپنا ریکارڈ ہے — آڈٹ کے پاس آزاد گواہ کا سب سے قریب روپ۔ "
+            "بینک اسٹیٹمنٹ بینک کا اکاؤنٹ کا اپنا ریکارڈ ہے، آڈٹ کے پاس آزاد گواہ کا سب سے قریب روپ۔ "
             "جو رقم اکاؤنٹ سے گئی وہ اس پر ہے، جو رقم صرف کاغذ پر ہے وہ نہیں، اسی لیے یہ وہ لنگر ہے "
             "جس سے لیجر کی ہر قطار ملائی جاتی ہے۔ ترازو اسے وژن ماڈل سے پڑھتا ہے، اور جو قدر پڑھی جاتی ہے "
             "وہ اپنا صفحہ اور اقتباس ساتھ رکھتی ہے، تاکہ آپ مشین کا کاغذ سے مقابلہ کر سکیں۔"
@@ -191,7 +191,7 @@ CONCEPTS: dict[str, dict[str, str]] = {
             "does not check every paisa to the same depth; it focuses where an error would "
             "change a reader's opinion of the books. A missing receipt for a small tea "
             "bill and the same gap on a large payment are not the same finding. Tarazu "
-            "helps you see the sizes — largest payments, totals by vendor — so you can "
+            "helps you see the sizes (largest payments, totals by vendor) so you can "
             "point your attention where it matters."
         ),
         "ur": (

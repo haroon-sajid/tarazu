@@ -1,4 +1,4 @@
-# docs/ — Tarazu Documentation
+# docs/: Tarazu Documentation
 
 Tarazu (ترازو, "the scales") is a production-grade platform for audit firms. AI
 vision models extract structured data from bank statements, invoices, and
@@ -16,12 +16,19 @@ architecture, API contracts, and architecture decision records (ADRs).
 **Inputs:** Design discussions, contract changes, and decisions made during
 development.
 
-**Outputs:** `architecture.md` (system design), `api-contracts.md` (the single
-source of truth for the public HTTP API and internal module interfaces),
-`decisions/` (one ADR per decision), `product-plan.md` (the product plan v2:
-positioning, phases with acceptance criteria, and a delivery status that is
-kept current), and `hackathon-plan.md` (the step-by-step hackathon build plan;
-superseded once the event ends).
+**Outputs:**
+
+| File | What it is |
+|---|---|
+| `architecture.md` | System design: the modular monolith, its boundaries, and the data flow through a case. |
+| `api-contracts.md` | The single source of truth for the public HTTP API and the internal module interfaces. Changing a contract means changing this file and `backend/app/shared/` in the same commit. |
+| `product-plan.md` | Positioning, phases with acceptance criteria, and a delivery status kept current per item. |
+| `decisions/` | One ADR per significant decision, numbered and immutable once accepted. |
+| `hackathon-plan.md` | The step-by-step hackathon build plan. Superseded once the event ended; kept for the record. |
+
+The delivery status a reader is most likely to want is the one in
+[CLAUDE.md](../CLAUDE.md), which is updated with each change; `product-plan.md`
+carries the same status per acceptance criterion.
 
 **Does not belong here:** Code, generated API docs, user-facing help content,
 and per-service implementation notes; those live in each service's README.

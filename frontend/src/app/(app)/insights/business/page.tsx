@@ -13,12 +13,12 @@ import * as React from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
+  ArrowLeft,
   CheckCircle2,
   Download,
   FileText,
   HelpCircle,
   ShieldCheck,
-  XCircle,
 } from "lucide-react";
 import { ApiError, downloadReport, getBusinessSummary } from "@/lib/api";
 import type { BusinessSummary } from "@/lib/types";
@@ -160,9 +160,9 @@ export default function BusinessPage() {
         title="Business view needs the live backend"
         message={`${unavailable} The owner-facing summary is built from stored case results, so it is not available while the app is running on sample fixtures.`}
         action={
-          <Link href="/dashboard">
+          <Link href="/insights">
             <Button size="sm" variant="outline">
-              Back to dashboard
+              Back to insights
             </Button>
           </Link>
         }
@@ -192,6 +192,13 @@ export default function BusinessPage() {
   return (
     <div className="space-y-4 pb-20 md:pb-0">
       <div>
+        <Link
+          href="/insights"
+          className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+          Back to insights
+        </Link>
         <h1 className="text-xl font-bold text-ink-900">{summary.client_name}</h1>
         <p className="mt-1 break-words text-sm text-ink-600">
           {period} · {summary.case_id}

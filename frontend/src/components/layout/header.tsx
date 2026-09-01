@@ -208,7 +208,7 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
                       className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-ink-600 transition-colors hover:bg-slate-100 hover:text-ink-900"
                     >
                       <FolderOpen className="h-3.5 w-3.5" aria-hidden />
-                      Manage cases — rename, delete, or open
+                      Manage cases: rename, delete, or open
                     </Link>
                   </div>
                 </div>

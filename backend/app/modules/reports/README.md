@@ -6,7 +6,7 @@ assembled from human-decided results and the audit trail.
 **Inputs:** The case, its review items (decided and pending), its audit-trail
 records, and its Benford result (`app/shared/` schemas).
 
-**Outputs:** The two files as bytes and a `ReportRecord` describing them — the
+**Outputs:** The two files as bytes and a `ReportRecord` describing them: the
 storage paths the caller writes them to, SHA-256 digests of exactly those
 bytes, and the counts at the moment of generation. The route stores the files,
 saves the record, and appends `report_generated` to the audit trail.
@@ -27,11 +27,11 @@ this package.
 
 1. A summary block: client, case, period, counts, who generated it and when,
    the report id.
-2. **Decided items** — every ledger row carrying an explicit human decision,
+2. **Decided items**: every ledger row carrying an explicit human decision,
    with its match result and the decision. Pending items are counted and named
    as pending in the note and are not listed.
 3. **Red flags on decided items.**
-4. **Provenance** — for every figure behind a decided item: the document, the
+4. **Provenance**, for every figure behind a decided item: the document, the
    page or spreadsheet row, and the characters as printed.
 5. **Benford's law** table, when the case has one.
 6. **The audit trail**, complete, oldest first, as it stood at generation.
@@ -40,7 +40,7 @@ this package.
 
 A report is evidence of what the firm delivered on a date. The `reports` table
 refuses UPDATE and DELETE in both stores (SQLite triggers; Postgres REVOKE, RLS
-without update or delete policies, and triggers — `infra/supabase/0006`), and
+without update or delete policies, and triggers, `infra/supabase/0006`), and
 the repository has no method that could try. Regenerating after more decisions
 produces a new record; the old file stays downloadable and its digest stays on
 record.

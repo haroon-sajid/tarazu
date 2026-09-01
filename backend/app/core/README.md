@@ -3,7 +3,8 @@
 **Purpose:** Cross-cutting infrastructure shared by all modules: configuration
 loading, access-token verification, API-key minting and recognition, the two
 `CaseRepository` implementations (Supabase Postgres and Storage; local SQLite and
-the filesystem), and the append-only audit-trail writer.
+the filesystem), the background job runner behind `POST /v1/upload?background=true`,
+and the append-only audit-trail writer.
 
 **Inputs:** Environment variables (names listed in `.env.example`) and incoming
 request auth headers.
@@ -15,7 +16,7 @@ instances, and audit-trail write functions, consumed by `app/api/` and the modul
 method takes `org_id` as its first argument and puts it in the query, so a row
 belonging to another firm is *not found* rather than *refused*. Which
 organization a request acts inside is decided once, in
-`app/api/deps.py::get_current_org`, from the caller's `user_id` — never from
+`app/api/deps.py::get_current_org`, from the caller's `user_id`, never from
 anything the client sends. See
 [ADR 0003](../../../docs/decisions/0003-tenancy-is-an-org-id-column-and-two-enforcement-layers.md).
 

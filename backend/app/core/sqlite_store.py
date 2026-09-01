@@ -774,6 +774,20 @@ class SqliteCaseRepository:
             created_at=rows[0]["created_at"],
         )
 
+    def update_organization(self, org_id: str, name: str) -> Organization | None:
+        existing = self.get_organization(org_id)
+        if existing is None:
+            return None
+        self._write(
+            [
+                (
+                    "update organizations set name = ? where org_id = ?",
+                    (name, org_id),
+                )
+            ]
+        )
+        return existing.model_copy(update={"name": name})
+
     def add_member(self, member: OrganizationMember) -> None:
         self._write(
             [

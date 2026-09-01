@@ -35,7 +35,7 @@
     {
       "anomaly_id": "ANOM-0001",
       "kind": "negative-amount",
-      "explanation": "sale of -85,000.00 to Lahore Retail Group on 2026-03-18 is negative — a refund, a correction, or a sign error in the export",
+      "explanation": "sale of -85,000.00 to Lahore Retail Group on 2026-03-18 is negative: a refund, a correction, or a sign error in the export",
       "source_row_id": "SLS-0142",
       "related_row_ids": [],
       "month": null,
@@ -44,7 +44,7 @@
     {
       "anomaly_id": "ANOM-0002",
       "kind": "duplicate-transaction",
-      "explanation": "2 identical rows — Karachi Wholesale Mart, Bath Towels, 412,500.00 on 2026-05-07 — share one key",
+      "explanation": "2 identical rows (Karachi Wholesale Mart, Bath Towels, 412,500.00 on 2026-05-07) share one key",
       "source_row_id": "SLS-0214",
       "related_row_ids": ["SLS-0214", "SLS-0215"],
       "month": null,

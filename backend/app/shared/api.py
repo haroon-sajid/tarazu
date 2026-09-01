@@ -81,6 +81,7 @@ __all__ = [
     "SignOffListResponse",
     "SignOffResponse",
     "UpdateClientRequest",
+    "UpdateOrganizationRequest",
     "UpdateOrgProfileRequest",
     "VendorAttention",
     "AssistantChatRequest",
@@ -910,6 +911,17 @@ class SignOffListResponse(TarazuModel):
 # --------------------------------------------------------------------------- #
 
 MAX_LOGO_CHARS = 400_000  # ~300 KB of image once base64-decoded
+
+
+class UpdateOrganizationRequest(TarazuModel):
+    """`PATCH /v1/organization`. Rename the workspace."""
+
+    name: str = Field(min_length=1, max_length=200)
+
+    @field_validator("name")
+    @classmethod
+    def _name_is_non_empty(cls, value: str) -> str:
+        return value.strip() or ""
 
 
 class UpdateOrgProfileRequest(TarazuModel):

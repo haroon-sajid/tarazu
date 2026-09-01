@@ -92,6 +92,17 @@ class SupabaseCaseRepository:
             created_at=rows[0]["created_at"],
         )
 
+    def update_organization(self, org_id: str, name: str) -> Organization | None:
+        existing = self.get_organization(org_id)
+        if existing is None:
+            return None
+        self._rest.update(
+            "organizations",
+            {"org_id": f"eq.{org_id}"},
+            {"name": name},
+        )
+        return existing.model_copy(update={"name": name})
+
     def add_member(self, member: OrganizationMember) -> None:
         self._rest.insert(
             "organization_members",

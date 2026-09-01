@@ -85,7 +85,7 @@ export function FirstRunChecklist({
     {
       title: "Upload documents",
       href: "/upload",
-      why: "A bank statement, the invoices and a ledger. Tarazu audits records you already keep — it never asks you to type them in again.",
+      why: "A bank statement, the invoices and a ledger. Tarazu audits records you already keep. It never asks you to type them in again.",
       done: hasCase,
     },
     {
@@ -126,7 +126,7 @@ export function FirstRunChecklist({
             <h2 className="text-base font-semibold text-ink-900">Finish your first case</h2>
             <p className="mt-0.5 text-xs text-ink-500">
               {doneCount === steps.length
-                ? "All set — your first case is complete."
+                ? "All set. Your first case is complete."
                 : `Four steps from an upload to a signed report. ${doneCount} of ${steps.length} complete.`}
             </p>
           </div>

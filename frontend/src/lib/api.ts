@@ -77,6 +77,7 @@ import type {
   SignupResponse,
   UpdateCaseRequest,
   UpdateClientRequest,
+  UpdateOrganizationRequest,
   UpdateOrgProfileRequest,
   UpdateProfileRequest,
   UploadFiles,
@@ -1662,6 +1663,19 @@ export async function updateOrgProfile(
   if (!FIXTURE_MODE) {
     return request<OrgProfileResponse>("/v1/org-profile", {
       method: "PUT",
+      body: JSON.stringify(body),
+    });
+  }
+  throw new ApiError(501, NEEDS_BACKEND);
+}
+
+/** PATCH /v1/organization — rename the workspace. Owners only. */
+export async function updateOrganization(
+  body: UpdateOrganizationRequest,
+): Promise<OrgProfileResponse> {
+  if (!FIXTURE_MODE) {
+    return request<OrgProfileResponse>("/v1/organization", {
+      method: "PATCH",
       body: JSON.stringify(body),
     });
   }

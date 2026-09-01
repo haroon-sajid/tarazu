@@ -145,8 +145,8 @@ export default function BrandingSettingsPage() {
         `That logo is too large. ${formatFileSize(file.size)} encodes to ` +
           `${dataUrl.length.toLocaleString()} characters and the limit is ` +
           `${LOGO_MAX_CHARS.toLocaleString()} (roughly 300 KB of image). Export it ` +
-          "smaller — a letterhead mark rarely needs to be wider than about 600 " +
-          "pixels — and upload it again.",
+          "smaller (a letterhead mark rarely needs to be wider than about 600 " +
+          "pixels) and upload it again.",
       );
       return;
     }
@@ -217,7 +217,7 @@ export default function BrandingSettingsPage() {
     <div>
       <SectionHeader
         title="Report branding"
-        description="Your firm's letterhead: what a client sees at the top of every report Tarazu generates for you. Presentation only — nothing here changes a number, a match, or a decision."
+        description="Your firm's letterhead: what a client sees at the top of every report Tarazu generates for you. Presentation only: nothing here changes a number, a match, or a decision."
       />
 
       {loadError ? (
@@ -235,7 +235,7 @@ export default function BrandingSettingsPage() {
             <p className="mb-6 rounded-md bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900 ring-1 ring-amber-300">
               You are signed in as a {session?.role}. The letterhead is the
               firm's identity rather than one auditor's preference, so only an
-              owner can save changes here — you can see what your reports carry,
+              owner can save changes here. You can see what your reports carry,
               and an owner can change it.
             </p>
           )}
@@ -245,7 +245,7 @@ export default function BrandingSettingsPage() {
             <div>
               <SettingsSection
                 title="Logo"
-                description="Printed at the top of every report page. PNG, JPEG, or WebP, up to about 300 KB — a PNG with a transparent background usually looks best."
+                description="Printed at the top of every report page. PNG, JPEG, or WebP, up to about 300 KB. A PNG with a transparent background usually looks best."
               >
                 <div className="flex flex-wrap items-center gap-5 py-4">
                   {logo ? (
@@ -279,7 +279,7 @@ export default function BrandingSettingsPage() {
                     </div>
                     <p className="mt-1.5 text-xs text-ink-400">
                       The image is read in your browser and stored inline with
-                      the branding — there is no separate file store, and the
+                      the branding. There is no separate file store, and the
                       size is checked here before anything is sent.
                     </p>
                     <input
@@ -372,7 +372,7 @@ export default function BrandingSettingsPage() {
                     maxLength={300}
                     value={reportFooter}
                     onChange={(event) => setReportFooter(event.target.value)}
-                    placeholder="Confidential — prepared for the addressee only."
+                    placeholder="Confidential. Prepared for the addressee only."
                     className={textareaClass}
                     aria-label="Report footer"
                   />
@@ -462,7 +462,7 @@ export default function BrandingSettingsPage() {
 
                     <p className="mt-6 border-t border-slate-200 pt-3 text-[10px] leading-relaxed text-ink-400">
                       {reportFooter.trim() ||
-                        "No footer set — reports print without one."}
+                        "No footer set. Reports print without one."}
                     </p>
                   </div>
                   <p className="mt-3 text-[11px] leading-relaxed text-ink-400">

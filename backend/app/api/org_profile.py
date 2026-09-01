@@ -18,7 +18,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import Principal, get_repository, human_only, require_read
 from app.core.repository import CaseRepository
-from app.shared.api import OrgProfileResponse, UpdateOrgProfileRequest
+from app.shared.api import (
+    OrgProfileResponse,
+    UpdateOrganizationRequest,
+    UpdateOrgProfileRequest,
+)
 from app.shared.schemas import OrgProfile, OrgRole
 
 __all__ = ["router"]
@@ -45,6 +49,46 @@ async def get_org_profile(
     return OrgProfileResponse.of(
         principal.org_id, _name_of(repository, principal.org_id), record
     )
+
+
+@router.patch(
+    "/organization",
+    response_model=OrgProfileResponse,
+    summary="Rename the organization (owner only)",
+)
+async def update_organization(
+    body: UpdateOrganizationRequest,
+    principal: Principal = Depends(human_only),
+    repository: CaseRepository = Depends(get_repository),
+) -> OrgProfileResponse:
+    """Change the workspace's display name.
+
+    This is the name shown in the sidebar, the header, and on reports when no
+    legal/letterhead name has been set. Only an owner can change it.
+    """
+    if principal.role is not OrgRole.OWNER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Only an owner can rename the organization. "
+                "Ask an owner of your workspace to update it."
+            ),
+        )
+
+    updated = repository.update_organization(principal.org_id, body.name)
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found.",
+        )
+    logger.info(
+        "Organization %s renamed to %r by %s",
+        principal.org_id,
+        updated.name,
+        principal.user_id,
+    )
+    record = repository.get_org_profile(principal.org_id)
+    return OrgProfileResponse.of(principal.org_id, updated.name, record)
 
 
 @router.put(

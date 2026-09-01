@@ -26,7 +26,7 @@ export function SectionHeader({
 }) {
   return (
     <div className="mb-6 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-      <div className="max-w-xl">
+      <div className="max-w-3xl">
         <h2 className="text-2xl font-bold tracking-tight text-ink-900">{title}</h2>
         {description && (
           <p className="mt-1.5 text-sm leading-relaxed text-ink-600">{description}</p>
@@ -99,7 +99,7 @@ export function SettingRow({
   }
   return (
     <div className="flex items-center justify-between gap-6 py-4 max-md:flex-wrap max-md:gap-y-3">
-      <div className="min-w-0 max-w-md max-md:grow max-md:basis-40">
+      <div className="min-w-0 max-w-2xl max-md:grow max-md:basis-40">
         <p className="text-[13px] font-semibold text-ink-900">{name}</p>
         <p className="mt-0.5 text-xs leading-relaxed text-ink-500">{description}</p>
       </div>

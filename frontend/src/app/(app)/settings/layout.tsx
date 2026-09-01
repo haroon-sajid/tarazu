@@ -76,7 +76,7 @@ export default function SettingsLayout({
       ?.group ?? "Settings";
 
   return (
-    <div className="-m-4 flex min-h-full overflow-x-hidden md:-m-6">
+    <div className="flex min-h-full overflow-x-hidden">
       {/* Desktop rail */}
       <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-slate-50/70 px-4 py-6 md:block">
         <nav className="sticky top-6">
@@ -124,7 +124,7 @@ export default function SettingsLayout({
           <h1 className="mb-3 text-base font-semibold tracking-tight text-ink-900">
             Settings
           </h1>
-          <nav className="-mx-1 flex gap-1 overflow-x-auto overflow-y-hidden px-1 pb-3">
+          <nav className="-mx-1 flex flex-wrap gap-1 px-1 pb-3">
             {NAV.flatMap(({ items }) => items).map(({ href, label }) => {
               const active = pathname.startsWith(href);
               return (
@@ -147,7 +147,7 @@ export default function SettingsLayout({
 
         <div className="px-4 py-6 sm:px-8 sm:py-8">
           <p className="mb-1 text-xs font-medium text-ink-400">{currentGroup}</p>
-          <div className="max-w-3xl pb-10">{children}</div>
+          <div className="pb-10">{children}</div>
         </div>
       </div>
     </div>

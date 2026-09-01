@@ -325,7 +325,7 @@ export function EvidencePanel({
             </p>
             <span className="ml-auto flex items-center gap-1.5 text-[11px] text-ink-400">
               <FileText className="h-3 w-3" aria-hidden />
-              Nothing was saved — this is sample data.
+              Nothing was saved. This is sample data.
             </span>
           </div>
         )}

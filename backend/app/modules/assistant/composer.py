@@ -64,7 +64,7 @@ _UNSUPPORTED = {
 
 _HELP = {
     "en": (
-        "Yes — ask away. I answer questions about this audit, grounded only in what was actually uploaded and decided. "
+        "Yes, ask away. I answer questions about this audit, grounded only in what was actually uploaded and decided. "
         "About the results: \"match results\", \"which items are unmatched?\", \"explain the structuring flag\", "
         "\"any duplicate payments?\", \"Benford summary\". "
         "About the data: \"which invoices are in this case?\", \"what is in the bank statement?\", \"list all ledger rows\", "
@@ -73,7 +73,7 @@ _HELP = {
         "About the engagement's own record: \"what documents are in this case?\", \"what did the model read?\", "
         "\"how confident was the reading?\", \"what have we decided so far?\", \"which reports exist?\", "
         "\"what happened in this case?\", \"who is the client?\", \"show me all my cases\". "
-        "And if you are new to auditing, ask \"what is reconciliation?\" or \"explain materiality\" — "
+        "And if you are new to auditing, ask \"what is reconciliation?\" or \"explain materiality\". "
         "I keep a plain-language glossary for exactly that. "
         "I can also answer in Urdu: ask in Urdu or say \"in Urdu\"."
     ),
@@ -84,7 +84,7 @@ _HELP = {
         "کسی ایک چیز کے بارے میں اس کا نمبر لکھیں: \"RI-0005\"، \"انوائس INV-2026-0087\"، \"قطار 16\"۔ "
         "ریکارڈ کے بارے میں: \"اس کیس میں کون سے دستاویزات ہیں؟\"، \"ماڈل نے کیا پڑھا؟\"، \"اب تک کیا فیصلے ہوئے؟\"، "
         "\"اس کیس میں کیا ہوا؟\"، \"کلائنٹ کون ہے؟\"، \"میرے تمام کیس دکھائیں\"۔ "
-        "اگر آڈٹ کے لیے نئے ہیں تو پوچھیں \"مطابقت کیا ہے؟\" یا \"اہمیت کیا ہے؟\" — میرے پاس سادہ زبان کی لغت موجود ہے۔ "
+        "اگر آڈٹ کے لیے نئے ہیں تو پوچھیں \"مطابقت کیا ہے؟\" یا \"اہمیت کیا ہے؟\"۔ میرے پاس سادہ زبان کی لغت موجود ہے۔ "
         "اردو میں بھی جواب دے سکتا ہوں: اردو میں پوچھیں یا کہیں \"اردو میں\"۔"
     ),
 }
@@ -161,46 +161,46 @@ def _item_card(detail: dict, lang: str) -> str:
     flags = detail["flag_rows"]
     weakest = detail["weakest"]
     if lang == "ur":
-        lines = [f"{detail['review_item_id']} — {detail['party']}، {_m(detail['amount'], currency)}، {_d(detail['date'])}۔"]
+        lines = [f"{detail['review_item_id']}: {detail['party']}، {_m(detail['amount'], currency)}، {_d(detail['date'])}۔"]
         lines.append(f"• لیجر: {detail['ledger_row_id']} (شیٹ قطار {detail['row_number'] or '-'})، \"{detail['description'] or '-'}\"، اکاؤنٹ {detail['account'] or '-'}۔")
         lines.append(
             f"• بینک اسٹیٹمنٹ: {bank['bank_row_id']}، {_d(bank['date'])}، {_m(bank['amount'], bank['currency'])}، \"{bank['description']}\" (صفحہ {bank['page'] or '-'})۔"
-            if bank else "• بینک اسٹیٹمنٹ: کوئی نہیں — اس قطار کے لیے بینک لائن نہیں ملی۔"
+            if bank else "• بینک اسٹیٹمنٹ: کوئی نہیں۔ اس قطار کے لیے بینک لائن نہیں ملی۔"
         )
         lines.append(
             f"• انوائس: {invoice['number']}، {_d(invoice['date'])}، {_m(invoice['amount'], invoice['currency'])}، {invoice['party']} (صفحہ {invoice['page'] or '-'})۔"
             if invoice else "• انوائس: کوئی منسلک نہیں۔"
         )
-        lines.append(f"• میچ: {_status(detail['status'], lang)} ({_level(detail['strength'], lang)} مضبوطی)، اصول {detail['rule_id']} — {detail['reason']}")
+        lines.append(f"• میچ: {_status(detail['status'], lang)} ({_level(detail['strength'], lang)} مضبوطی)، اصول {detail['rule_id']}۔ {detail['reason']}")
         if flags:
-            lines.append(f"• نشانیاں ({len(flags)}): " + "؛ ".join(f"{f['rule_id']} ({_level(f['severity'], lang)}) — {f['explanation']}" for f in flags))
+            lines.append(f"• نشانیاں ({len(flags)}): " + "؛ ".join(f"{f['rule_id']} ({_level(f['severity'], lang)}): {f['explanation']}" for f in flags))
         else:
             lines.append("• نشانیاں: کوئی نہیں۔")
         reading = ""
         if weakest and (weakest["unreadable"] or weakest["confidence"] != "high"):
             reading = (f"؛ کمزور ترین پڑھائی: {weakest['field']} ناقابلِ مطالعہ" if weakest["unreadable"]
                        else f"؛ کمزور ترین پڑھائی: {weakest['field']} = {weakest['value']} ({_level(weakest['confidence'], lang)})")
-        lines.append(f"• نکاسی کا اعتماد: {_level(detail['confidence'], lang)} — {detail['readings']} پڑھائیاں، {detail['unreadable']} ناقابلِ مطالعہ{reading}۔")
+        lines.append(f"• نکاسی کا اعتماد: {_level(detail['confidence'], lang)} ({detail['readings']} پڑھائیاں، {detail['unreadable']} ناقابلِ مطالعہ){reading}۔")
         if detail["decision"] == "pending":
-            lines.append("• فیصلہ: زیر التوا — جائزہ اسکرین پر واضح انسانی فیصلے کا منتظر۔")
+            lines.append("• فیصلہ: زیر التوا، جائزہ اسکرین پر واضح انسانی فیصلے کا منتظر۔")
         else:
-            reason = f" — {detail['rejection_reason'].rstrip('.۔')}" if detail["rejection_reason"] else ""
+            reason = f"۔ وجہ: {detail['rejection_reason'].rstrip('.۔')}" if detail["rejection_reason"] else ""
             lines.append(f"• فیصلہ: {_decision(detail['decision'], lang)}، {detail['decided_by']} نے {detail['decided_at']} پر{reason}۔")
         return "\n".join(lines)
 
-    lines = [f"{detail['review_item_id']} — {detail['party']}, {_m(detail['amount'], currency)} on {_d(detail['date'])}."]
+    lines = [f"{detail['review_item_id']}: {detail['party']}, {_m(detail['amount'], currency)} on {_d(detail['date'])}."]
     lines.append(f"• Ledger: {detail['ledger_row_id']} (sheet row {detail['row_number'] or '-'}), \"{detail['description'] or '-'}\", account {detail['account'] or '-'}.")
     lines.append(
         f"• Bank statement: {bank['bank_row_id']} on {_d(bank['date'])}, {_m(bank['amount'], bank['currency'])}, \"{bank['description']}\" (page {bank['page'] or '-'})."
-        if bank else "• Bank statement: none — no bank line was found for this row."
+        if bank else "• Bank statement: none. No bank line was found for this row."
     )
     lines.append(
         f"• Invoice: {invoice['number']} dated {_d(invoice['date'])}, {_m(invoice['amount'], invoice['currency'])}, {invoice['party']} (page {invoice['page'] or '-'})."
         if invoice else "• Invoice: none attached."
     )
-    lines.append(f"• Match: {detail['status']} ({detail['strength']} strength) by rule {detail['rule_id']} — {detail['reason']}")
+    lines.append(f"• Match: {detail['status']} ({detail['strength']} strength) by rule {detail['rule_id']}. {detail['reason']}")
     if flags:
-        lines.append(f"• Flags ({len(flags)}): " + "; ".join(f"{f['rule_id']} ({f['severity']}) — {f['explanation']}" for f in flags))
+        lines.append(f"• Flags ({len(flags)}): " + "; ".join(f"{f['rule_id']} ({f['severity']}): {f['explanation']}" for f in flags))
     else:
         lines.append("• Flags: none.")
     reading = ""
@@ -208,11 +208,11 @@ def _item_card(detail: dict, lang: str) -> str:
         where = f" from {weakest['document_id']}" + (f" page {weakest['page']}" if weakest["page"] else "")
         reading = (f"; weakest reading: {weakest['field']} unreadable{where}" if weakest["unreadable"]
                    else f"; weakest reading: {weakest['field']} = {weakest['value']} ({weakest['confidence']}){where}")
-    lines.append(f"• Extraction confidence: {detail['confidence']} — {_n(detail['readings'], 'reading')}, {detail['unreadable']} unreadable{reading}.")
+    lines.append(f"• Extraction confidence: {detail['confidence']} ({_n(detail['readings'], 'reading')}, {detail['unreadable']} unreadable){reading}.")
     if detail["decision"] == "pending":
-        lines.append("• Decision: pending — awaiting an explicit human decision on the Review screen.")
+        lines.append("• Decision: pending, awaiting an explicit human decision on the Review screen.")
     else:
-        reason = f" — {detail['rejection_reason'].rstrip('.')}" if detail["rejection_reason"] else ""
+        reason = f". Reason: {detail['rejection_reason'].rstrip('.')}" if detail["rejection_reason"] else ""
         lines.append(f"• Decision: {detail['decision']} by {detail['decided_by']} at {detail['decided_at']}{reason}.")
     return "\n".join(lines)
 
@@ -259,9 +259,9 @@ def compose(plan: Plan, result: QueryResult) -> str:
         lines = []
         for row in rows:
             if lang == "ur":
-                lines.append(f"• {row['party']}، {_m(row['amount'], row['currency'])}، {_d(row['date'])} ({row['review_item_id']}): {_status(row['status'], lang)} ({_level(row['strength'], lang)}) اصول {row['rule_id']} سے — {_counterpart(row, lang)}۔ {row['reason']}")
+                lines.append(f"• {row['party']}، {_m(row['amount'], row['currency'])}، {_d(row['date'])} ({row['review_item_id']}): {_status(row['status'], lang)} ({_level(row['strength'], lang)}) اصول {row['rule_id']} سے، {_counterpart(row, lang)}۔ {row['reason']}")
             else:
-                lines.append(f"• {row['party']}, {_m(row['amount'], row['currency'])} on {_d(row['date'])} ({row['review_item_id']}): {row['status']} ({row['strength']}) by {row['rule_id']} — {_counterpart(row, lang)}. {row['reason']}")
+                lines.append(f"• {row['party']}, {_m(row['amount'], row['currency'])} on {_d(row['date'])} ({row['review_item_id']}): {row['status']} ({row['strength']}) by {row['rule_id']}, with {_counterpart(row, lang)}. {row['reason']}")
         body = "\n".join(lines) + _more(data["more"], lang)
         if status is not None:
             if not rows:
@@ -328,12 +328,12 @@ def compose(plan: Plan, result: QueryResult) -> str:
         for row in rows:
             if lang == "ur":
                 settled = "، ".join(f"{p['review_item_id']} ({_d(p['date'])}، {_status(p['status'], lang)}، {_decision(p['decision'], lang)})" for p in row["paid_by"])
-                twice = " — ایک ہی انوائس دو بار ادا ہوئی" if len(row["paid_by"]) > 1 else ""
-                lines.append(f"• {row['number']} — {row['party']}، {_m(row['amount'], row['currency'])}، {_d(row['date'])} (دستاویز {row['document_id']}، صفحہ {row['page'] or '-'}): {len(row['paid_by'])} لیجر قطار سے ادا — {settled}{twice}")
+                twice = "؛ ایک ہی انوائس دو بار ادا ہوئی" if len(row["paid_by"]) > 1 else ""
+                lines.append(f"• {row['number']}: {row['party']}، {_m(row['amount'], row['currency'])}، {_d(row['date'])} (دستاویز {row['document_id']}، صفحہ {row['page'] or '-'})؛ {len(row['paid_by'])} لیجر قطار سے ادا: {settled}{twice}")
             else:
                 settled = ", ".join(f"{p['review_item_id']} on {_d(p['date'])} ({p['status']}, {p['decision']})" for p in row["paid_by"])
-                twice = " — the same invoice paid more than once" if len(row["paid_by"]) > 1 else ""
-                lines.append(f"• {row['number']} — {row['party']}, {_m(row['amount'], row['currency'])}, dated {_d(row['date'])} (document {row['document_id']}, page {row['page'] or '-'}): settled by {_n(len(row['paid_by']), 'ledger row')} — {settled}{twice}")
+                twice = "; the same invoice paid more than once" if len(row["paid_by"]) > 1 else ""
+                lines.append(f"• {row['number']}: {row['party']}, {_m(row['amount'], row['currency'])}, dated {_d(row['date'])} (document {row['document_id']}, page {row['page'] or '-'}); settled by {_n(len(row['paid_by']), 'ledger row')}: {settled}{twice}")
         body = "\n".join(lines) + _more(data["more"], lang)
         if lang == "ur":
             return (
@@ -358,10 +358,10 @@ def compose(plan: Plan, result: QueryResult) -> str:
             balance = (f"، بقایا {_m(row['balance'], row['currency'])}" if lang == "ur" else f", balance {_m(row['balance'], row['currency'])}") if row["balance"] is not None else ""
             if lang == "ur":
                 pays = "، ".join(f"{p['review_item_id']} {p['party']}" for p in row["pays"])
-                lines.append(f"• {row['bank_row_id']} — {_d(row['date'])}، {_m(row['amount'], row['currency'])}، \"{row['description']}\" (صفحہ {row['page'] or '-'}{balance}) → {pays} کی ادائیگی")
+                lines.append(f"• {row['bank_row_id']}: {_d(row['date'])}، {_m(row['amount'], row['currency'])}، \"{row['description']}\" (صفحہ {row['page'] or '-'}{balance}) → {pays} کی ادائیگی")
             else:
                 pays = ", ".join(f"{p['review_item_id']} {p['party']}" for p in row["pays"])
-                lines.append(f"• {row['bank_row_id']} — {_d(row['date'])}, {_m(row['amount'], row['currency'])}, \"{row['description']}\" (page {row['page'] or '-'}{balance}) → pays {pays}")
+                lines.append(f"• {row['bank_row_id']}: {_d(row['date'])}, {_m(row['amount'], row['currency'])}, \"{row['description']}\" (page {row['page'] or '-'}{balance}) → pays {pays}")
         body = "\n".join(lines) + _more(data["more"], lang)
         read = ""
         if data["lines_read"] is not None:
@@ -371,13 +371,13 @@ def compose(plan: Plan, result: QueryResult) -> str:
             return (
                 f"بینک اسٹیٹمنٹ کی {data['count']} قطاریں لیجر قطاروں سے ملی ہیں، مجموعی {_m(data['total'], currency)}، صفحات {pages} پر؛ "
                 f"{data['without']} لیجر قطاروں کی کوئی بینک لائن نہیں۔{read}\n\n{body}\n\n"
-                "اسٹیٹمنٹ وژن ماڈل پڑھتا ہے اور ہر قطار اپنا صفحہ ساتھ رکھتی ہے۔ یہاں صرف وہ قطاریں ہیں جو کسی لیجر قطار سے ملیں — پوری اسٹیٹمنٹ دستاویزات کی اسکرین پر ہے۔"
+                "اسٹیٹمنٹ وژن ماڈل پڑھتا ہے اور ہر قطار اپنا صفحہ ساتھ رکھتی ہے۔ یہاں صرف وہ قطاریں ہیں جو کسی لیجر قطار سے ملیں۔ پوری اسٹیٹمنٹ دستاویزات کی اسکرین پر ہے۔"
             )
         return (
             f"{_n(data['count'], 'bank statement line')} {'is' if data['count'] == 1 else 'are'} matched to ledger rows, totalling {_m(data['total'], currency)}, "
             f"on page(s) {pages}; {_n(data['without'], 'ledger row')} {'has' if data['without'] == 1 else 'have'} no bank line.{read}\n\n{body}\n\n"
-            "The statement is read by the vision model, and every line keeps the page it came from. Only lines matched to a ledger row are listed here — "
-            "the Documents screen shows the whole statement."
+            "The statement is read by the vision model, and every line keeps the page it came from. Only lines matched to a ledger row are listed here. "
+            "The Documents screen shows the whole statement."
         )
 
     if intent is AssistantIntent.LEDGER:
@@ -391,20 +391,20 @@ def compose(plan: Plan, result: QueryResult) -> str:
             if row["flag_count"]:
                 flags = f"، {row['flag_count']} نشانیاں" if lang == "ur" else f", {_n(row['flag_count'], 'flag')}"
             if lang == "ur":
-                lines.append(f"• {_d(row['date'])} — {row['party']}، {_m(row['amount'], row['currency'])} ({row['review_item_id']}، شیٹ قطار {row['row_number'] or '-'}): {_status(row['status'], lang)}، {_decision(row['decision'], lang)}{flags} — {row['description'] or '-'}")
+                lines.append(f"• {_d(row['date'])}، {row['party']}، {_m(row['amount'], row['currency'])} ({row['review_item_id']}، شیٹ قطار {row['row_number'] or '-'}): {_status(row['status'], lang)}، {_decision(row['decision'], lang)}{flags}، \"{row['description'] or '-'}\"")
             else:
-                lines.append(f"• {_d(row['date'])} — {row['party']}, {_m(row['amount'], row['currency'])} ({row['review_item_id']}, sheet row {row['row_number'] or '-'}): {row['status']}, {row['decision']}{flags} — {row['description'] or '-'}")
+                lines.append(f"• {_d(row['date'])}, {row['party']}, {_m(row['amount'], row['currency'])} ({row['review_item_id']}, sheet row {row['row_number'] or '-'}): {row['status']}, {row['decision']}{flags}, \"{row['description'] or '-'}\"")
         body = "\n".join(lines) + _more(data["more"], lang)
         if lang == "ur":
             return (
                 f"لیجر میں {data['count']} قطاریں ہیں، مجموعی {_m(data['total'], currency)}، {_d(data['period_start'])} سے {_d(data['period_end'])} تک، {data['parties']} فریقوں کو:\n\n{body}\n\n"
-                "لیجر کلائنٹ کا اپنا ریکارڈ ہے، اسپریڈ شیٹ کوڈ سے پڑھا گیا؛ اوپر کی ہر قطار بینک اسٹیٹمنٹ اور انوائسز سے جانچی گئی ہے — ہر قطار کے ملاپ کے لیے پوچھیں: \"میچ کے نتائج\"۔"
+                "لیجر کلائنٹ کا اپنا ریکارڈ ہے، اسپریڈ شیٹ کوڈ سے پڑھا گیا؛ اوپر کی ہر قطار بینک اسٹیٹمنٹ اور انوائسز سے جانچی گئی ہے۔ ہر قطار کے ملاپ کے لیے پوچھیں: \"میچ کے نتائج\"۔"
             )
         return (
             f"The ledger has {_n(data['count'], 'row')} totalling {_m(data['total'], currency)}, dated {_d(data['period_start'])} to {_d(data['period_end'])}, "
             f"to {_n(data['parties'], 'party', 'parties')}:\n\n{body}\n\n"
-            "The ledger is the client's own record, read by spreadsheet code; every row above was checked against the bank statement and the invoices — "
-            "ask \"match results\" for how each one reconciled."
+            "The ledger is the client's own record, read by spreadsheet code; every row above was checked against the bank statement and the invoices. "
+            "Ask \"match results\" for how each one reconciled."
         )
 
     if intent is AssistantIntent.SEARCH_DATE:
@@ -424,24 +424,24 @@ def compose(plan: Plan, result: QueryResult) -> str:
         if lang == "ur":
             parts.append(f"{label}: {len(ledger)} لیجر قطاریں مجموعی {_m(data['total'], currency)}، {len(bank)} بینک لائنیں، {len(invoices)} انوائسز اس تاریخ کی، {len(decided)} فیصلے۔")
             if ledger:
-                parts.append("لیجر قطاریں:\n" + "\n".join(f"• {r['party']}، {_m(r['amount'], r['currency'])} ({r['review_item_id']}): {_status(r['status'], lang)}، فیصلہ {_decision(r['decision'], lang)} — {r['reason']}" for r in ledger))
+                parts.append("لیجر قطاریں:\n" + "\n".join(f"• {r['party']}، {_m(r['amount'], r['currency'])} ({r['review_item_id']}): {_status(r['status'], lang)}، فیصلہ {_decision(r['decision'], lang)}۔ {r['reason']}" for r in ledger))
             if bank:
                 parts.append("بینک لائنیں:\n" + "\n".join(f"• {r['bank']['bank_row_id']}: {_m(r['bank']['amount'], r['bank']['currency'])}، \"{r['bank']['description']}\" (صفحہ {r['bank']['page'] or '-'}) → {r['review_item_id']} {r['party']}" for r in bank))
             if invoices:
                 parts.append("انوائسز:\n" + "\n".join(f"• {r['invoice']['number']}: {_m(r['invoice']['amount'], r['invoice']['currency'])}، {r['invoice']['party']} → {r['review_item_id']}" for r in invoices))
             if decided:
-                parts.append("فیصلے:\n" + "\n".join(f"• {r['review_item_id']}: {_decision(r['decision'], lang)}، {r['decided_by']} نے {r['decided_at']} پر" + (f" — {r['rejection_reason']}" if r['rejection_reason'] else "") for r in decided))
+                parts.append("فیصلے:\n" + "\n".join(f"• {r['review_item_id']}: {_decision(r['decision'], lang)}، {r['decided_by']} نے {r['decided_at']} پر" + (f"۔ وجہ: {r['rejection_reason']}" if r['rejection_reason'] else "") for r in decided))
             return "\n\n".join(parts)
         when = "In" if data["granularity"] == "month" else "On"
         parts.append(f"{when} {label}: {_n(len(ledger), 'ledger row')} totalling {_m(data['total'], currency)}, {_n(len(bank), 'bank line')}, {_n(len(invoices), 'invoice')} dated then, {_n(len(decided), 'decision')} taken.")
         if ledger:
-            parts.append("Ledger rows:\n" + "\n".join(f"• {r['party']}, {_m(r['amount'], r['currency'])} ({r['review_item_id']}): {r['status']}, decision {r['decision']} — {r['reason']}" for r in ledger))
+            parts.append("Ledger rows:\n" + "\n".join(f"• {r['party']}, {_m(r['amount'], r['currency'])} ({r['review_item_id']}): {r['status']}, decision {r['decision']}. {r['reason']}" for r in ledger))
         if bank:
             parts.append("Bank lines:\n" + "\n".join(f"• {r['bank']['bank_row_id']}: {_m(r['bank']['amount'], r['bank']['currency'])}, \"{r['bank']['description']}\" (page {r['bank']['page'] or '-'}) → pays {r['review_item_id']} {r['party']}" for r in bank))
         if invoices:
             parts.append("Invoices:\n" + "\n".join(f"• {r['invoice']['number']}: {_m(r['invoice']['amount'], r['invoice']['currency'])}, {r['invoice']['party']} → settled by {r['review_item_id']}" for r in invoices))
         if decided:
-            parts.append("Decisions:\n" + "\n".join(f"• {r['review_item_id']}: {r['decision']} by {r['decided_by']} at {r['decided_at']}" + (f" — {r['rejection_reason']}" if r['rejection_reason'] else "") for r in decided))
+            parts.append("Decisions:\n" + "\n".join(f"• {r['review_item_id']}: {r['decision']} by {r['decided_by']} at {r['decided_at']}" + (f". Reason: {r['rejection_reason']}" if r['rejection_reason'] else "") for r in decided))
         return "\n\n".join(parts)
 
     if intent is AssistantIntent.CASE_INFO:
@@ -456,17 +456,17 @@ def compose(plan: Plan, result: QueryResult) -> str:
         if data["documents"] is not None:
             docs = data["documents"]
             counts = ", ".join(f"{count} {kind.replace('_', ' ')}" for kind, count in sorted(docs.items())) or ("کوئی نہیں" if lang == "ur" else "none")
-            record = (f" دستاویزات: {sum(docs.values())} — {counts}۔ رپورٹیں بنیں: {data['reports']}۔" if lang == "ur"
-                      else f" Documents: {sum(docs.values())} — {counts}. Reports generated: {data['reports']}.")
+            record = (f" دستاویزات: {sum(docs.values())} ({counts})۔ رپورٹیں بنیں: {data['reports']}۔" if lang == "ur"
+                      else f" Documents: {sum(docs.values())} ({counts}). Reports generated: {data['reports']}.")
         detail = f" ({data['status_detail']})" if data["status_detail"] else ""
         if lang == "ur":
             return (
-                f"{data['client']} — کیس {data['case_id']}، حیثیت {status}{detail}۔ {_d(data['created'])} کو {data['created_by']} نے بنایا۔{period} "
+                f"{data['client']}: کیس {data['case_id']}، حیثیت {status}{detail}۔ {_d(data['created'])} کو {data['created_by']} نے بنایا۔{period} "
                 f"{data['items']} لیجر قطاریں، مجموعی {_m(data['total'], currency)}، {data['parties']} فریقوں کو: {data['matched']} مماثل، {data['partial']} جزوی، {data['unmatched']} غیر مماثل؛ "
                 f"{data['approved']} منظور، {data['rejected']} مسترد، {data['pending']} زیر التوا؛ {data['flags']} نشانیاں۔{record}"
             )
         return (
-            f"{data['client']} — case {data['case_id']}, status {status}{detail}. Created {_d(data['created'])} by {data['created_by']}.{period} "
+            f"{data['client']}: case {data['case_id']}, status {status}{detail}. Created {_d(data['created'])} by {data['created_by']}.{period} "
             f"{_n(data['items'], 'ledger row')} totalling {_m(data['total'], currency)} across {_n(data['parties'], 'party', 'parties')}: "
             f"{data['matched']} matched, {data['partial']} partial, {data['unmatched']} unmatched; "
             f"{data['approved']} approved, {data['rejected']} rejected, {data['pending']} pending; {_n(data['flags'], 'flag')}.{record}"
@@ -487,12 +487,12 @@ def compose(plan: Plan, result: QueryResult) -> str:
                            else f"{weakest['field']} unreadable in {weakest['document_id']}")
             else:
                 where = f"{weakest['document_id']}" + (f" page {weakest['page']}" if weakest["page"] else "")
-                reading = (f"{weakest['field']} = {weakest['value']} ({_level(weakest['confidence'], lang)}) — {where}" if lang == "ur"
+                reading = (f"{weakest['field']} = {weakest['value']} ({_level(weakest['confidence'], lang)})، {where}" if lang == "ur"
                            else f"{weakest['field']} = {weakest['value']} ({weakest['confidence']}) from {where}")
             if lang == "ur":
-                lines.append(f"• {row['party']}، {_m(row['amount'], row['currency'])}، {_d(row['date'])} ({row['review_item_id']}): {_level(row['confidence'], lang)} اعتماد — کمزور ترین پڑھائی: {reading}")
+                lines.append(f"• {row['party']}، {_m(row['amount'], row['currency'])}، {_d(row['date'])} ({row['review_item_id']}): {_level(row['confidence'], lang)} اعتماد؛ کمزور ترین پڑھائی: {reading}")
             else:
-                lines.append(f"• {row['party']}, {_m(row['amount'], row['currency'])} on {_d(row['date'])} ({row['review_item_id']}): {row['confidence']} confidence — weakest reading: {reading}")
+                lines.append(f"• {row['party']}, {_m(row['amount'], row['currency'])} on {_d(row['date'])} ({row['review_item_id']}): {row['confidence']} confidence; weakest reading: {reading}")
         body = ("\n".join(lines) + _more(data["more"], lang)) if lines else ""
         if lang == "ur":
             head = f"{data['total']} آئٹمز میں نکاسی کا اعتماد: {data['high']} زیادہ، {data['medium']} درمیانی، {data['low']} کم؛ {data['unreadable']} ماخذ قدریں ناقابلِ مطالعہ۔"
@@ -715,12 +715,12 @@ def compose(plan: Plan, result: QueryResult) -> str:
             if lang == "ur":
                 lines.append(
                     f"• {row['client']} ({row['case_id']}){active}: {row['items']} آئٹم، {row['pending']} زیر التوا، "
-                    f"{row['flags']} نشانیاں — {row['status']}، {row['created']} کو بنی"
+                    f"{row['flags']} نشانیاں؛ {row['status']}، {row['created']} کو بنی"
                 )
             else:
                 lines.append(
                     f"• {row['client']} ({row['case_id']}){active}: {row['items']} items, {row['pending']} pending, "
-                    f"{row['flags']} flags — {row['status']}, created {row['created']}"
+                    f"{row['flags']} flags; {row['status']}, created {row['created']}"
                 )
         body = "\n".join(lines)
         if lang == "ur":
@@ -741,28 +741,28 @@ def compose(plan: Plan, result: QueryResult) -> str:
                     else "This case holds no documents yet.")
         lines = []
         for row in rows:
-            review = (" — دو پاسوں میں اختلاف، انسانی نظر درکار" if lang == "ur"
-                      else " — the two passes disagreed, needs human review") if row["needs_human_review"] else ""
+            review = ("؛ دو پاسوں میں اختلاف، انسانی نظر درکار" if lang == "ur"
+                      else "; the two passes disagreed, needs human review") if row["needs_human_review"] else ""
             if row["extracted"]:
                 if lang == "ur":
-                    lines.append(f"• {row['filename']} — {row['type']}، {row['size']}؛ {row['model']} نے {row['pages']} صفحے پڑھے، {row['values']} قدر{review}")
+                    lines.append(f"• {row['filename']}: {row['type']}، {row['size']}؛ {row['model']} نے {row['pages']} صفحے پڑھے، {row['values']} قدر{review}")
                 else:
-                    lines.append(f"• {row['filename']} — {row['type']}, {row['size']}; read by {row['model']} over {row['pages']} page(s), {row['values']} values{review}")
+                    lines.append(f"• {row['filename']}: {row['type']}, {row['size']}; read by {row['model']} over {row['pages']} page(s), {row['values']} values{review}")
             else:
                 if lang == "ur":
-                    lines.append(f"• {row['filename']} — {row['type']}، {row['size']}؛ ابھی نہیں پڑھی گئی")
+                    lines.append(f"• {row['filename']}: {row['type']}، {row['size']}؛ ابھی نہیں پڑھی گئی")
                 else:
-                    lines.append(f"• {row['filename']} — {row['type']}, {row['size']}; not extracted yet")
+                    lines.append(f"• {row['filename']}: {row['type']}, {row['size']}; not extracted yet")
         body = "\n".join(lines)
         if lang == "ur":
             return (
                 f"اس کیس میں {data['count']} دستاویزات ہیں، جن میں سے {data['extracted']} نکاسی سلگھی ہے:\n\n{body}\n\n"
-                "دستاویز اپ لوڈ کے وقت ایک بار پڑھی جاتی ہے۔ ماڈل کی پڑھی ہر قدر اپنا صفحہ اور اقتباس ساتھ رکھتی ہے — دستاویزات کی اسکرین پر دیکھیں۔"
+                "دستاویز اپ لوڈ کے وقت ایک بار پڑھی جاتی ہے۔ ماڈل کی پڑھی ہر قدر اپنا صفحہ اور اقتباس ساتھ رکھتی ہے۔ دستاویزات کی اسکرین پر دیکھیں۔"
             )
         return (
             f"This case holds {data['count']} document{'s' if data['count'] != 1 else ''}, {data['extracted']} of them read by the extraction pipeline:\n\n{body}\n\n"
-            "Documents are read once, at upload. Every value the model produced keeps the page and snippet it came from — "
-            "the Documents screen shows each one."
+            "Documents are read once, at upload. Every value the model produced keeps the page and snippet it came from. "
+            "The Documents screen shows each one."
         )
 
     if intent is AssistantIntent.EXTRACTIONS:
@@ -774,12 +774,12 @@ def compose(plan: Plan, result: QueryResult) -> str:
         for row in rows:
             if lang == "ur":
                 lines.append(
-                    f"• {row['filename']} ({row['type']}): {row['pages']} صفحوں سے {row['values']} قدر — "
+                    f"• {row['filename']} ({row['type']}): {row['pages']} صفحوں سے {row['values']} قدر: "
                     f"{row['high']} زیادہ، {row['medium']} درمیانی، {row['low']} کم اعتماد، {row['unreadable']} ناقابلِ مطالعہ ({row['model']})"
                 )
             else:
                 lines.append(
-                    f"• {row['filename']} ({row['type']}): {row['values']} values over {row['pages']} page(s) — "
+                    f"• {row['filename']} ({row['type']}): {row['values']} values over {row['pages']} page(s): "
                     f"{row['high']} high, {row['medium']} medium, {row['low']} low confidence, {row['unreadable']} unreadable (read by {row['model']})"
                 )
             for notable in row["notable"]:
@@ -789,32 +789,33 @@ def compose(plan: Plan, result: QueryResult) -> str:
                     value = f"{notable['value']}"
                 lines.append(f"  – {notable['field']}: {value} ({notable['confidence']})")
             if row["second_opinion"] == "disagrees":
-                lines.append(("  — دوسری پاس سے اختلاف؛ انسانی نظر درکار" if lang == "ur"
-                              else "  — the second pass disagrees; needs human review"))
+                lines.append(("  – دوسری پاس سے اختلاف؛ انسانی نظر درکار" if lang == "ur"
+                              else "  – the second pass disagrees; needs human review"))
         body = "\n".join(lines)
         if lang == "ur":
             return (
                 f"ماڈل نے اس کیس کی دستاویزات سے کیا پڑھا:\n\n{body}\n\n"
-                "ماڈل جو قدر نہ پڑھ سکے وہ ناقابلِ مطالعہ درج ہوتی ہے، کبھی گھڑی نہیں جاتی۔ ہر پڑھائی اپنا صفحہ اور اقتباس رکھتی ہے — نیچے کے حوالے اسی طرف لے جاتے ہیں۔"
+                "ماڈل جو قدر نہ پڑھ سکے وہ ناقابلِ مطالعہ درج ہوتی ہے، کبھی گھڑی نہیں جاتی۔ ہر پڑھائی اپنا صفحہ اور اقتباس رکھتی ہے۔ نیچے کے حوالے اسی طرف لے جاتے ہیں۔"
             )
         return (
             f"What the model read from this case's documents:\n\n{body}\n\n"
             "A field the model could not read is recorded as unreadable, never guessed. "
-            "Every reading keeps the page and snippet it came from — the citations below lead to them."
+            "Every reading keeps the page and snippet it came from; the citations below lead to them."
         )
 
     if intent is AssistantIntent.DECISIONS:
         rows = data["rows"]
         if data["decided"] == 0:
-            return ("ابھی کوئی فیصلہ نہیں ہوا — ہر آئٹم انسانی فیصلے کا منتظر ہے۔ جائزہ اسکرین پر فیصلہ کریں۔" if lang == "ur"
-                    else "Nothing has been decided yet — every item is still waiting for a human decision, taken on the Review screen.")
+            return ("ابھی کوئی فیصلہ نہیں ہوا۔ ہر آئٹم انسانی فیصلے کا منتظر ہے۔ جائزہ اسکرین پر فیصلہ کریں۔" if lang == "ur"
+                    else "Nothing has been decided yet: every item is still waiting for a human decision, taken on the Review screen.")
         lines = []
         for row in rows:
-            reason = f" — {row['rejection_reason']}" if row["rejection_reason"] else ""
+            reason = f". Reason: {row['rejection_reason']}" if row["rejection_reason"] else ""
             if lang == "ur":
-                lines.append(f"• {row['review_item_id']}: {row['party']}، {_m(row['amount'], row['currency'])} — {row['decision']}، {row['decided_by']} نے {row['decided_at']} پر{reason}")
+                reason = f"۔ وجہ: {row['rejection_reason']}" if row["rejection_reason"] else ""
+                lines.append(f"• {row['review_item_id']}: {row['party']}، {_m(row['amount'], row['currency'])}؛ {row['decision']}، {row['decided_by']} نے {row['decided_at']} پر{reason}")
             else:
-                lines.append(f"• {row['review_item_id']}: {row['party']}, {_m(row['amount'], row['currency'])} — {row['decision']} by {row['decided_by']} at {row['decided_at']}{reason}")
+                lines.append(f"• {row['review_item_id']}: {row['party']}, {_m(row['amount'], row['currency'])}; {row['decision']} by {row['decided_by']} at {row['decided_at']}{reason}")
         body = "\n".join(lines)
         if lang == "ur":
             return (
@@ -829,8 +830,8 @@ def compose(plan: Plan, result: QueryResult) -> str:
     if intent is AssistantIntent.REPORTS:
         rows = data["rows"]
         if not rows:
-            return ("اس کیس کے لیے ابھی کوئی رپورٹ نہیں بنی۔ جب آئٹمز کے فیصلے ہو جائیں تو رپورٹس اسکرین سے بنائیں — وہ ٹریل میں درج ہوتی ہے اور بعد میں نہیں بدلتی۔" if lang == "ur"
-                    else "No report has been generated for this case yet. Once the items have their decisions, generate one from the Reports screen — it is recorded in the trail and never changes afterwards.")
+            return ("اس کیس کے لیے ابھی کوئی رپورٹ نہیں بنی۔ جب آئٹمز کے فیصلے ہو جائیں تو رپورٹس اسکرین سے بنائیں۔ وہ ٹریل میں درج ہوتی ہے اور بعد میں نہیں بدلتی۔" if lang == "ur"
+                    else "No report has been generated for this case yet. Once the items have their decisions, generate one from the Reports screen. It is recorded in the trail and never changes afterwards.")
         lines = []
         for row in rows:
             if lang == "ur":
@@ -864,14 +865,14 @@ def compose(plan: Plan, result: QueryResult) -> str:
         for row in rows:
             detail = f": {row['detail']}" if row["detail"] else ""
             if lang == "ur":
-                lines.append(f"• {row['when']} — {row['action']} ({row['actor']}){detail}")
+                lines.append(f"• {row['when']}، {row['action']} ({row['actor']}){detail}")
             else:
-                lines.append(f"• {row['when']} — {row['action']} by {row['actor']}{detail}")
+                lines.append(f"• {row['when']}, {row['action']} by {row['actor']}{detail}")
         body = "\n".join(lines)
         if lang == "ur":
             return (
                 f"اس کیس کے ٹریل میں {data['total']} اندراج ہیں۔ حال ہی کے:\n\n{body}\n\n"
-                "ٹریل صرف جمع ہونے والا ہے: کوئی اندراج کسی کے ہاتھوں نہیں بدل سکتا، نہ مٹ سکتا — نہ آپ کے، نہ سسٹم کے۔"
+                "ٹریل صرف جمع ہونے والا ہے: کوئی اندراج کسی کے ہاتھوں نہیں بدل سکتا، نہ مٹ سکتا، نہ آپ کے، نہ سسٹم کے۔"
             )
         return (
             f"The trail records {data['total']} event{'s' if data['total'] != 1 else ''} for this case. Most recent:\n\n{body}\n\n"
@@ -885,13 +886,13 @@ def compose(plan: Plan, result: QueryResult) -> str:
         if lang == "ur":
             return (
                 f"{text}\n\n"
-                "یہ ترازو کی اپنی لغت سے ہے — کوڈ میں لکھی اور جانچی گئی، مشین سے تخلیق نہیں۔ "
-                "اب اپنے کیس کے بارے میں پوچھیں — مثلاً \"کون سے آئٹم غیر مماثل ہیں؟\" یا \"اس کیس میں کیا ہوا؟\" — تاکہ یہ تصور اپنے ہی اعداد میں دکھے۔"
+                "یہ ترازو کی اپنی لغت سے ہے، کوڈ میں لکھی اور جانچی گئی، مشین سے تخلیق نہیں۔ "
+                "اب اپنے کیس کے بارے میں پوچھیں، مثلاً \"کون سے آئٹم غیر مماثل ہیں؟\" یا \"اس کیس میں کیا ہوا؟\"، تاکہ یہ تصور اپنے ہی اعداد میں دکھے۔"
             )
         return (
             f"{text}\n\n"
-            "That is from Tarazu's built-in glossary — written and reviewed in code, not generated. "
-            "Ask about your own case next — for example \"which items are unmatched?\" or \"what happened in this case?\" — "
+            "That is from Tarazu's built-in glossary, written and reviewed in code, not generated. "
+            "Ask about your own case next, for example \"which items are unmatched?\" or \"what happened in this case?\", "
             "to see the idea at work in your data."
         )
 

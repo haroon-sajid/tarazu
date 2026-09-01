@@ -377,12 +377,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <FirstRunChecklist
-        hasCase
-        hasDecisions={summary.decisions.approved + summary.decisions.rejected > 0}
-        hasReport={hasReport}
-      />
-
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard
@@ -528,6 +522,12 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      <FirstRunChecklist
+        hasCase
+        hasDecisions={summary.decisions.approved + summary.decisions.rejected > 0}
+        hasReport={hasReport}
+      />
     </div>
   );
 }

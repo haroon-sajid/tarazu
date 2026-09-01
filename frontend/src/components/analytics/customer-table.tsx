@@ -13,7 +13,7 @@ export function CustomerTable({ customers }: { customers: CustomerSummary[] }) {
   if (customers.length === 0) {
     return (
       <p className="py-10 text-center text-sm text-ink-400">
-        No customers ranked — a readout with no sales has nobody to rank.
+        No customers ranked. A readout with no sales has nobody to rank.
       </p>
     );
   }

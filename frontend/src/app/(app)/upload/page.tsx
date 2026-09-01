@@ -107,12 +107,17 @@ function StepRow({
   state: "pending" | "running" | "done";
 }) {
   return (
-    <li className="flex items-start gap-3">
+    <li
+      className={cn(
+        "flex items-start gap-3 rounded-lg transition-colors",
+        state === "running" && "bg-brand-50/50 px-2 py-2 motion-safe:animate-pulse",
+      )}
+    >
       <span
         className={cn(
           "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
           state === "done" && "bg-emerald-50 text-emerald-600",
-          state === "running" && "bg-brand-50 text-brand-700",
+          state === "running" && "bg-brand-100 text-brand-700",
           state === "pending" && "bg-slate-100 text-ink-400",
         )}
       >
@@ -308,119 +313,120 @@ export default function UploadPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="min-w-0">
-            {clients.length > 0 && (
-              <div className="mb-4">
-                <label
-                  htmlFor="upload-client"
-                  className="mb-1 block text-xs font-medium text-ink-600"
-                >
-                  Client (optional)
-                </label>
-                <select
-                  id="upload-client"
-                  value={clientId}
-                  onChange={(event) => setClientId(event.target.value)}
-                  disabled={phase === "working"}
-                  className="h-10 w-full max-w-sm rounded-lg border border-slate-300 bg-white px-3 text-sm text-ink-900 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600"
-                >
-                  <option value="">One-off engagement (firm defaults)</option>
-                  {clients.map((client) => (
-                    <option key={client.client_id} value={client.client_id}>
-                      {client.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-[11px] text-ink-400">
-                  Picking a client makes this one period of a recurring
-                  engagement, and runs it against that client&apos;s own approval
-                  limits and thresholds instead of the firm-wide defaults.
-                </p>
-              </div>
-            )}
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <DropZone
-                label="Ledger"
-                hint="Excel or CSV (.xlsx, .xls, .csv)"
-                accept={[".xlsx", ".xls", ".csv"]}
-                files={ledger}
-                onFiles={setLedger}
-                disabled={phase === "working"}
-              />
-              <DropZone
-                label="Bank statement"
-                hint="PDF, or the CSV/Excel export from internet banking"
-                accept={[".pdf", ".csv", ".xlsx", ".xlsm", ".xls"]}
-                files={bankStatement}
-                onFiles={setBankStatement}
-                disabled={phase === "working"}
-              />
-              <DropZone
-                label="Invoices"
-                hint="One or more PDFs or photos (.pdf, .png, .jpg, .jpeg, .webp)"
-                accept={[".pdf", ".png", ".jpg", ".jpeg", ".webp"]}
-                multiple
-                files={invoices}
-                onFiles={setInvoices}
-                disabled={phase === "working"}
-              />
-            </div>
-
-            <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-ink-400">
-              Prefer the bank&apos;s CSV or Excel export where you have one:
-              deterministic code reads it, so the statement carries no reading uncertainty.
-            </p>
-
-            {error && (
-              <div className="mt-4">
-                <ErrorState title="Upload failed" message={error} onRetry={submit} />
-              </div>
-            )}
-
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
-              {!ready && phase === "idle" && (
-                <p className="min-w-0 text-xs text-ink-400 sm:flex-1">
-                  The button unlocks when the three required slots are filled.
-                </p>
-              )}
-              {phase === "working" && (
-                <p className="min-w-0 text-xs text-ink-400 sm:flex-1">
-                  {FIXTURE_MODE
-                    ? "Simulated pipeline (fixture mode)."
-                    : "You can leave this page; the work continues on the server."}
-                </p>
-              )}
-              <Button
-                size="sm"
-                className="self-start sm:ml-auto sm:shrink-0"
-                disabled={!ready || phase === "working"}
-                onClick={submit}
+        <div className="space-y-5">
+          {clients.length > 0 && (
+            <div>
+              <label
+                htmlFor="upload-client"
+                className="mb-1 block text-xs font-medium text-ink-600"
               >
-                {phase === "working" ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                    Analyzing…
-                  </>
-                ) : (
-                  "Start the audit"
-                )}
-              </Button>
+                Client (optional)
+              </label>
+              <select
+                id="upload-client"
+                value={clientId}
+                onChange={(event) => setClientId(event.target.value)}
+                disabled={phase === "working"}
+                className="h-10 w-full max-w-sm rounded-lg border border-slate-300 bg-white px-3 text-sm text-ink-900 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600"
+              >
+                <option value="">One-off engagement (firm defaults)</option>
+                {clients.map((client) => (
+                  <option key={client.client_id} value={client.client_id}>
+                    {client.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-ink-400">
+                Picking a client makes this one period of a recurring
+                engagement, and runs it against that client&apos;s own approval
+                limits and thresholds instead of the firm-wide defaults.
+              </p>
             </div>
+          )}
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <DropZone
+              label="Ledger"
+              hint="Excel or CSV (.xlsx, .xls, .csv)"
+              accept={[".xlsx", ".xls", ".csv"]}
+              files={ledger}
+              onFiles={setLedger}
+              disabled={phase === "working"}
+            />
+            <DropZone
+              label="Bank statement"
+              hint="PDF, or the CSV/Excel export from internet banking"
+              accept={[".pdf", ".csv", ".xlsx", ".xlsm", ".xls"]}
+              files={bankStatement}
+              onFiles={setBankStatement}
+              disabled={phase === "working"}
+            />
+            <DropZone
+              label="Invoices"
+              hint="One or more PDFs or photos (.pdf, .png, .jpg, .jpeg, .webp)"
+              accept={[".pdf", ".png", ".jpg", ".jpeg", ".webp"]}
+              multiple
+              files={invoices}
+              onFiles={setInvoices}
+              disabled={phase === "working"}
+            />
+          </div>
+
+          <p className="line-clamp-2 text-[11px] leading-relaxed text-ink-400">
+            Prefer the bank&apos;s CSV or Excel export where you have one:
+            deterministic code reads it, so the statement carries no reading uncertainty.
+          </p>
+
+          {error && (
+            <div>
+              <ErrorState title="Upload failed" message={error} onRetry={submit} />
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+            {!ready && phase === "idle" && (
+              <p className="min-w-0 text-xs text-ink-400 sm:flex-1">
+                The button unlocks when the three required slots are filled.
+              </p>
+            )}
+            {phase === "working" && (
+              <p className="min-w-0 text-xs text-ink-400 sm:flex-1">
+                {FIXTURE_MODE
+                  ? "Simulated pipeline (fixture mode)."
+                  : "You can leave this page; the work continues on the server."}
+              </p>
+            )}
+            <Button
+              size="sm"
+              className="self-start sm:ml-auto sm:shrink-0"
+              disabled={!ready || phase === "working"}
+              onClick={submit}
+            >
+              {phase === "working" ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  Analyzing…
+                </>
+              ) : (
+                "Start the audit"
+              )}
+            </Button>
           </div>
 
           {/* The analysis, as it actually happens */}
-          <Card>
+          <Card className={cn(phase === "working" && "ring-1 ring-brand-200")}>
             <CardHeader>
-              <CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                {phase === "working" && (
+                  <Loader2 className="h-4 w-4 animate-spin text-brand-700" aria-hidden />
+                )}
                 {phase === "working" ? "Analyzing your data" : "What happens on upload"}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {phase === "working" && job && (
-                <div className="mb-4">
-                  <div className="mb-1 flex items-baseline justify-between text-xs">
+                <div className="mb-5">
+                  <div className="mb-1.5 flex items-baseline justify-between text-xs">
                     <span className="min-w-0 truncate font-medium text-ink-900">
                       {job.step}
                     </span>
@@ -429,7 +435,7 @@ export default function UploadPage() {
                     </span>
                   </div>
                   <div
-                    className="h-1.5 overflow-hidden rounded-full bg-slate-100"
+                    className="relative h-2 overflow-hidden rounded-full bg-slate-100"
                     role="progressbar"
                     aria-valuenow={progress}
                     aria-valuemin={0}
@@ -440,6 +446,12 @@ export default function UploadPage() {
                       className="h-full rounded-full bg-brand-700 transition-[width] duration-500"
                       style={{ width: `${progress}%` }}
                     />
+                    {progress < 100 && (
+                      <div
+                        className="absolute inset-y-0 left-0 h-full w-full animate-[shimmer_1.5s_infinite] rounded-full bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                        style={{ mixBlendMode: "overlay" }}
+                      />
+                    )}
                   </div>
                 </div>
               )}

@@ -1002,6 +1002,11 @@ export interface OrgProfileResponse {
   updated_at: string | null;
 }
 
+/** PATCH /v1/organization — rename the workspace. */
+export interface UpdateOrganizationRequest {
+  name: string;
+}
+
 /** PUT /v1/org-profile — a full replacement; omitted fields are cleared. */
 export interface UpdateOrgProfileRequest {
   legal_name?: string | null;

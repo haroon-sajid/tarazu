@@ -32,12 +32,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-50">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-50">
       <Sidebar mobileOpen={mobileOpen} onMobileOpenChange={setMobileOpen} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Header onMenuToggle={() => setMobileOpen((open) => !open)} />
         <main className="flex-1 overflow-hidden px-4 py-4 md:px-6 md:py-6">
-          <div className="h-full w-full overflow-y-auto">
+          <div className="h-full w-full overflow-x-hidden overflow-y-auto">
             <Workspace>{children}</Workspace>
           </div>
         </main>

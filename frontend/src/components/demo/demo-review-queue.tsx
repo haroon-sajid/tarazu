@@ -103,8 +103,8 @@ export function DemoReviewQueue({
         <div>
           <h3 className="text-base font-bold text-ink-900">Review queue</h3>
           <p className="mt-1 max-w-2xl text-sm text-ink-600">
-            The AI suggests, you decide. Every row needs an explicit approve or reject —
-            in the product each one lands in the immutable audit trail. Open a row to see
+            The AI suggests, you decide. Every row needs an explicit approve or reject.
+            In the product each one lands in the immutable audit trail. Open a row to see
             the evidence behind it.
           </p>
         </div>

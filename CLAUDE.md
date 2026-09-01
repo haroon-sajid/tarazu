@@ -143,10 +143,12 @@ build on are already live.
 - Tests: `pytest` from the repo root (hermetic: no `.env`, no network).
   Background jobs run inline in the suite (`TARAZU_JOBS_INLINE=1`, set in
   `conftest.py`) so nothing has to be polled or slept on.
-- Supabase: ten migrations, `python scripts/apply_supabase_schema.py`;
-  `0008-sales-analytics.sql` is the newest — one new table plus the
-  audit-action check restated with the full merged list, so it is safe
-  against live data.
+- Supabase: eleven migrations, `python scripts/apply_supabase_schema.py`
+  (`--check` reports which have landed). `0009-sales-data-uploads.sql` is the
+  newest, adding `sales_data_uploads` for the sales exports a case carries;
+  `0008-sales-analytics.sql` added the saved readout table plus the
+  audit-action check restated with the full merged list. Both are additive and
+  idempotent, so they are safe against live data.
 
 **Live end to end** (backend + frontend + tests): auth (signup/login/change
 password), tenancy, the **full upload pipeline** — extraction (stubbed by

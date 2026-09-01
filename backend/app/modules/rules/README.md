@@ -44,7 +44,7 @@ dictionary with these keys, each falling back to `DEFAULT_CONFIG`:
 | `round_number_floor` | `10000` | `RULES_ROUND_NUMBER_FLOOR` |
 | `duplicate_window_days` | `3` | `RULES_DUPLICATE_WINDOW_DAYS` |
 | `near_limit_tolerance` | `0.02` | `RULES_NEAR_LIMIT_THRESHOLD` |
-| `weekend_days` | `[5, 6]` (Sat, Sun) | — |
+| `weekend_days` | `[5, 6]` (Sat, Sun) | - |
 
 `default_config()` reads the overrides; the pipeline calls it once at import.
 Per-client configuration replaces the environment when clients exist (ADR 0005).

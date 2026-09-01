@@ -172,7 +172,7 @@ export function DemoPlayground() {
             <p className="text-xs leading-relaxed text-amber-900 sm:text-sm">
               <span className="font-semibold">This is sample data.</span> A seeded
               engagement for a fictional client, Haroon Textiles, June 2026. No real books,
-              no backend, no signup — and nothing you approve or reject here is saved.
+              no backend, no signup. Nothing you approve or reject here is saved.
             </p>
           </div>
         </div>
@@ -319,7 +319,7 @@ export function DemoPlayground() {
           </section>
 
           <p className="mt-6 text-center text-[11px] text-ink-400">
-            Sample data only. Tarazu flags items that need review — it does not detect
+            Sample data only. Tarazu flags items that need review. It does not detect
             fraud and it does not audit anything on its own.
           </p>
         </div>

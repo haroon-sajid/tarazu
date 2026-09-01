@@ -21,6 +21,8 @@ interface AuthContextValue {
     inviteCode?: string,
   ) => Promise<void>;
   signOut: () => void;
+  /** Update the cached organization name without a full re-sign-in. */
+  updateOrganizationName: (name: string) => void;
 }
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);
@@ -83,9 +85,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
   }, []);
 
+  const updateOrganizationName = React.useCallback((name: string) => {
+    setSession((current) => {
+      if (!current) return current;
+      const next = { ...current, organizationName: name };
+      storeSession(next);
+      return next;
+    });
+  }, []);
+
   const value = React.useMemo(
-    () => ({ session, signIn, signUp, signOut }),
-    [session, signIn, signUp, signOut],
+    () => ({ session, signIn, signUp, signOut, updateOrganizationName }),
+    [session, signIn, signUp, signOut, updateOrganizationName],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

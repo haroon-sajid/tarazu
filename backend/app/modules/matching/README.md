@@ -2,7 +2,7 @@
 
 **Purpose:** Pure Python and pandas logic that deterministically matches
 bank-statement transactions against invoices and ledger entries. The same input
-always produces the same output — in the same order, whatever order the rows
+always produces the same output, in the same order, whatever order the rows
 arrived in. This module uses no AI.
 
 **Inputs:** Structured extraction results (`app/shared/` schemas) with
@@ -26,9 +26,9 @@ the strongest evidence decides the result.
 | 2 | Exact amount, date within the tolerance window (3 days) | matched / medium | `exact-amount-date-within-3-days` |
 | 3 | Amount within 1%, party ≥ 70, date within window | partial / low | `amount-within-1pct-party-similar` |
 | 4 | Party ≥ 85, same date, amount differs (transpositions are named) | partial / low | `same-party-same-date-amount-mismatch` |
-| — | No bank line; an invoice agrees on amount and party | partial / medium | `invoice-only-no-bank-payment` |
-| — | No bank line; an invoice within 1% | partial / low | `invoice-only-amount-mismatch` |
-| — | Nothing | unmatched / low | `no-candidate-found` |
+| - | No bank line; an invoice agrees on amount and party | partial / medium | `invoice-only-no-bank-payment` |
+| - | No bank line; an invoice within 1% | partial / low | `invoice-only-amount-mismatch` |
+| - | Nothing | unmatched / low | `no-candidate-found` |
 
 - **Bank matching is one-to-one.** Every candidate pair across the case is
   ranked (tier, date gap, similarity, then the rows' own ids) and assigned

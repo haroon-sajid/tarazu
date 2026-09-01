@@ -139,8 +139,8 @@ export default function MembersSettingsPage() {
           ))}
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left max-md:min-w-[560px]">
+        <div>
+          <table className="w-full text-left">
             <thead>
               <tr className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
                 <th className="py-2 pr-4">Member</th>
@@ -217,14 +217,14 @@ export default function MembersSettingsPage() {
               they enter it on the signup screen.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left max-md:min-w-[640px]">
+            <div>
+              <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
                     <th className="py-2 pr-4">Invited</th>
                     <th className="py-2 pr-4">Role</th>
                     <th className="py-2 pr-4">Code</th>
-                    <th className="py-2 pr-4">Created</th>
+                    <th className="hidden py-2 pr-4 sm:table-cell">Created</th>
                     <th className="py-2 pr-4">Status</th>
                     <th className="py-2 text-right" aria-label="Actions" />
                   </tr>
@@ -235,7 +235,7 @@ export default function MembersSettingsPage() {
                       key={invitation.invite_id}
                       className="border-b border-slate-100 text-sm last:border-0"
                     >
-                      <td className="py-2.5 pr-4 font-medium text-ink-900">
+                      <td className="break-all py-2.5 pr-4 font-medium text-ink-900">
                         {invitation.email}
                       </td>
                       <td className="py-2.5 pr-4 capitalize text-ink-600">
@@ -261,7 +261,7 @@ export default function MembersSettingsPage() {
                           </button>
                         )}
                       </td>
-                      <td className="py-2.5 pr-4 text-xs text-ink-600">
+                      <td className="hidden py-2.5 pr-4 text-xs text-ink-600 sm:table-cell">
                         {formatTimestamp(invitation.created_at)}
                       </td>
                       <td className="py-2.5 pr-4">
