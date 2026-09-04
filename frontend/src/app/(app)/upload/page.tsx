@@ -38,6 +38,7 @@ import {
   getJob,
   getReviewItems,
   listClients,
+  refreshWorkspace,
   setActiveCaseId,
   uploadDocuments,
 } from "@/lib/api";
@@ -234,8 +235,11 @@ export default function UploadPage() {
       } else {
         setItemCount(response.review_item_count);
       }
-      // The new case becomes the one the whole workspace is about.
-      setActiveCaseId(response.case_id);
+      // The new case becomes the one the whole workspace is about — recorded
+      // silently, because the change event remounts every screen and would
+      // wipe this result the moment it rendered. The unmount effect below
+      // fires the event when the user moves on.
+      setActiveCaseId(response.case_id, false);
       setPhase("done");
     } catch (caught) {
       setError(
@@ -246,6 +250,14 @@ export default function UploadPage() {
       setPhase("idle");
     }
   };
+
+  // Once the result is on screen, the workspace switch is owed: fire it when
+  // the user leaves this screen (Go to review, or any sidebar link), so the
+  // header and every screen pick up the new case.
+  React.useEffect(() => {
+    if (phase !== "done") return;
+    return () => refreshWorkspace();
+  }, [phase]);
 
   const progress = job?.progress ?? 0;
 
@@ -262,13 +274,19 @@ export default function UploadPage() {
       </div>
 
       {phase === "done" && result ? (
-        <Card>
+        <Card className="ring-1 ring-emerald-200">
           <CardHeader>
-            <CardTitle>Case {result.case_id} is ready</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                <Check className="h-4 w-4" aria-hidden />
+              </span>
+              Audit complete — case {result.case_id} is ready for review
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-ink-600">
-              {job?.step ?? result.message}
+              Every flagged and matched item now waits for your decision. Nothing
+              has been approved automatically.
             </p>
 
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">

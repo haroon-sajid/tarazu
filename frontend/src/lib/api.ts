@@ -271,12 +271,15 @@ export function getActiveCaseId(): string | null {
   }
 }
 
-export function setActiveCaseId(caseId: string | null): void {
+export function setActiveCaseId(caseId: string | null, notify = true): void {
   try {
     const previous = window.localStorage.getItem(ACTIVE_CASE_KEY);
     if (caseId === null) window.localStorage.removeItem(ACTIVE_CASE_KEY);
     else window.localStorage.setItem(ACTIVE_CASE_KEY, caseId);
-    if (previous !== caseId) {
+    // `notify: false` records the selection without remounting the workspace —
+    // for a screen that must keep its own state on screen (the upload result)
+    // and will call `refreshWorkspace()` when the user leaves it.
+    if (notify && previous !== caseId) {
       window.dispatchEvent(new Event(ACTIVE_CASE_CHANGED_EVENT));
     }
   } catch {
