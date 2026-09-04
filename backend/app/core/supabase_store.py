@@ -588,23 +588,31 @@ class SupabaseCaseRepository:
             upsert=True,
         )
 
-        flags = [
-            {
-                "flag_id": flag.flag_id,
-                "org_id": org_id,
-                "case_id": case_id,
-                "review_item_id": item.review_item_id,
-                "rule_id": flag.rule_id,
-                "severity": flag.severity.value,
-                "explanation": flag.explanation,
-                "source_row_id": flag.source_row_id,
-                "payload": json.loads(flag.model_dump_json()),
-            }
-            for item in items
-            for flag in item.flags
-        ]
-        if flags:
-            self._rest.insert("flags", flags, upsert=True)
+        # One flag can span several rows (a duplicate pair, a structuring
+        # group), so the same flag reaches this flatten once per item it
+        # touches. Postgres rejects an upsert whose batch hits one key twice
+        # ("ON CONFLICT DO UPDATE cannot affect row a second time"), so keep
+        # one row per flag_id — the first item it appeared under. Items keep
+        # their own full flag lists in their payloads either way.
+        flags_by_id: dict[str, dict] = {}
+        for item in items:
+            for flag in item.flags:
+                flags_by_id.setdefault(
+                    flag.flag_id,
+                    {
+                        "flag_id": flag.flag_id,
+                        "org_id": org_id,
+                        "case_id": case_id,
+                        "review_item_id": item.review_item_id,
+                        "rule_id": flag.rule_id,
+                        "severity": flag.severity.value,
+                        "explanation": flag.explanation,
+                        "source_row_id": flag.source_row_id,
+                        "payload": json.loads(flag.model_dump_json()),
+                    },
+                )
+        if flags_by_id:
+            self._rest.insert("flags", list(flags_by_id.values()), upsert=True)
 
     def list_review_items(self, org_id: str, case_id: str) -> list[ReviewItem]:
         return [
