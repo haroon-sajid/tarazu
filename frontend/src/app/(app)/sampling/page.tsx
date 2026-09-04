@@ -206,10 +206,10 @@ export default function SamplingPage() {
         </p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
-        {/* The three inputs */}
-        <Card className="h-fit">
-          <CardContent className="space-y-4 px-4 py-4 sm:px-5 sm:py-5">
+      {/* The three inputs, one bar above what they produce */}
+      <Card className="mb-5">
+        <CardContent className="px-4 py-4 sm:px-5 sm:py-5">
+          <div className="grid gap-4 sm:grid-cols-2 sm:items-end lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
             <Select
               label="Method"
               value={method}
@@ -221,23 +221,6 @@ export default function SamplingPage() {
                 </option>
               ))}
             </Select>
-            <p
-              className={cn(
-                "rounded-md px-3 py-2 text-[11px] leading-relaxed ring-1",
-                chosen.statistical
-                  ? "bg-slate-50 text-ink-600 ring-slate-200"
-                  : "bg-amber-50 text-amber-900 ring-amber-300",
-              )}
-            >
-              {!chosen.statistical && (
-                <TriangleAlert
-                  className="mr-1 inline h-3.5 w-3.5 align-[-2px]"
-                  aria-hidden
-                />
-              )}
-              {chosen.line}
-            </p>
-
             <Input
               label="Sample size"
               type="number"
@@ -245,7 +228,6 @@ export default function SamplingPage() {
               max={500}
               value={size}
               onChange={(event) => setSize(event.target.value)}
-              hint="1 to 500. A size at or above the population tests all of it: a census, and the note will say so."
             />
             <Input
               label="Seed (optional)"
@@ -255,22 +237,9 @@ export default function SamplingPage() {
               value={seed}
               onChange={(event) => setSeed(event.target.value)}
               placeholder="Leave blank to generate one"
-              hint="Paste the seed from an earlier draw to reproduce it exactly. Left blank, one is generated and returned."
             />
-
-            {!sizeValid && size.trim() !== "" && (
-              <p className="rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">
-                The sample size must be a whole number between 1 and 500.
-              </p>
-            )}
-            {!seedValid && (
-              <p className="rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">
-                A seed must be a whole number between 0 and 2,147,483,647.
-              </p>
-            )}
-
             <Button
-              className="w-full"
+              className="w-full lg:w-auto"
               onClick={submit}
               disabled={busy || !sizeValid || !seedValid}
             >
@@ -281,16 +250,49 @@ export default function SamplingPage() {
               )}
               {busy ? "Drawing" : "Draw sample"}
             </Button>
-            <p className="text-[11px] leading-relaxed text-ink-400">
-              Drawing a sample decides nothing. It says which items a person
-              should look at; the person still looks, and still approves or
-              rejects each one on the review screen.
-            </p>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* What came back */}
-        <div className="min-w-0">
+          <p
+            className={cn(
+              "mt-4 rounded-md px-3 py-2 text-[11px] leading-relaxed ring-1",
+              chosen.statistical
+                ? "bg-slate-50 text-ink-600 ring-slate-200"
+                : "bg-amber-50 text-amber-900 ring-amber-300",
+            )}
+          >
+            {!chosen.statistical && (
+              <TriangleAlert
+                className="mr-1 inline h-3.5 w-3.5 align-[-2px]"
+                aria-hidden
+              />
+            )}
+            {chosen.line}
+          </p>
+
+          {!sizeValid && size.trim() !== "" && (
+            <p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">
+              The sample size must be a whole number between 1 and 500.
+            </p>
+          )}
+          {!seedValid && (
+            <p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">
+              A seed must be a whole number between 0 and 2,147,483,647.
+            </p>
+          )}
+
+          <p className="mt-3 text-[11px] leading-relaxed text-ink-400">
+            Size runs 1 to 500; at or above the population it tests all of it, a
+            census, and the note will say so. A seed pasted from an earlier draw
+            reproduces it exactly; left blank, one is generated and returned.
+            Drawing a sample decides nothing: it says which items a person
+            should look at, and each one is still approved or rejected on the
+            review screen.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* What came back */}
+      <div className="min-w-0">
           {unavailable ? (
             <div className="rounded-lg border border-sky-200 bg-sky-50/70 px-5 py-8 text-center">
               <Info className="mx-auto h-8 w-8 text-sky-500" aria-hidden />
@@ -320,7 +322,7 @@ export default function SamplingPage() {
           ) : sample === null ? (
             <EmptyState
               title="No sample drawn yet"
-              message="Pick a method and a size on the left, then draw. The seed that produced the sample comes back with it, so the same draw can be repeated and defended later."
+              message="Pick a method and a size above, then draw. The seed that produced the sample comes back with it, so the same draw can be repeated and defended later."
             />
           ) : (
             <div className="space-y-4">
@@ -361,7 +363,7 @@ export default function SamplingPage() {
                       {sample.seed}
                     </p>
                     <p className="mt-1 max-w-lg text-[11px] leading-relaxed text-ink-600">
-                      Put this seed back in the field on the left, with the same
+                      Put this seed back in the seed field above, with the same
                       method and size, and the same population returns this
                       exact sample. That reproducibility is what makes the
                       selection defensible rather than an anecdote. Record it
@@ -454,8 +456,7 @@ export default function SamplingPage() {
                 file shows when this sample was taken and by whom.
               </p>
             </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );

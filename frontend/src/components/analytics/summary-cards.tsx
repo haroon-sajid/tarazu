@@ -34,7 +34,7 @@ function SummaryCard({
   tone?: "default" | "good" | "warn";
 }) {
   return (
-    <Card className="hover-lift">
+    <Card>
       <CardContent className="flex items-start justify-between gap-3 px-5 py-4">
         <div className="min-w-0">
           <p className="text-xs font-medium text-ink-400">{label}</p>
@@ -49,10 +49,10 @@ function SummaryCard({
         <span
           className={
             tone === "good"
-              ? "rounded-lg bg-gradient-to-br from-emerald-50 to-emerald-100 p-2.5 text-emerald-600 shadow-sm transition-transform hover:scale-110"
+              ? "rounded-lg bg-gradient-to-br from-emerald-50 to-emerald-100 p-2.5 text-emerald-600 shadow-sm"
               : tone === "warn"
-                ? "rounded-lg bg-gradient-to-br from-purple-50 to-purple-100 p-2.5 text-purple-600 shadow-sm transition-transform hover:scale-110"
-                : "rounded-lg bg-gradient-to-br from-brand-50 to-brand-100 p-2.5 text-brand-700 shadow-sm transition-transform hover:scale-110"
+                ? "rounded-lg bg-gradient-to-br from-purple-50 to-purple-100 p-2.5 text-purple-600 shadow-sm"
+                : "rounded-lg bg-gradient-to-br from-brand-50 to-brand-100 p-2.5 text-brand-700 shadow-sm"
           }
         >
           <Icon className="h-5 w-5" aria-hidden />

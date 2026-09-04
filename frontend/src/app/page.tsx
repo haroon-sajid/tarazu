@@ -892,10 +892,6 @@ export default function LandingPage() {
           the full-bleed section backgrounds reach the viewport edges. */}
       <main className="p-0!">
         <style>{`
-          @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(24px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
           @keyframes slideInLeft {
             from { opacity: 0; transform: translateX(-100%); }
             to { opacity: 1; transform: translateX(0); }
@@ -980,10 +976,10 @@ export default function LandingPage() {
               {SOLUTION_STEPS.map(({ icon: Icon, title, body }, index) => (
                 <div
                   key={title}
-                  className="group rounded-2xl p-5 opacity-0 transition-all duration-300 hover:-translate-y-1 hover:bg-white hover:shadow-lg motion-safe:animate-[fadeInUp_0.6s_ease-out_forwards]"
+                  className="rounded-2xl p-5 transition-all duration-300 hover:bg-white hover:shadow-lg motion-safe:animate-[fade-slide_0.6s_ease-out_both]"
                   style={{ animationDelay: `${index * 100}ms` }}
                 >
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0E7C66] text-white transition-transform duration-300 group-hover:scale-110">
+                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-[#0E7C66] text-white">
                     <Icon className="h-6 w-6" aria-hidden />
                   </div>
                   <h3
@@ -1087,7 +1083,7 @@ export default function LandingPage() {
               {AGENTS.map(({ phase, title, body }) => (
                 <div
                   key={title}
-                  className="rounded-[10px] border border-[#E1E7E4] bg-white p-6 text-center transition-all duration-200 hover:-translate-y-1 hover:border-[#0E7C66] hover:shadow-md"
+                  className="rounded-[10px] border border-[#E1E7E4] bg-white p-6 text-center transition-all duration-200 hover:border-[#0E7C66] hover:shadow-md"
                 >
                   <span className="mb-2 block text-[12px] font-semibold uppercase tracking-[0.08em] text-[#0E7C66]">
                     {phase}

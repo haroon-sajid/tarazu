@@ -76,10 +76,10 @@ export default function SettingsLayout({
       ?.group ?? "Settings";
 
   return (
-    <div className="flex min-h-full overflow-x-hidden">
-      {/* Desktop rail */}
-      <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-slate-50/70 px-4 py-6 md:block">
-        <nav className="sticky top-6">
+    <div className="flex h-full overflow-x-hidden">
+      {/* Desktop rail: static — only the content column scrolls. */}
+      <aside className="hidden w-60 shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50/70 px-4 py-6 md:block">
+        <nav>
           <h1 className="mb-6 px-2 text-base font-semibold tracking-tight text-ink-900">
             Settings
           </h1>
@@ -117,10 +117,10 @@ export default function SettingsLayout({
         </nav>
       </aside>
 
-      {/* Content column */}
-      <div className="min-w-0 flex-1 overflow-x-hidden">
-        {/* Narrow screens: heading + scrollable tab bar */}
-        <div className="border-b border-slate-200 bg-white px-4 pt-4 md:hidden">
+      {/* Content column: the only scrolling region. */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
+        {/* Narrow screens: heading + tab bar, pinned; the panel scrolls under it */}
+        <div className="shrink-0 border-b border-slate-200 bg-white px-4 pt-4 md:hidden">
           <h1 className="mb-3 text-base font-semibold tracking-tight text-ink-900">
             Settings
           </h1>
@@ -145,7 +145,7 @@ export default function SettingsLayout({
           </nav>
         </div>
 
-        <div className="px-4 py-6 sm:px-8 sm:py-8">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8">
           <p className="mb-1 text-xs font-medium text-ink-400">{currentGroup}</p>
           <div className="pb-10">{children}</div>
         </div>

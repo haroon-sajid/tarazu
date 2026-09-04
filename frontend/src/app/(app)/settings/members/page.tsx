@@ -139,8 +139,8 @@ export default function MembersSettingsPage() {
           ))}
         </div>
       ) : (
-        <div>
-          <table className="w-full text-left">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-left">
             <thead>
               <tr className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
                 <th className="py-2 pr-4">Member</th>
@@ -175,7 +175,7 @@ export default function MembersSettingsPage() {
                               </span>
                             )}
                           </p>
-                          <p className="font-mono text-[10px] text-ink-400">
+                          <p className="break-all font-mono text-[10px] text-ink-400">
                             {member.user_id}
                           </p>
                         </span>
@@ -217,8 +217,8 @@ export default function MembersSettingsPage() {
               they enter it on the signup screen.
             </p>
           ) : (
-            <div>
-              <table className="w-full text-left">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left">
                 <thead>
                   <tr className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
                     <th className="py-2 pr-4">Invited</th>

@@ -6,7 +6,13 @@
  */
 
 import * as React from "react";
-import { login as apiLogin, signup as apiSignup } from "./api";
+import {
+  FIXTURE_MODE,
+  getOrgProfile,
+  listMembers,
+  login as apiLogin,
+  signup as apiSignup,
+} from "./api";
 import { clearSession, getStoredSession, storeSession } from "./auth-storage";
 import type { Session } from "./types";
 
@@ -30,9 +36,47 @@ const AuthContext = React.createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = React.useState<Session | null | undefined>(undefined);
 
-  React.useEffect(() => {
-    setSession(getStoredSession());
+  /**
+   * The login response deliberately carries no org claim, so a session that
+   * did not just sign up in this browser (the seeded demo login, a fresh
+   * machine) starts with null org facts. Fill them from the backend: the org
+   * profile names the workspace, the member list carries this user's role.
+   */
+  const hydrateOrgFacts = React.useCallback((base: Session) => {
+    if (FIXTURE_MODE) return;
+    if (base.orgId && base.organizationName && base.role) return;
+    void (async () => {
+      try {
+        const [org, members] = await Promise.all([
+          getOrgProfile(),
+          listMembers().catch(() => null),
+        ]);
+        const role = members?.members.find(
+          (member) => member.user_id === base.userId,
+        )?.role;
+        setSession((current) => {
+          // Signed out (or in again) while fetching: leave that session be.
+          if (!current || current.accessToken !== base.accessToken) return current;
+          const next: Session = {
+            ...current,
+            orgId: current.orgId ?? org.org_id,
+            organizationName: current.organizationName ?? org.name,
+            role: current.role ?? role ?? null,
+          };
+          storeSession(next);
+          return next;
+        });
+      } catch {
+        // Offline or denied: the facts stay null and screens keep their fallbacks.
+      }
+    })();
   }, []);
+
+  React.useEffect(() => {
+    const stored = getStoredSession();
+    setSession(stored);
+    if (stored) hydrateOrgFacts(stored);
+  }, [hydrateOrgFacts]);
 
   const signIn = React.useCallback(async (email: string, password: string) => {
     const response = await apiLogin(email, password);
@@ -53,7 +97,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     storeSession(next);
     setSession(next);
-  }, []);
+    hydrateOrgFacts(next);
+  }, [hydrateOrgFacts]);
 
   const signUp = React.useCallback(
     async (

@@ -302,7 +302,7 @@ export default function ApiKeysSettingsPage() {
                         {key.key_prefix}…
                       </td>
                       <td className="py-2.5 pr-4">
-                        <span className="flex gap-1">
+                        <span className="flex flex-wrap gap-1">
                           {key.scopes.map((scope) => (
                             <ScopePill key={scope} scope={scope} />
                           ))}

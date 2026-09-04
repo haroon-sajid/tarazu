@@ -552,7 +552,7 @@ function AnalyticsResult({
       <SummaryCards result={result} months={months} />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="hover-lift lg:col-span-2">
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Monthly revenue</CardTitle>
           </CardHeader>
@@ -560,7 +560,7 @@ function AnalyticsResult({
             <RevenueChart months={months} />
           </CardContent>
         </Card>
-        <Card className="hover-lift">
+        <Card>
           <CardHeader>
             <CardTitle>
               Sales by region
@@ -576,7 +576,7 @@ function AnalyticsResult({
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="hover-lift">
+        <Card>
           <CardHeader>
             <CardTitle>
               Revenue by product
@@ -589,7 +589,7 @@ function AnalyticsResult({
             <ProductChart products={result.revenue_by_product} />
           </CardContent>
         </Card>
-        <Card className="hover-lift lg:col-span-2">
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>
               Top customers
@@ -604,7 +604,7 @@ function AnalyticsResult({
         </Card>
       </div>
 
-      <Card className="hover-lift">
+      <Card>
         <CardHeader>
           <CardTitle>Anomalies</CardTitle>
         </CardHeader>

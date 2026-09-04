@@ -1,16 +1,49 @@
 "use client";
 
-/** Trust & data → Compliance: the guarantees the product is built on. */
+/** Trust & data → Compliance: the seven reliability rules the product is built on. */
 
-import { Lock, Scale, ShieldCheck } from "lucide-react";
+import {
+  Calculator,
+  FileSearch,
+  Gauge,
+  Lock,
+  MessagesSquare,
+  ShieldCheck,
+  UserCheck,
+} from "lucide-react";
 import { SectionHeader, SettingsSection } from "../_components/shared";
 
+/** The seven reliability rules, in their canonical order. */
 const GUARANTEES = [
+  {
+    icon: UserCheck,
+    name: "The AI suggests, the human decides",
+    description:
+      "The system has no automatic approval path. Each review item is approved or rejected by a named user, with the time of the decision recorded.",
+  },
+  {
+    icon: Calculator,
+    name: "All math and matching is deterministic code, never AI",
+    description:
+      "Sums, comparisons, reconciliation, and matching run in pure Python. The AI reads documents; it never produces or influences a numeric result.",
+  },
+  {
+    icon: FileSearch,
+    name: "Every extracted number is traceable to its source",
+    description:
+      "Each value records the document, page, and location it was read from, and the evidence viewer opens that exact spot on the real page.",
+  },
+  {
+    icon: Gauge,
+    name: "Every AI output carries a confidence level",
+    description:
+      "Readings are marked high, medium, or low confidence so reviewers know where to look hardest. Extraction output without a confidence level is rejected.",
+  },
   {
     icon: Lock,
     name: "Immutable audit trail",
     description:
-      "Every action is recorded in an append-only log. Records cannot be updated or deleted, and this is enforced at the database level.",
+      "Every action, by AI or human, is recorded in an append-only log. Records cannot be updated or deleted, and this is enforced at the database level.",
   },
   {
     icon: ShieldCheck,
@@ -19,10 +52,10 @@ const GUARANTEES = [
       "Documents are sent to the extraction model only to be read. No client data is used for training, telemetry, or feedback loops.",
   },
   {
-    icon: Scale,
-    name: "Every decision is made by a person",
+    icon: MessagesSquare,
+    name: "The assistant answers only from your documents",
     description:
-      "The system has no automatic approval path. Each review item is approved or rejected by a named user, with the time of the decision recorded.",
+      "Ask Tarazu computes answers from the case's own results and cites them. Questions it cannot ground in the uploaded files are declined, never guessed.",
   },
 ];
 
@@ -31,7 +64,7 @@ export default function ComplianceSettingsPage() {
     <div>
       <SectionHeader
         title="Compliance"
-        description="These guarantees are structural. They are not configurable and cannot be disabled."
+        description="The seven reliability rules this product is built on. They are structural: not configurable, and cannot be disabled."
       />
 
       <SettingsSection title="Guarantees">
@@ -47,6 +80,11 @@ export default function ComplianceSettingsPage() {
           </div>
         ))}
       </SettingsSection>
+
+      <p className="text-xs text-ink-400">
+        Tarazu reconciles your books, flags what needs attention, and explains it
+        in plain language. The AI assists, the human decides.
+      </p>
     </div>
   );
 }

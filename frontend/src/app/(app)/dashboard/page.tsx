@@ -110,7 +110,7 @@ function SalesOverview({ analytics }: { analytics: SalesAnalyticsResult }) {
     <>
       {/* Sales summary cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="hover-lift">
+        <Card>
           <CardContent className="flex items-start justify-between px-5 py-4">
             <div className="min-w-0">
               <p className="text-xs font-medium text-ink-400">Total Revenue</p>
@@ -130,7 +130,7 @@ function SalesOverview({ analytics }: { analytics: SalesAnalyticsResult }) {
           </CardContent>
         </Card>
 
-        <Card className="hover-lift">
+        <Card>
           <CardContent className="flex items-start justify-between px-5 py-4">
             <div className="min-w-0">
               <p className="text-xs font-medium text-ink-400">Top Product</p>
@@ -149,7 +149,7 @@ function SalesOverview({ analytics }: { analytics: SalesAnalyticsResult }) {
           </CardContent>
         </Card>
 
-        <Card className="hover-lift">
+        <Card>
           <CardContent className="flex items-start justify-between px-5 py-4">
             <div className="min-w-0">
               <p className="text-xs font-medium text-ink-400">Anomalies</p>
@@ -177,7 +177,7 @@ function SalesOverview({ analytics }: { analytics: SalesAnalyticsResult }) {
 
       {/* Revenue trend chart */}
       {analytics.monthly_revenue.length > 0 && (
-        <Card className="hover-lift">
+        <Card>
           <CardHeader>
             <CardTitle>Revenue trend</CardTitle>
           </CardHeader>
