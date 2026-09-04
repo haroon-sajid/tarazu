@@ -138,7 +138,10 @@ async def upload_documents(
     bank_statement: UploadFile = File(..., description="Bank statement PDF"),
     ledger: UploadFile = File(..., description="Ledger, Excel or CSV"),
     invoices: list[UploadFile] = File(..., description="One or more invoice PDFs or images"),
-    client_name: str = Form("Haroon Textiles", description="The audited client"),
+    client_name: str = Form(
+        "One-off engagement",
+        description="Names the case when no recurring client is attached.",
+    ),
     client_id: str | None = Form(
         default=None,
         description="Attach this period to a recurring client (ADR 0005).",

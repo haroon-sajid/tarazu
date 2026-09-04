@@ -160,6 +160,7 @@ export default function UploadPage() {
   const [invoices, setInvoices] = React.useState<File[]>([]);
   const [clients, setClients] = React.useState<ClientSummary[]>([]);
   const [clientId, setClientId] = React.useState("");
+  const [clientName, setClientName] = React.useState("");
   const [phase, setPhase] = React.useState<Phase>("idle");
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<UploadResponse | null>(null);
@@ -206,6 +207,9 @@ export default function UploadPage() {
         ledger: ledger[0],
         invoices,
         clientId: clientId || undefined,
+        // For a one-off engagement the typed name names the case; with a
+        // client attached the backend uses the client record's name instead.
+        clientName: clientId ? undefined : clientName.trim() || undefined,
       });
 
       // Fixture mode answers with the finished case and no job to follow.
@@ -332,22 +336,22 @@ export default function UploadPage() {
         </Card>
       ) : (
         <div className="space-y-5">
-          {clients.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label
                 htmlFor="upload-client"
                 className="mb-1 block text-xs font-medium text-ink-600"
               >
-                Client (optional)
+                Client
               </label>
               <select
                 id="upload-client"
                 value={clientId}
                 onChange={(event) => setClientId(event.target.value)}
                 disabled={phase === "working"}
-                className="h-10 w-full max-w-sm rounded-lg border border-slate-300 bg-white px-3 text-sm text-ink-900 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600"
+                className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-ink-900 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600"
               >
-                <option value="">One-off engagement (firm defaults)</option>
+                <option value="">One-off engagement (name it here)</option>
                 {clients.map((client) => (
                   <option key={client.client_id} value={client.client_id}>
                     {client.name}
@@ -356,11 +360,41 @@ export default function UploadPage() {
               </select>
               <p className="mt-1 text-[11px] text-ink-400">
                 Picking a client makes this one period of a recurring
-                engagement, and runs it against that client&apos;s own approval
-                limits and thresholds instead of the firm-wide defaults.
+                engagement, run against that client&apos;s own thresholds.{" "}
+                <Link
+                  href="/clients"
+                  className="font-medium text-brand-700 hover:underline"
+                >
+                  Create or manage clients
+                </Link>
+                .
               </p>
             </div>
-          )}
+            {clientId === "" && (
+              <div>
+                <label
+                  htmlFor="upload-client-name"
+                  className="mb-1 block text-xs font-medium text-ink-600"
+                >
+                  Client name for this case
+                </label>
+                <input
+                  id="upload-client-name"
+                  type="text"
+                  value={clientName}
+                  maxLength={200}
+                  onChange={(event) => setClientName(event.target.value)}
+                  disabled={phase === "working"}
+                  placeholder="City Medical Store"
+                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600"
+                />
+                <p className="mt-1 text-[11px] text-ink-400">
+                  Names the case everywhere: the case list, the dashboard, and
+                  the report.
+                </p>
+              </div>
+            )}
+          </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
             <DropZone

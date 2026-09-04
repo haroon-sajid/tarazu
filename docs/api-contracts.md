@@ -741,7 +741,9 @@ curl -X POST http://localhost:8000/v1/upload \
   -F "invoices=@smw-0431-photo.jpg"
 ```
 
-An optional `client_name` form field names the audited client.
+An optional `client_name` form field names the audited client; without it (and
+without a `client_id`, whose record's name always wins) the case is named
+"One-off engagement".
 
 This endpoint runs the whole pipeline synchronously: store the bytes, extract
 with Qwen VL (or from cache when `DEMO_MODE=true`), read the ledger with pandas,
