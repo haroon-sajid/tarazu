@@ -17,9 +17,11 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
+from app.api import problems
 from app.api import (
     analytics,
     api_keys,
@@ -82,6 +84,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Every error body is a sentence a person can read, and a refused upload also
+# carries the structured guide the screen lays out. See `app/api/problems.py`.
+app.add_exception_handler(problems.ProblemHTTPException, problems.handle_problem)
+app.add_exception_handler(RequestValidationError, problems.handle_validation)
+app.add_exception_handler(Exception, problems.handle_unexpected)
 
 app.include_router(health.router)
 app.include_router(auth.router, prefix="/v1")

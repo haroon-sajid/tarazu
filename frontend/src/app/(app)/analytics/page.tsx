@@ -46,6 +46,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { DropZone } from "@/components/upload/drop-zone";
+import {
+  UploadFailureNotice,
+  UploadProblemDialog,
+  type UploadFailure,
+} from "@/components/upload/upload-problem-dialog";
 import { SummaryCards } from "@/components/analytics/summary-cards";
 import { RevenueChart } from "@/components/analytics/revenue-chart";
 import { ProductChart } from "@/components/analytics/product-chart";
@@ -131,6 +136,10 @@ function AnalyticsScreen() {
   const [uploading, setUploading] = React.useState(false);
   const [pendingFile, setPendingFile] = React.useState<File | null>(null);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
+  // A refused export, as the backend's guide: shown in a dialog first, then
+  // kept as a notice beside the drop zone until the next attempt.
+  const [uploadFailure, setUploadFailure] = React.useState<UploadFailure | null>(null);
+  const [guideOpen, setGuideOpen] = React.useState(false);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
   const load = React.useCallback(() => {
@@ -206,16 +215,25 @@ function AnalyticsScreen() {
       setPendingFile(file);
       setUploading(true);
       setUploadError(null);
+      setUploadFailure(null);
+      setGuideOpen(false);
       try {
         await uploadSalesData(file, explicitCaseId);
         const response = await listSalesData(explicitCaseId);
         setUploads(response.uploads);
       } catch (caught) {
-        setUploadError(
-          caught instanceof ApiError
-            ? caught.message
-            : "Could not upload the sales data file.",
-        );
+        // A refusal the backend explained gets the guide; anything else, the
+        // sentence. Both name the file, so the person knows which to replace.
+        if (caught instanceof ApiError && caught.problem) {
+          setUploadFailure({ problem: caught.problem, message: caught.message });
+          setGuideOpen(true);
+        } else {
+          setUploadError(
+            caught instanceof ApiError
+              ? caught.message
+              : "Could not upload the sales data file.",
+          );
+        }
         setUploading(false);
         setPendingFile(null);
         return;
@@ -306,6 +324,17 @@ function AnalyticsScreen() {
           {uploadError}
         </p>
       )}
+      {uploadFailure && (
+        <UploadFailureNotice
+          failure={uploadFailure}
+          onDetails={() => setGuideOpen(true)}
+        />
+      )}
+      <UploadProblemDialog
+        open={guideOpen && uploadFailure !== null}
+        failure={uploadFailure}
+        onClose={() => setGuideOpen(false)}
+      />
       {uploadsError && (
         <p className="rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">
           {uploadsError}
@@ -356,6 +385,7 @@ function AnalyticsScreen() {
               files={pendingFile ? [pendingFile] : []}
               onFiles={handleUpload}
               disabled={uploading || running || uploadsLoading}
+              error={uploadFailure?.problem?.title ?? null}
             />
             {uploads.length > 0 && (
               <ul className="space-y-2">

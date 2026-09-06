@@ -295,7 +295,7 @@ export default function AssistantPage() {
               </p>
               <p className="mt-1 max-w-md text-xs text-ink-400">
                 The assistant explains flags, matches, totals, and the
-                Benford analysis. It also reads the engagement's own record
+                Benford analysis. It also reads the engagement&apos;s own record
                 (documents, extractions, decisions, reports, and history)
                 and keeps a plain-language glossary for first-time auditors,
                 in English and Urdu.

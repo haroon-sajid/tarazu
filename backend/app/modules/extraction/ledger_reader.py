@@ -5,123 +5,210 @@ a vision model would add cost, latency, and a chance of misreading a number that
 is sitting right there in a cell. Every value here is read exactly, and its
 provenance is the spreadsheet row it came from.
 
-This module imports pandas and the shared schemas. It must never import
-`qwen_client`, and no code here may call a model.
+What a ledger looks like varies more than what a bank statement looks like,
+because it is whatever the client's bookkeeper keeps: a Tally day book with a
+single signed `Amount`, a QuickBooks export with `Debit` and `Credit` side by
+side, a hand-kept Excel bank book with `Debit (PKR)` and `Credit (PKR)` and a
+running balance, with the counterparty in a `Party` column or only in the
+narration. All of those are ledgers, and all of them are read here:
+
+- **The amount** comes from a single amount column, or from a debit/credit
+  pair folded into one figure. A pair has no sign convention of its own — a
+  bookkeeper's debit is money out of a bank book and money in to an expense
+  head — so the folded amount is the **magnitude** of whichever side is filled.
+  A single amount column is taken as written, sign included, as before.
+- **Who was paid** comes from a party column when the file has one, and from
+  the description or narration when it does not; a row with neither cannot be
+  matched to an invoice or a bank line and is skipped.
+- **The header** is found, not assumed: an export that starts with the firm's
+  name and the period is read from the row that actually names the columns.
+
+This module imports pandas (through `spreadsheet.py`) and the shared schemas.
+It must never import `qwen_client`, and no code here may call a model.
 """
 
 from __future__ import annotations
 
-import io
 import logging
-import re
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
-import pandas as pd
+from app.modules.extraction.spreadsheet import (
+    SPREADSHEET_SUFFIXES,
+    HeaderMatch,
+    cell,
+    cell_text,
+    load_tables,
+    locate_header,
+    to_date,
+    to_decimal,
+)
+from app.shared.problems import (
+    ReadProblemError,
+    empty_file,
+    missing_columns,
+    no_usable_rows,
+)
+from app.shared.schemas import LedgerEntry, ProblemField, Provenance
 
-from app.shared.schemas import LedgerEntry, Provenance
-
-__all__ = ["LedgerReadError", "read_ledger"]
+__all__ = ["LEDGER_FIELDS", "LedgerReadError", "read_ledger"]
 
 logger = logging.getLogger(__name__)
 
 
-class LedgerReadError(ValueError):
-    """The ledger could not be read: unknown format, or a missing column."""
+class LedgerReadError(ReadProblemError):
+    """The ledger could not be read. `problem` says what to do about it."""
 
 
 #: Header aliases seen in real Pakistani ledger exports (Tally, QuickBooks,
-#: Excel by hand). Compared after normalising to lowercase with underscores.
+#: Excel by hand). Compared after normalising to lowercase with underscores
+#: and dropping a currency word, so `Debit (PKR)` is `debit`. Order inside a
+#: tuple is priority: the first alias present in the file wins.
 _ALIASES: dict[str, tuple[str, ...]] = {
-    "date": ("date", "txn_date", "transaction_date", "entry_date", "posting_date", "dated"),
-    "amount": ("amount", "amt", "value", "debit", "credit", "debit_amount", "amount_pkr"),
+    "date": (
+        "date", "txn_date", "transaction_date", "entry_date", "posting_date",
+        "voucher_date", "tran_date", "trans_date", "value_date", "dated",
+        "date_of_transaction",
+    ),
+    "amount": (
+        "amount", "amt", "value", "transaction_amount", "txn_amount",
+        "net_amount", "total_amount", "signed_amount",
+    ),
+    "debit": (
+        "debit", "dr", "debit_amount", "withdrawal", "withdrawals", "payment",
+        "payments", "paid", "paid_out", "money_out", "outflow", "expense",
+    ),
+    "credit": (
+        "credit", "cr", "credit_amount", "deposit", "deposits", "receipt",
+        "receipts", "received", "paid_in", "money_in", "inflow", "income",
+    ),
     "party_name": (
-        "party_name", "party", "vendor", "supplier", "payee", "account_name",
-        "customer", "name",
+        "party_name", "party", "vendor", "vendor_name", "supplier",
+        "supplier_name", "payee", "payee_name", "customer", "customer_name",
+        "account_name", "name", "paid_to", "beneficiary", "counterparty",
+        "to_from",
     ),
     "description": (
         "description", "particulars", "narration", "details", "memo", "remarks",
+        "transaction_details", "narrative", "notes", "note",
     ),
     "account_code": (
         "account_code", "account", "code", "gl_code", "ledger_code", "account_no",
+        "account_number", "gl_account", "ledger_account", "account_head", "head",
     ),
-    "ledger_row_id": ("ledger_row_id", "id", "ref", "reference", "voucher_no", "entry_no"),
+    "ledger_row_id": (
+        "ledger_row_id", "id", "voucher_no", "voucher_number", "voucher",
+        "entry_no", "entry_number", "txn_id", "transaction_id", "ref",
+        "reference", "serial", "serial_no", "sr_no", "s_no", "sno",
+    ),
 }
 
-_REQUIRED = ("date", "amount", "party_name")
+#: What a ledger has to carry, said for the person who has to add it. These
+#: are what the refusal lists as missing, and what the upload screen explains.
+LEDGER_FIELDS: dict[str, ProblemField] = {
+    "date": ProblemField(
+        name="date",
+        label="Date",
+        why=(
+            "Every match is placed by date, so a row without one cannot be "
+            "set against the bank statement."
+        ),
+        accepted_headers=[
+            "Date", "Txn Date", "Transaction Date", "Entry Date",
+            "Posting Date", "Voucher Date",
+        ],
+    ),
+    "amount": ProblemField(
+        name="amount",
+        label="Amount",
+        why=(
+            "Every match and every audit rule works on the amount; without "
+            "it nothing can be reconciled."
+        ),
+        accepted_headers=[
+            "Amount", "Amt", "Value", "Amount (PKR)", "Debit and Credit",
+            "Dr and Cr", "Payment and Receipt", "Withdrawal and Deposit",
+        ],
+    ),
+    "party_name": ProblemField(
+        name="party_name",
+        label="Party or description",
+        why=(
+            "Matching an entry to an invoice and a bank line needs to know "
+            "who was paid, from a party column or, failing that, the narration."
+        ),
+        accepted_headers=[
+            "Party", "Party Name", "Vendor", "Supplier", "Payee", "Customer",
+            "Account Name", "Paid To", "Description", "Particulars",
+            "Narration", "Details", "Memo", "Remarks",
+        ],
+    ),
+}
 
-#: The numeric core of a money cell: `284,000.00`, `1 500 000`, `45,900`.
-#: Anchoring on the digits rather than stripping noise is what lets this survive
-#: `Rs. 45,900/-` — where a naive strip leaves the `.` of `Rs.` glued to the
-#: front and the `-` of `/-` glued to the back.
-_MONEY_NUMBER = re.compile(r"\d[\d,\s]*(?:\.\d+)?")
-
-
-def _normalise_header(name: object) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", str(name).strip().lower()).strip("_")
-
-
-def _resolve_columns(frame: pd.DataFrame) -> dict[str, str]:
-    """Map our canonical names onto whatever the client called their columns."""
-    normalised = {_normalise_header(column): column for column in frame.columns}
-    resolved: dict[str, str] = {}
-    for canonical, aliases in _ALIASES.items():
-        for alias in aliases:
-            if alias in normalised:
-                resolved[canonical] = normalised[alias]
-                break
-    missing = [name for name in _REQUIRED if name not in resolved]
-    if missing:
-        raise LedgerReadError(
-            f"the ledger is missing required column(s): {', '.join(missing)}. "
-            f"Found columns: {', '.join(str(c) for c in frame.columns)}"
-        )
-    return resolved
-
-
-def _to_decimal(raw: object) -> Decimal | None:
-    """Parse a money cell. Handles 'Rs. 49,500/-', '(1,200)', and plain numbers."""
-    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
-        return None
-    if isinstance(raw, (int, float, Decimal)):
-        try:
-            return Decimal(str(raw))
-        except InvalidOperation:
-            return None
-
-    text = str(raw).strip()
-    if not text:
-        return None
-
-    match = _MONEY_NUMBER.search(text)
-    if not match:
-        return None
-
-    digits = match.group(0).replace(",", "").replace(" ", "").rstrip(".")
-    if not digits:
-        return None
-
-    # Accounting style writes negatives as `(1,200)`; a bare `-` also counts,
-    # but only when it sits before the digits. A trailing `/-` is the Pakistani
-    # "only" marker, not a minus sign.
-    prefix = text[: match.start()]
-    negative = "(" in prefix or "-" in prefix
-
-    try:
-        value = Decimal(digits)
-    except InvalidOperation:
-        return None
-    return -value if negative else value
+#: The whole requirement in one phrase, for the guide.
+_NEEDS = (
+    "the date, the amount (or a Debit and Credit pair), and who was paid "
+    "(a Party, Vendor, Supplier, or Payee column, or at least a Description "
+    "or Narration)"
+)
 
 
-def _read_frame(content: bytes, filename: str) -> pd.DataFrame:
-    lowered = filename.lower()
-    if lowered.endswith(".csv"):
-        return pd.read_csv(io.BytesIO(content), dtype=object, keep_default_na=False)
-    if lowered.endswith((".xlsx", ".xlsm", ".xls")):
-        return pd.read_excel(io.BytesIO(content), dtype=object)
-    raise LedgerReadError(
-        f"unsupported ledger format: {filename!r}. Expected .xlsx, .xls, or .csv."
+def _has_amount(columns: dict[str, int]) -> bool:
+    return bool({"amount", "debit", "credit"} & set(columns))
+
+
+def _has_party(columns: dict[str, int]) -> bool:
+    return bool({"party_name", "description"} & set(columns))
+
+
+def _complete(columns: dict[str, int]) -> bool:
+    return "date" in columns and _has_amount(columns) and _has_party(columns)
+
+
+def _missing(columns: dict[str, int]) -> list[ProblemField]:
+    missing: list[ProblemField] = []
+    if "date" not in columns:
+        missing.append(LEDGER_FIELDS["date"])
+    if not _has_amount(columns):
+        missing.append(LEDGER_FIELDS["amount"])
+    if not _has_party(columns):
+        missing.append(LEDGER_FIELDS["party_name"])
+    return missing
+
+
+def _refuse_header(match: HeaderMatch | None, filename: str, first_row: list[str]) -> LedgerReadError:
+    found = match.cells if match is not None else first_row
+    columns = match.columns if match is not None else {}
+    return LedgerReadError(
+        missing_columns("ledger", filename, found, _missing(columns), needs=_NEEDS)
     )
+
+
+def _amount_of(row: list[object], columns: dict[str, int]) -> Decimal | None:
+    """The row's amount: a single column as written, or a pair as a magnitude.
+
+    The pair wins when the file has both, because the pair states which side a
+    figure is on and a bare `amount` beside it is usually an unsigned copy.
+    Exactly one side of a pair is expected to be filled; when both are, the
+    net (debit less credit) is kept and logged rather than a side dropped.
+    """
+    if {"debit", "credit"} & set(columns):
+        debit = to_decimal(cell(row, columns.get("debit")))
+        credit = to_decimal(cell(row, columns.get("credit")))
+        debit = debit if debit else None
+        credit = credit if credit else None
+        if debit is None and credit is None:
+            return None
+        if debit is not None and credit is not None:
+            return abs(debit) - abs(credit)
+        return abs(debit if debit is not None else credit)  # type: ignore[arg-type]
+    return to_decimal(cell(row, columns.get("amount")))
+
+
+def _party_of(row: list[object], columns: dict[str, int]) -> str | None:
+    party = cell_text(cell(row, columns.get("party_name")))
+    if party:
+        return party
+    return cell_text(cell(row, columns.get("description")))
 
 
 def read_ledger(
@@ -143,67 +230,113 @@ def read_ledger(
         currency: ISO code recorded on every row.
 
     Returns:
-        One `LedgerEntry` per usable row, in file order. Rows with no date or no
-        amount are skipped as blank or as separator rows, and counted in a log
-        line rather than silently dropped.
+        One `LedgerEntry` per usable row, in file order. A row is usable when
+        it has a date, a non-zero amount, and a party or a description. Rows
+        without them — blank separators, opening balances, totals — are skipped
+        and counted in a log line rather than silently dropped. `ledger_row_id`
+        is the file's own reference or voucher number when the file has one
+        and it is unique; otherwise it is minted from the spreadsheet row
+        (`LED-0002` for the first data row under a row-1 header), because a
+        reference that repeats cannot name a row.
 
     Raises:
-        LedgerReadError: The format is unsupported, a required column is absent,
-            or no usable rows were found.
+        LedgerReadError: The format is unsupported, the file will not open,
+            the header does not name a date, an amount, and a party or
+            description, or no usable rows were found. `problem` on the error
+            says which, with what was found and what to do about it.
     """
-    frame = _read_frame(content, filename)
-    if frame.empty:
-        raise LedgerReadError("the ledger has no rows")
-
-    columns = _resolve_columns(frame)
-    dates = pd.to_datetime(
-        frame[columns["date"]], errors="coerce", dayfirst=dayfirst
+    tables = load_tables(
+        content, filename, slot="ledger", error=LedgerReadError,
+        accepted=SPREADSHEET_SUFFIXES,
     )
+    match = locate_header(tables, _ALIASES, complete=_complete)
+    if match is None or not match.complete:
+        raise _refuse_header(match, filename, _first_row(tables))
+    if not match.data_rows:
+        raise LedgerReadError(empty_file("ledger", filename))
 
-    entries: list[LedgerEntry] = []
+    columns = match.columns
+    read: list[tuple[int, object, Decimal, str, list[object]]] = []
     skipped = 0
-    for position, (index, row) in enumerate(frame.iterrows()):
-        # Spreadsheet row as a human sees it: header is row 1, data starts at 2.
-        row_number = position + 2
-        date = dates.iloc[position]
-        amount = _to_decimal(row[columns["amount"]])
-        party = str(row[columns["party_name"]] or "").strip()
-
-        if pd.isna(date) or amount is None or not party:
+    for offset, row in enumerate(match.data_rows):
+        row_number = match.row_number(offset)
+        when = to_date(cell(row, columns["date"]), dayfirst=dayfirst)
+        amount = _amount_of(row, columns)
+        party = _party_of(row, columns)
+        if when is None or amount is None or amount == 0 or not party:
             skipped += 1
             continue
+        read.append((row_number, when, amount, party, row))
 
-        raw_id = row[columns["ledger_row_id"]] if "ledger_row_id" in columns else None
-        ledger_row_id = str(raw_id).strip() if raw_id not in (None, "") else ""
-
-        entries.append(
-            LedgerEntry(
-                ledger_row_id=ledger_row_id or f"LED-{row_number:04d}",
-                date=date.date(),
-                amount=amount,
-                party_name=party,
-                description=_optional(row, columns, "description"),
-                account_code=_optional(row, columns, "account_code"),
-                currency=currency,
-                source=Provenance(document_id=document_id, row_number=row_number),
+    if not read:
+        example = ", ".join(
+            cell_text(value) or "" for value in (match.data_rows[0] if match.data_rows else [])
+        ).strip(", ")
+        raise LedgerReadError(
+            no_usable_rows(
+                "ledger", filename,
+                needs="a date, a non-zero amount, and a party or a description",
+                rows_seen=len(match.data_rows),
+                example=example or None,
+                found=match.cells,
             )
         )
 
-    if not entries:
-        raise LedgerReadError(
-            "no usable rows in the ledger: every row was missing a date, an amount, "
-            "or a party name"
+    ids = _row_ids(read, columns)
+    entries = [
+        LedgerEntry(
+            ledger_row_id=ledger_row_id,
+            date=when,
+            amount=amount,
+            party_name=party,
+            description=cell_text(cell(row, columns.get("description"))),
+            account_code=cell_text(cell(row, columns.get("account_code"))),
+            currency=currency,
+            source=Provenance(document_id=document_id, row_number=row_number),
         )
+        for (row_number, when, amount, party, row), ledger_row_id in zip(read, ids)
+    ]
     if skipped:
         logger.info("Ledger %s: skipped %s incomplete row(s).", document_id, skipped)
     return entries
 
 
-def _optional(row: pd.Series, columns: dict[str, str], name: str) -> str | None:
-    if name not in columns:
-        return None
-    value = row[columns[name]]
-    if value is None or (isinstance(value, float) and pd.isna(value)):
-        return None
-    text = str(value).strip()
-    return text or None
+def _row_ids(
+    read: list[tuple[int, object, Decimal, str, list[object]]],
+    columns: dict[str, int],
+) -> list[str]:
+    """The file's own ids where they are unique, the row number where not.
+
+    Every downstream lookup — the match, the flag, the approve route — is by
+    `ledger_row_id`, so two rows sharing one would be one row to the review
+    queue. A repeated reference therefore falls back to the row, for every
+    row that carries it.
+    """
+    position = columns.get("ledger_row_id")
+    raw = [
+        cell_text(cell(row, position)) if position is not None else None
+        for _number, _when, _amount, _party, row in read
+    ]
+    counts: dict[str, int] = {}
+    for value in raw:
+        if value:
+            counts[value] = counts.get(value, 0) + 1
+    repeated = {value for value, count in counts.items() if count > 1}
+    if repeated:
+        logger.info(
+            "Ledger ids %s repeat; those rows are numbered by spreadsheet row instead.",
+            ", ".join(sorted(repeated)[:5]),
+        )
+    return [
+        value if value and value not in repeated else f"LED-{row_number:04d}"
+        for value, (row_number, *_rest) in zip(raw, read)
+    ]
+
+
+def _first_row(tables) -> list[str]:
+    for table in tables:
+        for row in table.rows:
+            texts = [cell_text(value) for value in row]
+            if any(texts):
+                return [text for text in texts if text]
+    return []

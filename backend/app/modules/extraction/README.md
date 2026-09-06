@@ -24,7 +24,9 @@ this package.
 | `page_images.py` | PDF → PNG pages with PyMuPDF. No poppler on the deploy box. |
 | `qwen_client.py` | HTTP to Model Studio: retries, backoff, JSON parsing. |
 | `prompts.py` | The prompts and the JSON shapes the model must answer in. |
-| `ledger_reader.py` | pandas → `LedgerEntry`. **Imports no AI client.** |
+| `spreadsheet.py` | The plumbing both spreadsheet readers stand on: encodings and delimiters, the header under title rows and cover sheets, currency words in headers, messy money and date cells. **Imports no AI client.** |
+| `ledger_reader.py` | pandas → `LedgerEntry`: a single amount column or a debit/credit pair, a party column or the narration. **Imports no AI client.** |
+| `bank_reader.py` | pandas → `BankTransaction` from a CSV/Excel statement export; money out is negative. **Imports no AI client.** |
 | `demo_mode.py` | `DEMO_MODE`: replay cached results instead of calling Qwen. |
 | `settings.py` | Module config from the environment. |
 
@@ -51,8 +53,19 @@ highlights, and a field without it is dropped rather than emitted.
 
 **The ledger goes to pandas.** An Excel file is already structured. Sending it to
 a vision model would add cost, latency, and a chance of misreading a number
-sitting in a cell. `ledger_reader.py` imports pandas and the shared schemas and
-nothing else; its provenance is the spreadsheet row.
+sitting in a cell. `ledger_reader.py` imports pandas (through `spreadsheet.py`)
+and the shared schemas and nothing else; its provenance is the spreadsheet row.
+A bank statement exported from internet banking takes the same path through
+`bank_reader.py`.
+
+Both readers take what real exports look like rather than one ideal shape: the
+header is found under title rows and on whichever sheet carries it; `Debit (PKR)`
+and `Credit (PKR)` are a pair that folds into one amount; a party is taken from
+a party column or, failing that, from the narration; a Windows-encoded or
+semicolon-separated CSV is decoded and split correctly. A file they still cannot
+use is refused with a `LedgerReadError` / `BankStatementReadError` whose
+`problem` (`app/shared/problems.py`) says which file, what it held, what it
+lacked, and what to do — the upload screen shows that as a guide.
 
 ## The verifier is a checker, not a second guesser
 
@@ -80,6 +93,8 @@ It runs only on fields at or below `EXTRACTION_CONFIDENCE_THRESHOLD`
 | No provenance at all | The field is dropped, not emitted |
 | Unrecognised confidence word | Treated as `low`; "unknown" must never read as "high" |
 | Model reports a value it could not read | Forced to `unreadable=True`, `value=None` |
+| A spreadsheet names no date, no amount, or (ledger) no party or description | `LedgerReadError` / `BankStatementReadError` with a `problem` naming the columns found, the ones missing, and the header names that would do |
+| A spreadsheet will not open, is empty, or has no usable row | The same error, with `problem.code` `unreadable_file`, `empty_file`, or `no_usable_rows` |
 
 ## Must never do
 

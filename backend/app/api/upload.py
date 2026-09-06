@@ -5,7 +5,16 @@ contains no extraction, matching, or rule logic: everything below the validation
 is one call. Sales data exports are uploaded separately via the analytics routes;
 they are analytical material, not audit evidence.
 
-Two ways to run that call:
+**Every file is read before a case exists.** The ledger and a spreadsheet
+statement go through the same deterministic readers the pipeline uses; a PDF or
+a photo is opened to prove it is one. A file that cannot be used is refused on
+the spot with a `422` whose body carries a `ReadProblem` — which document, what
+it held, what it lacked, what to do — and nothing is created: no case row, no
+job, no half-read documents for the case list to show as stuck. The pipeline
+reads the files again afterwards; both reads are deterministic, and the second
+one is what the trail records.
+
+Two ways to run the pipeline:
 
 - **Synchronously** (the default). The pipeline finishes before the response is
   written, and the counts on it are final. This is what an integration polling
@@ -38,16 +47,15 @@ from fastapi import (
 )
 
 from app.api.deps import Principal, get_repository, get_storage, require_write
+from app.api.files import safe_filename, suffix_of
+from app.api.problems import ProblemHTTPException, raise_for
 from app.core import jobs
 from app.core.repository import CaseRepository, DocumentStore, StoredDocument
-from app.modules.extraction.service import (
-    BankStatementReadError,
-    ExtractionError,
-    LedgerReadError,
-    QwenError,
-)
-from app.pipeline import RULES_CONFIG, run_pipeline
+from app.modules.extraction import service as extraction
+from app.pipeline import RULES_CONFIG, PipelineError, run_pipeline
+from app.shared import problems
 from app.shared.api import UploadResponse
+from app.shared.problems import ReadProblemError
 from app.shared.schemas import (
     CaseRecord,
     CaseStatus,
@@ -79,37 +87,34 @@ ACCEPTED_SUFFIXES: dict[DocumentType, frozenset[str]] = {
 MAX_FILE_BYTES = 25 * 1024 * 1024
 
 
-def _suffix(filename: str | None) -> str:
-    if not filename or "." not in filename:
-        return ""
-    return "." + filename.rsplit(".", 1)[1].lower()
-
-
 def _accept(
     upload: UploadFile, document_type: DocumentType, case_id: str
 ) -> tuple[StoredDocument, bytes]:
-    """Validate one uploaded file and read its bytes."""
+    """Validate one uploaded file's name and size, and read its bytes.
+
+    The name is made safe first (`safe_filename`): it becomes part of the
+    storage path and of a download header, so it may not carry a directory,
+    a control character, or more length than a filesystem takes.
+    """
     allowed = ACCEPTED_SUFFIXES[document_type]
-    if _suffix(upload.filename) not in allowed:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=(
-                f"{upload.filename!r} is not accepted as a {document_type.value}. "
-                f"Allowed: {', '.join(sorted(allowed))}"
-            ),
+    slot = document_type.value
+    filename = safe_filename(upload.filename)
+    if suffix_of(filename) not in allowed:
+        raise ProblemHTTPException(
+            problems.unsupported_format(slot, filename, sorted(allowed)),
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
         )
 
     content = upload.file.read()
     if len(content) > MAX_FILE_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"{upload.filename!r} is larger than {MAX_FILE_BYTES // 1024 // 1024} MB.",
+        raise ProblemHTTPException(
+            problems.too_large(
+                slot, filename, len(content) / 1024 / 1024, MAX_FILE_BYTES // 1024 // 1024
+            ),
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         )
     if not content:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"{upload.filename!r} is empty.",
-        )
+        raise ProblemHTTPException(problems.empty_upload(slot, filename))
 
     prefix = {
         DocumentType.BANK_STATEMENT: "DOC-BNK",
@@ -117,7 +122,6 @@ def _accept(
         DocumentType.LEDGER: "DOC-LED",
     }[document_type]
     document_id = f"{prefix}-{uuid4().hex[:8]}"
-    filename = upload.filename or "unnamed"
     document = StoredDocument(
         document_id=document_id,
         document_type=document_type,
@@ -126,6 +130,47 @@ def _accept(
         storage_path=f"{case_id}/{document_id}/{filename}",
     )
     return document, content
+
+
+def _preflight(documents: list[tuple[StoredDocument, bytes]]) -> None:
+    """Read every file now, so a bad one is refused before a case exists.
+
+    The spreadsheets go through the readers the pipeline will use; a PDF or a
+    photo is opened to prove it is one. The same bytes in the ledger and the
+    statement slots are refused too — reconciling a file against itself would
+    match every row and prove nothing.
+    """
+    by_type: dict[DocumentType, tuple[StoredDocument, bytes]] = {}
+    for document, content in documents:
+        slot = document.document_type.value
+        by_type.setdefault(document.document_type, (document, content))
+        try:
+            if document.document_type is DocumentType.LEDGER:
+                extraction.read_ledger(document.document_id, document.filename, content)
+            elif document.document_type is DocumentType.BANK_STATEMENT and (
+                extraction.statement_is_a_spreadsheet(document.filename)
+            ):
+                extraction.read_bank_statement(
+                    document.document_id, document.filename, content
+                )
+            else:
+                kind = "PDF" if document.filename.lower().endswith(".pdf") else "image"
+                if extraction.document_page_count(content, document.filename) == 0:
+                    raise ValueError(f"the {kind} has no pages")
+        except ReadProblemError as error:
+            raise raise_for(error) from error
+        except ValueError as error:
+            kind = "PDF" if document.filename.lower().endswith(".pdf") else "image"
+            raise ProblemHTTPException(
+                problems.unreadable_file(slot, document.filename, str(error), kind=kind)
+            ) from error
+
+    ledger = by_type.get(DocumentType.LEDGER)
+    statement = by_type.get(DocumentType.BANK_STATEMENT)
+    if ledger and statement and ledger[1] == statement[1]:
+        raise ProblemHTTPException(
+            problems.duplicate_file("ledger", "bank_statement", statement[0].filename)
+        )
 
 
 @router.post(
@@ -172,11 +217,18 @@ async def upload_documents(
     drops last month's statement, ledger, and invoices in. The case is created
     by the auditor whose key it is, and the trail says the upload arrived from
     `api-key:<prefix>`.
+
+    A file that cannot be used is refused with `422` before anything is
+    created; the body's `problem` says which file, what it held, what it
+    lacked, and what to do.
     """
     if not invoices:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="At least one invoice is required.",
+            detail=(
+                "At least one invoice is required: the ledger's payments are "
+                "matched against the invoices they settle."
+            ),
         )
 
     client = _resolve_client(repository, principal, client_id)
@@ -192,6 +244,7 @@ async def upload_documents(
         _accept(ledger, DocumentType.LEDGER, case_id),
         *(_accept(invoice, DocumentType.INVOICE, case_id) for invoice in invoices),
     ]
+    _preflight(documents)
 
     if background:
         return _queue(
@@ -206,36 +259,10 @@ async def upload_documents(
             client_id=client.client_id if client else None,
             rules_config=rules_config,
         )
-    except BankStatementReadError as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"The bank statement could not be read: {error}",
-        ) from error
-    except LedgerReadError as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"The ledger could not be read: {error}",
-        ) from error
-    except QwenError as error:
-        logger.exception("Extraction failed for case %s", case_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                f"The document reader is unavailable: {error}. "
-                "Set DEMO_MODE=true to run on cached extractions."
-            ),
-        ) from error
-    except ExtractionError as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
-        ) from error
-    except Exception as error:  # noqa: BLE001 - a deterministic step failed
+    except PipelineError as error:
         # The pipeline has already marked the case `failed` with the reason and
-        # logged the traceback; the caller gets a plain statement of it.
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"The case could not be processed: {error}",
-        ) from error
+        # logged the traceback; the caller gets the same reason as a guide.
+        raise ProblemHTTPException(error.problem) from error
 
     return UploadResponse(
         case_id=outcome.case_id,
@@ -272,14 +299,17 @@ def _resolve_client(
     if client is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No client with id {client_id!r}.",
+            detail=(
+                f"No client with id {client_id!r}. Pick a client from the list, "
+                "or leave the client blank for a one-off engagement."
+            ),
         )
     if not client.is_active:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"Client {client.name!r} is archived. Restore it before running a "
-                "new period for it."
+                f"Client {client.name!r} is archived. Restore it on the Clients "
+                "screen before running a new period for it."
             ),
         )
     return client
@@ -331,6 +361,9 @@ def _queue(
     )
 
     def work(progress: jobs.Progress) -> None:
+        # A `PipelineError` carries its `problem`; the job runner records it,
+        # so the upload screen polling the job shows the same guide a refused
+        # upload gets.
         run_pipeline(
             principal.org_id, case_id, client_name, documents, principal.actor,
             repository, storage,

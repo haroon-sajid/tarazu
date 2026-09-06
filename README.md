@@ -276,18 +276,40 @@ the service-role key is backend-only by design.
 
 ```bash
 pytest                                   # from the repository root
+pytest -m "not slow"                     # skip the performance budgets (~1 min)
+backend/.venv/Scripts/python -m ruff check backend/app backend/tests scripts --select E9,F,PLE
 ```
 
 The suite is hermetic: it ignores `.env`, makes no network calls, and runs
 background jobs inline (`TARAZU_JOBS_INLINE=1`, set in `conftest.py`) so nothing
 has to be polled or slept on. It covers the pipeline end to end, tenant
 isolation, audit-trail immutability, the module import bans, and the fixture
-contracts.
+contracts — and, since 2026-09-06, four more layers:
 
-The frontend type-checks with:
+- `tests/test_journey.py` — one firm's period from client to report through
+  the public API alone, checking that the trail, the dashboard, the report,
+  the bundle, and a revoked API key all agree. The smoke test before a deploy.
+- `tests/test_domain_edges.py` — the deterministic modules at their edges:
+  empty cases, zero and negative amounts, Urdu and very long names, samples
+  larger than their population, reports over no decisions.
+- `tests/test_hardening.py` — what client data must never do: a party name
+  that is an Excel formula stays text in every workbook, a filename with `..`
+  or a newline is stored under its basename, the local store refuses any path
+  outside its root.
+- `tests/test_fuzz_readers.py` — property-based (Hypothesis): random bytes,
+  random tables, every encoding and delimiter into the readers, and the upload
+  route, which must answer a refusal or a case and never a `500`.
+- `tests/test_performance.py` (`-m slow`) — budgets for matching, rules, and
+  the readers at the size of a real monthly case.
+
+The frontend has its own three checks, run together with `npm run check`:
 
 ```bash
-cd frontend && npx tsc --noEmit
+cd frontend
+npm run typecheck                         # tsc --noEmit
+npm run lint                              # ESLint with Next's rule sets
+npm test                                  # vitest: the API client in fixture mode, the
+                                          # fixture assistant, formatting, session storage
 ```
 
 Two checks are worth knowing about:

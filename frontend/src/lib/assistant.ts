@@ -25,7 +25,6 @@ import type {
   BankTransaction,
   Confidence,
   DashboardSummary,
-  ExtractedField,
   Flag,
   Invoice,
   MatchStatus,

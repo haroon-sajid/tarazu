@@ -55,6 +55,7 @@ from app.shared.schemas import (
     OrgInvitation,
     OrgProfile,
     OrgRole,
+    ReadProblem,
     ReportRecord,
     ReviewItem,
     SalesAnalyticsResult,
@@ -383,7 +384,10 @@ create table if not exists jobs (
   created_at  text not null,
   started_at  text,
   finished_at text,
-  error       text
+  error       text,
+  -- The failure as a guide (a ReadProblem as JSON), when the work could say
+  -- what to do about it. `error` is its message.
+  problem     text
 );
 
 create index if not exists jobs_org_case_idx on jobs (org_id, case_id, created_at);
@@ -621,6 +625,7 @@ class SqliteCaseRepository:
     ADDED_COLUMNS: dict[str, dict[str, str]] = {
         "cases": {"client_id": "text"},
         "evidence_requests": {"cancellation_note": "text"},
+        "jobs": {"problem": "text"},
     }
 
     def _migrate_added_columns(self) -> None:
@@ -1632,8 +1637,8 @@ class SqliteCaseRepository:
     def _job_upsert(org_id: str, job: JobRecord) -> tuple[str, tuple]:
         return (
             "insert or replace into jobs (job_id, org_id, case_id, kind, status, "
-            "progress, step, created_by, created_at, started_at, finished_at, error) "
-            "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "progress, step, created_by, created_at, started_at, finished_at, error, "
+            "problem) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 job.job_id,
                 org_id,
@@ -1647,6 +1652,7 @@ class SqliteCaseRepository:
                 _iso(job.started_at),
                 _iso(job.finished_at),
                 job.error,
+                job.problem.model_dump_json() if job.problem else None,
             ),
         )
 
@@ -1694,6 +1700,9 @@ class SqliteCaseRepository:
             started_at=row["started_at"],
             finished_at=row["finished_at"],
             error=row["error"],
+            problem=(
+                ReadProblem.model_validate_json(row["problem"]) if row["problem"] else None
+            ),
         )
 
     # -- value corrections --------------------------------------------------- #
@@ -2091,8 +2100,11 @@ class LocalDocumentStore:
         self._root.mkdir(parents=True, exist_ok=True)
 
     def _resolve(self, path: str) -> Path:
-        target = (self._root / path).resolve()
-        if not str(target).startswith(str(self._root.resolve())):
+        # `is_relative_to`, not a string prefix: `store2/x` starts with `store`
+        # and is still outside it.
+        root = self._root.resolve()
+        target = (root / path).resolve()
+        if target == root or not target.is_relative_to(root):
             raise ValueError(f"path escapes the document store: {path!r}")
         return target
 

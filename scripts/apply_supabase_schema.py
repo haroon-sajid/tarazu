@@ -43,6 +43,7 @@ MIGRATIONS = (
     ("0007-clients-and-periods.sql", "clients, jobs, corrections, evidence requests, sign-offs, org profiles"),
     ("0008-sales-analytics.sql", "sales_analytics readout, sales_analytics_run action"),
     ("0009-sales-data-uploads.sql", "standalone sales data upload metadata"),
+    ("0010-jobs-problem.sql", "jobs.problem: a failed upload's reason as a guide"),
 )
 
 #: What each migration should leave behind, so --check can say where a project is.
@@ -62,6 +63,7 @@ EXPECTED_TABLES = {
                                      "evidence_requests", "sign_offs", "org_profiles"),
     "0008-sales-analytics.sql": ("sales_analytics",),
     "0009-sales-data-uploads.sql": ("sales_data_uploads",),
+    "0010-jobs-problem.sql": (),
 }
 
 #: Migrations whose effect is a privilege or a trigger rather than a table.
@@ -74,6 +76,7 @@ EXPECTED_TRIGGERS = {
 #: Migrations detected by a column's type: (table, column, expected data_type).
 EXPECTED_COLUMN_TYPES = {
     "0005-audit-id-is-text.sql": (("audit_trail", "audit_id", "text"),),
+    "0010-jobs-problem.sql": (("jobs", "problem", "jsonb"),),
 }
 
 

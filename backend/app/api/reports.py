@@ -111,7 +111,7 @@ async def generate_report(
             detail=(
                 "This client requires a sign-off before a report can be generated. "
                 "Have a colleague who did not decide these items sign the engagement "
-                "off at POST /v1/sign-offs."
+                "off on the Report screen first."
             ),
         )
 

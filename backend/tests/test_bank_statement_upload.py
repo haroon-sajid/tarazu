@@ -129,7 +129,15 @@ def test_an_unreadable_statement_is_a_422_naming_the_problem(client, demo_mode) 
     broken = b"this,is,not,a,bank,statement\n1,2,3,4,5,6\n"
     response = _upload(client, ("statement.csv", io.BytesIO(broken)))
     assert response.status_code == 422
-    assert "bank statement could not be read" in response.json()["detail"]
+    body = response.json()
+    assert "bank statement 'statement.csv' could not be read" in body["detail"]
+    # The refusal is a guide the upload screen lays out, not only a sentence.
+    problem = body["problem"]
+    assert problem["code"] == "missing_columns"
+    assert problem["document"] == "bank_statement"
+    assert problem["found_columns"] == ["this", "is", "not", "a", "bank", "statement"]
+    assert {field["name"] for field in problem["missing"]} == {"date", "amount"}
+    assert problem["guidance"]
 
 
 def test_an_unsupported_statement_extension_is_refused(client, demo_mode) -> None:

@@ -23,7 +23,7 @@ import dashboardFixture from "./fixtures/dashboard.json";
 import reviewItemsFixture from "./fixtures/review-items.json";
 import salesAnalyticsFixture from "./fixtures/sales-analytics.json";
 import { answerFromCase, toAssistantAnswer } from "./assistant";
-import { clearSession, getStoredSession } from "./auth-storage";
+import { clearSession, getStoredSession, markSessionEnded } from "./auth-storage";
 import type {
   ApiKeyListResponse,
   ApiKeyScope,
@@ -62,6 +62,7 @@ import type {
   OrgProfileResponse,
   OrgRole,
   LoginResponse,
+  ReadProblem,
   ReportFormat,
   ReportListResponse,
   ReportSummary,
@@ -96,9 +97,16 @@ export const DEMO_USER_ID = "user-demo-auditor";
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /**
+   * The refusal as a guide, when the backend could give one: a rejected
+   * upload says which file, what it held, what it lacked, and what to do.
+   * Null for every other failure; `message` is always complete on its own.
+   */
+  problem: ReadProblem | null;
+  constructor(status: number, message: string, problem: ReadProblem | null = null) {
     super(message);
     this.status = status;
+    this.problem = problem;
     this.name = "ApiError";
   }
 }
@@ -112,64 +120,116 @@ function authToken(): string {
   return getStoredSession()?.accessToken ?? DEMO_TOKEN;
 }
 
+const OFFLINE_MESSAGE =
+  "Tarazu could not reach its server. Check your connection and try again; " +
+  "if you run the backend yourself, make sure it is started.";
+
+/**
+ * A sentence for a status whose body said nothing useful — a proxy's HTML
+ * page, a bare "Internal Server Error", an empty reply.
+ */
+function fallbackMessage(status: number, statusText: string): string {
+  if (status >= 500) {
+    return (
+      `Something went wrong on the server (HTTP ${status}). Try again in a ` +
+      "moment; if it keeps happening, tell your administrator."
+    );
+  }
+  if (status === 404) return "What you asked for is no longer there.";
+  if (status === 401) return "Your session has ended. Sign in again to continue.";
+  if (status === 403) return "You do not have permission to do that.";
+  return statusText
+    ? `The request was refused: ${statusText} (HTTP ${status}).`
+    : `The request was refused (HTTP ${status}).`;
+}
+
+/** What a failed response said, in the shape every error body shares. */
+async function readError(response: Response): Promise<ApiError> {
+  let detail: string | null = null;
+  let problem: ReadProblem | null = null;
+  try {
+    const body = await response.json();
+    if (typeof body?.detail === "string" && body.detail.trim()) detail = body.detail;
+    if (body?.problem && typeof body.problem === "object") {
+      problem = body.problem as ReadProblem;
+    }
+  } catch {
+    // Not JSON: the fallback sentence stands.
+  }
+  return new ApiError(
+    response.status,
+    detail ?? fallbackMessage(response.status, response.statusText),
+    problem,
+  );
+}
+
+/**
+ * A 401 on a non-auth route means the session is over — the token expired,
+ * or was revoked — whatever the screen was doing. End it once, here, rather
+ * than let every mounted screen fail one by one: the login screen says why,
+ * and comes back to the page that was open once the person signs in again.
+ */
+function endSession(path: string, status: number): void {
+  if (status !== 401 || path.startsWith("/v1/auth/") || typeof window === "undefined") {
+    return;
+  }
+  clearSession();
+  markSessionEnded("expired");
+  const next = `${window.location.pathname}${window.location.search}`;
+  window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+}
+
+/**
+ * One fetch for every live call. Throws an `ApiError` — with the backend's
+ * own sentence, and its guide when there is one — for any status outside
+ * `tolerate`; an unreachable server is `status: 0`.
+ */
+async function send(
+  path: string,
+  init: RequestInit,
+  tolerate: readonly number[] = [],
+): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, init);
+  } catch {
+    throw new ApiError(0, OFFLINE_MESSAGE);
+  }
+  if (!response.ok && !tolerate.includes(response.status)) {
+    const error = await readError(response);
+    endSession(path, response.status);
+    throw error;
+  }
+  return response;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = authToken();
   const headers: Record<string, string> = {
     ...(init?.body ? { "Content-Type": "application/json" } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
-  let response: Response;
-  try {
-    response = await fetch(`${API_URL}${path}`, { ...init, headers });
-  } catch {
-    throw new ApiError(0, "Could not reach the Tarazu backend. Is it running?");
-  }
-  if (!response.ok) {
-    let detail = response.statusText;
-    try {
-      const body = await response.json();
-      if (typeof body?.detail === "string") detail = body.detail;
-    } catch {
-      // keep statusText
-    }
-    // A 401 on a non-auth route while signed in means the token expired or
-    // was revoked: the session is dead, so end it rather than error every
-    // screen one by one.
-    if (
-      response.status === 401 &&
-      !path.startsWith("/v1/auth/") &&
-      getStoredSession() !== null &&
-      typeof window !== "undefined"
-    ) {
-      clearSession();
-      window.location.assign("/login");
-    }
-    throw new ApiError(response.status, detail);
-  }
+  const response = await send(path, { ...init, headers });
+  return (await response.json()) as T;
+}
+
+/** A multipart POST — the upload routes — with the same auth and errors. */
+async function requestForm<T>(path: string, form: FormData): Promise<T> {
+  const token = authToken();
+  const response = await send(path, {
+    method: "POST",
+    body: form,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
   return (await response.json()) as T;
 }
 
 /** A binary GET — a rendered page, a report file — with the same auth. */
 async function requestBlob(path: string): Promise<Blob> {
   const token = authToken();
-  let response: Response;
-  try {
-    response = await fetch(`${API_URL}${path}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-  } catch {
-    throw new ApiError(0, "Could not reach the Tarazu backend. Is it running?");
-  }
-  if (!response.ok) {
-    let detail = response.statusText;
-    try {
-      const body = await response.json();
-      if (typeof body?.detail === "string") detail = body.detail;
-    } catch {
-      // keep statusText
-    }
-    throw new ApiError(response.status, detail);
-  }
+  const response = await send(path, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
   return response.blob();
 }
 
@@ -567,35 +627,13 @@ export async function uploadDocuments(files: UploadFiles): Promise<UploadRespons
     for (const invoice of files.invoices) form.append("invoices", invoice);
     if (files.clientName) form.append("client_name", files.clientName);
     if (files.clientId) form.append("client_id", files.clientId);
-    const token = authToken();
-    const headers: Record<string, string> = token
-      ? { Authorization: `Bearer ${token}` }
-      : {};
     // Queued by default from the browser: extraction over a real statement
     // takes tens of seconds, and a request held open that long is one the
-    // network will drop before the pipeline finishes.
+    // network will drop before the pipeline finishes. A file the backend
+    // cannot use is refused before anything is queued, and the `ApiError`
+    // carries the refusal as a guide in `problem`.
     const query = files.background === false ? "" : "?background=true";
-    let response: Response;
-    try {
-      response = await fetch(`${API_URL}/v1/upload${query}`, {
-        method: "POST",
-        body: form,
-        headers,
-      });
-    } catch {
-      throw new ApiError(0, "Could not reach the Tarazu backend. Is it running?");
-    }
-    if (!response.ok) {
-      let detail = response.statusText;
-      try {
-        const body = await response.json();
-        if (typeof body?.detail === "string") detail = body.detail;
-      } catch {
-        // keep statusText
-      }
-      throw new ApiError(response.status, detail);
-    }
-    return (await response.json()) as UploadResponse;
+    return requestForm<UploadResponse>(`/v1/upload${query}`, form);
   }
   // Fixture mode: pretend the synchronous pipeline ran and point the user at
   // the sample case. The extraction takes tens of seconds for real, so the
@@ -837,30 +875,10 @@ export async function uploadSalesData(
   if (!FIXTURE_MODE) {
     const form = new FormData();
     form.append("file", file);
-    const token = authToken();
-    const headers: Record<string, string> = token
-      ? { Authorization: `Bearer ${token}` }
-      : {};
-    let response: Response;
-    try {
-      response = await fetch(
-        `${API_URL}/v1/cases/${encodeURIComponent(effective)}/sales-data`,
-        { method: "POST", body: form, headers },
-      );
-    } catch {
-      throw new ApiError(0, "Could not reach the Tarazu backend. Is it running?");
-    }
-    if (!response.ok) {
-      let detail = response.statusText;
-      try {
-        const body = await response.json();
-        if (typeof body?.detail === "string") detail = body.detail;
-      } catch {
-        // keep statusText
-      }
-      throw new ApiError(response.status, detail);
-    }
-    return response.json() as Promise<SalesDataUploadSummary>;
+    return requestForm<SalesDataUploadSummary>(
+      `/v1/cases/${encodeURIComponent(effective)}/sales-data`,
+      form,
+    );
   }
   await sleep(FIXTURE_LATENCY_MS);
   const upload: SalesDataUploadSummary = {
@@ -885,28 +903,12 @@ export async function deleteSalesData(
   const effective = analyticsCaseId(caseId);
   if (!FIXTURE_MODE) {
     const token = authToken();
-    const headers: Record<string, string> = token
-      ? { Authorization: `Bearer ${token}` }
-      : {};
-    let response: Response;
-    try {
-      response = await fetch(
-        `${API_URL}/v1/cases/${encodeURIComponent(effective)}/sales-data/${encodeURIComponent(salesDataId)}`,
-        { method: "DELETE", headers },
-      );
-    } catch {
-      throw new ApiError(0, "Could not reach the Tarazu backend. Is it running?");
-    }
-    if (!response.ok && response.status !== 404) {
-      let detail = response.statusText;
-      try {
-        const body = await response.json();
-        if (typeof body?.detail === "string") detail = body.detail;
-      } catch {
-        // keep statusText
-      }
-      throw new ApiError(response.status, detail);
-    }
+    // A 404 is tolerated: the export is gone either way.
+    await send(
+      `/v1/cases/${encodeURIComponent(effective)}/sales-data/${encodeURIComponent(salesDataId)}`,
+      { method: "DELETE", headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      [404],
+    );
     return;
   }
   await sleep(FIXTURE_LATENCY_MS / 2);

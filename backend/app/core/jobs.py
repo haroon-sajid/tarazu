@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from typing import Callable, Protocol
 
 from app.core.repository import CaseRepository
-from app.shared.schemas import JobRecord, JobStatus
+from app.shared.schemas import JobRecord, JobStatus, ReadProblem
 
 __all__ = ["Progress", "install_executor", "run_inline_by_default", "submit"]
 
@@ -100,7 +100,10 @@ def submit(
     ran inline. Exceptions inside `work` are caught, recorded on the job as
     `failed` with the reason, and logged: a background failure must not be able
     to take the process down, and the case it belongs to has already been
-    marked `failed` by the pipeline itself.
+    marked `failed` by the pipeline itself. An exception that carries a
+    `problem` (a `ReadProblem`, as `PipelineError` does) is recorded with it,
+    so the screen polling the job can show the same guide a refused upload
+    gets; the job's `error` is then that problem's message.
     """
     repository.create_job(org_id, job)
     inline = run_inline_by_default() if inline is None else inline
@@ -139,9 +142,12 @@ def submit(
             )
             work(_progress)
         except Exception as error:  # noqa: BLE001 - recorded on the job, not raised
-            detail = f"{type(error).__name__}: {error}"
+            problem = getattr(error, "problem", None)
+            if not isinstance(problem, ReadProblem):
+                problem = None
+            detail = problem.message if problem else f"{type(error).__name__}: {error}"
             logger.exception("Job %s failed: %s", job.job_id, detail)
-            _finish(repository, org_id, job.job_id, JobStatus.FAILED, detail)
+            _finish(repository, org_id, job.job_id, JobStatus.FAILED, detail, problem)
             return
         _finish(repository, org_id, job.job_id, JobStatus.SUCCEEDED, None)
 
@@ -157,6 +163,7 @@ def _finish(
     job_id: str,
     status: JobStatus,
     error: str | None,
+    problem: ReadProblem | None = None,
 ) -> None:
     """Stamp a job's ending. Best-effort: the work itself is already done."""
     try:
@@ -172,6 +179,7 @@ def _finish(
                     "step": "Done" if status is JobStatus.SUCCEEDED else "Failed",
                     "finished_at": _now(),
                     "error": error,
+                    "problem": problem,
                 }
             ),
         )

@@ -348,7 +348,7 @@ export default function CasesPage() {
           </div>
           <p className="text-[11px] text-ink-400">
             The status, creator, and timestamps are facts the pipeline records;
-            they are not editable here. The change is written to the case's
+            they are not editable here. The change is written to the case&apos;s
             audit trail.
           </p>
           {editError && (

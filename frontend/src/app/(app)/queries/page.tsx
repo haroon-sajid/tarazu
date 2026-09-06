@@ -590,7 +590,7 @@ export default function EvidenceRequestsPage() {
             />
           </div>
           <p className="text-[11px] leading-relaxed text-ink-400">
-            The ask is recorded against you and written to the case's immutable
+            The ask is recorded against you and written to the case&apos;s immutable
             audit trail. It decides nothing about the item.
           </p>
           {createError && (

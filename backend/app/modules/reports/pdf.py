@@ -76,8 +76,22 @@ _FIRM_CONTACT = ParagraphStyle("TarazuFirmContact", parent=_styles["Normal"], fo
                                leading=10, textColor=_MUTED)
 
 
+#: The most of one value a PDF cell shows. A table row cannot be split across
+#: pages, so a narration of thousands of characters would make a row taller
+#: than the page and the render would fail outright. The workbook carries
+#: every character; the PDF says where the rest is.
+_CELL_LIMIT = 600
+_CLIPPED = " … [continues in the Excel annexure]"
+
+
+def _clip(text: str, limit: int = _CELL_LIMIT) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - len(_CLIPPED)].rstrip() + _CLIPPED
+
+
 def _p(text: str, style: ParagraphStyle = _CELL) -> Paragraph:
-    return Paragraph(escape(text or "").replace("\n", "<br/>"), style)
+    return Paragraph(escape(_clip(text or "")).replace("\n", "<br/>"), style)
 
 
 def _logo(branding: ReportBranding | None) -> Image | None:
@@ -194,6 +208,11 @@ def render_pdf(content: ReportContent) -> bytes:
         rightMargin=_MARGIN,
         topMargin=_MARGIN,
         bottomMargin=_MARGIN,
+        # No wall-clock stamp and no random document id in the file: the same
+        # content is the same bytes, so the digest on the report record is a
+        # property of the report and not of the second it was rendered in.
+        # The generation time a reader sees is printed from the content.
+        invariant=True,
         title=f"{title} — {meta.client_name} — {meta.case_id}",
         author="Tarazu — AI Audit Assistant",
         subject=f"Report {meta.report_id}",

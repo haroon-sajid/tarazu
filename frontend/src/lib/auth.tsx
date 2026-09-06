@@ -13,8 +13,16 @@ import {
   login as apiLogin,
   signup as apiSignup,
 } from "./api";
-import { clearSession, getStoredSession, storeSession } from "./auth-storage";
+import {
+  clearSession,
+  getStoredSession,
+  markSessionEnded,
+  storeSession,
+} from "./auth-storage";
 import type { Session } from "./types";
+
+/** `setTimeout` treats a longer delay as zero; a token never outlives this. */
+const MAX_TIMER_MS = 2_147_483_647;
 
 interface AuthContextValue {
   /** null = signed out. undefined = still reading localStorage (first paint). */
@@ -77,6 +85,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(stored);
     if (stored) hydrateOrgFacts(stored);
   }, [hydrateOrgFacts]);
+
+  /**
+   * A session ends on its own when its token does. Rather than let the next
+   * request fail with a 401 — after the person has filled in a form or picked
+   * their files — the clock is watched: at expiry, and whenever the tab comes
+   * back into view (a laptop that slept past it), the session is ended here
+   * and the login screen says why. The (app) layout sends the person there
+   * with the page they were on, so signing in again brings them back.
+   */
+  React.useEffect(() => {
+    if (!session) return;
+    const expire = () => {
+      markSessionEnded("expired");
+      clearSession();
+      setSession(null);
+    };
+    const check = () => {
+      if (Date.now() >= session.expiresAt) expire();
+    };
+    const delay = Math.min(Math.max(0, session.expiresAt - Date.now()) + 50, MAX_TIMER_MS);
+    const timer = window.setTimeout(check, delay);
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [session]);
 
   const signIn = React.useCallback(async (email: string, password: string) => {
     const response = await apiLogin(email, password);

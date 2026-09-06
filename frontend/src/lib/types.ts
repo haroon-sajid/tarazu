@@ -588,6 +588,38 @@ export interface AssistantChatResponse {
 // Upload
 // --------------------------------------------------------------------------
 
+/** Which upload a problem is about. `sales_data` is the analytics export. */
+export type UploadSlot = "ledger" | "bank_statement" | "invoice" | "sales_data";
+
+/** One thing a file has to carry for Tarazu to read it, and why. */
+export interface ProblemField {
+  /** The canonical name the readers use: `date`, `amount`, `party_name`. */
+  name: string;
+  /** What a person would call it: "Amount". */
+  label: string;
+  /** What breaks without it, in one sentence. */
+  why: string;
+  /** Header names that satisfy it, as they would be written in the file. */
+  accepted_headers: string[];
+}
+
+/**
+ * Why an upload could not be used, in a shape the screen lays out as a guide.
+ * `message` is complete on its own; the lists are structure for the dialog:
+ * the columns the file had, the ones it needs, and the steps that fix it.
+ * Comes back beside `detail` on a refused upload, and on a failed job.
+ */
+export interface ReadProblem {
+  code: string;
+  title: string;
+  message: string;
+  document: UploadSlot | null;
+  filename: string | null;
+  found_columns: string[];
+  missing: ProblemField[];
+  guidance: string[];
+}
+
 export interface UploadedDocument {
   document_id: string;
   document_type: DocumentType;
@@ -862,6 +894,8 @@ export interface JobSummary {
   started_at: string | null;
   finished_at: string | null;
   error: string | null;
+  /** The failure as a guide, when the work could say what to do about it. */
+  problem?: ReadProblem | null;
   finished: boolean;
 }
 

@@ -23,7 +23,6 @@ import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
-  BarChart3,
   Check,
   FileSearch,
   Files,
@@ -42,11 +41,20 @@ import {
   setActiveCaseId,
   uploadDocuments,
 } from "@/lib/api";
-import type { ClientSummary, JobSummary, UploadResponse } from "@/lib/types";
+import type {
+  ClientSummary,
+  JobSummary,
+  UploadResponse,
+  UploadSlot,
+} from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ErrorState } from "@/components/ui/states";
 import { DropZone } from "@/components/upload/drop-zone";
+import {
+  UploadFailureNotice,
+  UploadProblemDialog,
+  type UploadFailure,
+} from "@/components/upload/upload-problem-dialog";
 import { cn } from "@/lib/utils";
 
 type Phase = "idle" | "working" | "done";
@@ -162,7 +170,11 @@ export default function UploadPage() {
   const [clientId, setClientId] = React.useState("");
   const [clientName, setClientName] = React.useState("");
   const [phase, setPhase] = React.useState<Phase>("idle");
-  const [error, setError] = React.useState<string | null>(null);
+  // What went wrong, as the backend said it: a guide when it gave one, a
+  // sentence otherwise. Shown in a dialog first, then kept as a notice while
+  // the person replaces the file.
+  const [failure, setFailure] = React.useState<UploadFailure | null>(null);
+  const [guideOpen, setGuideOpen] = React.useState(false);
   const [result, setResult] = React.useState<UploadResponse | null>(null);
   const [itemCount, setItemCount] = React.useState(0);
   const [job, setJob] = React.useState<JobSummary | null>(null);
@@ -196,10 +208,31 @@ export default function UploadPage() {
     }
   }, []);
 
+  /** Show a failure: the dialog now, and the notice until the next attempt. */
+  const fail = (next: UploadFailure) => {
+    if (cancelled.current) return;
+    setFailure(next);
+    setGuideOpen(true);
+    setPhase("idle");
+  };
+
+  /** Clear the slot the guide named, so the button waits for a new file. */
+  const replaceSlot = (slot: UploadSlot) => {
+    if (slot === "ledger") setLedger([]);
+    else if (slot === "bank_statement") setBankStatement([]);
+    else if (slot === "invoice") setInvoices([]);
+    setGuideOpen(false);
+  };
+
+  /** The refusal's one line for the slot it names, to mark that drop zone. */
+  const slotError = (slot: UploadSlot): string | null =>
+    failure?.problem?.document === slot ? failure.problem.title : null;
+
   const submit = async () => {
     if (!ready || phase === "working") return;
     setPhase("working");
-    setError(null);
+    setFailure(null);
+    setGuideOpen(false);
     setJob(null);
     try {
       const response = await uploadDocuments({
@@ -216,11 +249,13 @@ export default function UploadPage() {
       if (response.job_id) {
         const finished = await followJob(response.job_id);
         if (finished.status === "failed") {
-          setError(
-            finished.error ??
-              "Processing failed. The case records why; check the case list.",
-          );
-          setPhase("idle");
+          fail({
+            problem: finished.problem ?? null,
+            title: "The audit could not be completed",
+            message:
+              finished.error ??
+              "Processing failed. The case is marked failed with the reason; check the case list.",
+          });
           return;
         }
       }
@@ -246,12 +281,14 @@ export default function UploadPage() {
       setActiveCaseId(response.case_id, false);
       setPhase("done");
     } catch (caught) {
-      setError(
-        caught instanceof ApiError
-          ? caught.message
-          : "Upload failed. Check the files and try again.",
-      );
-      setPhase("idle");
+      fail({
+        problem: caught instanceof ApiError ? caught.problem : null,
+        title: "Upload failed",
+        message:
+          caught instanceof ApiError
+            ? caught.message
+            : "The upload did not go through. Check the files and try again.",
+      });
     }
   };
 
@@ -399,11 +436,12 @@ export default function UploadPage() {
           <div className="grid gap-4 lg:grid-cols-3">
             <DropZone
               label="Ledger"
-              hint="Excel or CSV (.xlsx, .xls, .csv)"
-              accept={[".xlsx", ".xls", ".csv"]}
+              hint="Excel or CSV (.xlsx, .xls, .csv) with a date, an amount or Debit/Credit, and a party or description"
+              accept={[".xlsx", ".xlsm", ".xls", ".csv"]}
               files={ledger}
               onFiles={setLedger}
               disabled={phase === "working"}
+              error={slotError("ledger")}
             />
             <DropZone
               label="Bank statement"
@@ -412,6 +450,7 @@ export default function UploadPage() {
               files={bankStatement}
               onFiles={setBankStatement}
               disabled={phase === "working"}
+              error={slotError("bank_statement")}
             />
             <DropZone
               label="Invoices"
@@ -421,6 +460,7 @@ export default function UploadPage() {
               files={invoices}
               onFiles={setInvoices}
               disabled={phase === "working"}
+              error={slotError("invoice")}
             />
           </div>
 
@@ -429,11 +469,15 @@ export default function UploadPage() {
             deterministic code reads it, so the statement carries no reading uncertainty.
           </p>
 
-          {error && (
-            <div>
-              <ErrorState title="Upload failed" message={error} onRetry={submit} />
-            </div>
+          {failure && (
+            <UploadFailureNotice failure={failure} onDetails={() => setGuideOpen(true)} />
           )}
+          <UploadProblemDialog
+            open={guideOpen && failure !== null}
+            failure={failure}
+            onClose={() => setGuideOpen(false)}
+            onReplace={replaceSlot}
+          />
 
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
             {!ready && phase === "idle" && (

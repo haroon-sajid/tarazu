@@ -57,10 +57,20 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
+from app.shared.problems import (
+    ReadProblemError,
+    empty_file,
+    missing_columns,
+    no_usable_rows,
+    unreadable_file,
+    unsupported_format,
+)
 from app.shared.schemas import (
     Anomaly,
     CustomerSummary,
     MonthlyRevenue,
+    ProblemField,
+    ReadProblem,
     ProductRevenue,
     Provenance,
     RegionSummary,
@@ -88,9 +98,42 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-class SalesReadError(ValueError):
+class SalesReadError(ReadProblemError):
     """The sales data could not be read: an unsupported format, no header
-    naming a date and an amount, a malformed file, or no usable rows."""
+    naming a date and an amount, a malformed file, or no usable rows.
+
+    `problem` says which, as a guide for the person who uploaded it. A plain
+    reason is accepted too and becomes a generic problem for the sales-data
+    slot, so every refusal reaches the screen in the same shape.
+    """
+
+    def __init__(self, problem: ReadProblem | str, *, filename: str | None = None) -> None:
+        super().__init__(problem, slot="sales_data", filename=filename)
+
+
+#: What a sales export has to carry, said for the person who has to add it.
+SALES_FIELDS: dict[str, ProblemField] = {
+    "date": ProblemField(
+        name="date",
+        label="Date",
+        why="Revenue is read by month, so a row without a date has no month to fall in.",
+        accepted_headers=[
+            "Date", "Invoice Date", "Sale Date", "Order Date", "Txn Date", "Posting Date",
+        ],
+    ),
+    "amount": ProblemField(
+        name="amount",
+        label="Amount",
+        why=(
+            "Every total is a sum of amounts; a Quantity and a Unit Price pair "
+            "is accepted instead, and multiplied row by row."
+        ),
+        accepted_headers=[
+            "Amount", "Total", "Net Amount", "Sales", "Revenue", "Value",
+            "Quantity and Unit Price", "Qty and Rate",
+        ],
+    ),
+}
 
 
 #: The file types the reader understands. The API refuses anything else before
@@ -338,11 +381,12 @@ def _load_workbook(content: bytes, filename: str, suffix: str) -> list[_Table]:
     except ImportError as exc:
         raise SalesReadError(
             f"reading {filename!r} needs a spreadsheet library that is not "
-            f"installed on this server: {exc}"
+            f"installed on this server: {exc}",
+            filename=filename,
         ) from exc
     except Exception as exc:  # noqa: BLE001 - corrupt, encrypted, or not a workbook at all
         raise SalesReadError(
-            f"{filename!r} could not be opened as a spreadsheet: {exc}"
+            unreadable_file("sales_data", filename, str(exc).strip() or type(exc).__name__)
         ) from exc
 
     tables: list[_Table] = []
@@ -697,13 +741,12 @@ def read_sales_export(
     suffix = _suffix(filename)
     if suffix not in SUPPORTED_SUFFIXES:
         raise SalesReadError(
-            f"unsupported sales data format: {filename!r}. Expected one of "
-            f"{', '.join(sorted(SUPPORTED_SUFFIXES))}."
+            unsupported_format("sales_data", filename, sorted(SUPPORTED_SUFFIXES))
         )
 
     tables = _load_tables(content, filename, suffix)
     if not any(table.rows for table in tables):
-        raise SalesReadError("the sales data has no rows")
+        raise SalesReadError(empty_file("sales_data", filename))
 
     warnings: list[str] = []
     last_report: SourceReadReport | None = None
@@ -740,20 +783,47 @@ def read_sales_export(
 
     if last_report is not None:
         raise SalesReadError(
-            "no usable rows in the sales data: every row was missing a date or "
-            f"an amount (skipped: {last_report.skipped})"
+            no_usable_rows(
+                "sales_data", filename,
+                needs="a date and an amount (or a quantity and a unit price)",
+                rows_seen=last_report.rows_seen,
+                example=", ".join(f"{reason}: {count}" for reason, count in last_report.skipped.items()) or None,
+            )
         )
-    first_row = next(
-        (
-            [_text(cell) for cell in table.rows[0] if _text(cell)]
-            for table in tables
-            if table.rows
-        ),
-        [],
+    # The row that came closest to a header anywhere in the file, so the
+    # refusal can say what was found and what that row still lacks.
+    nearest: tuple[int, list[str], dict[str, int]] | None = None
+    for table in tables:
+        for row in table.rows[:_HEADER_SCAN_ROWS]:
+            headers = [_text(cell) for cell in row]
+            if sum(1 for header in headers if header) < 2:
+                continue
+            mapping = _resolve_headers(headers)
+            if nearest is None or len(mapping) > nearest[0]:
+                nearest = (len(mapping), [header for header in headers if header], mapping)
+    found = nearest[1] if nearest else []
+    mapping = nearest[2] if nearest else {}
+    missing = [
+        SALES_FIELDS[name]
+        for name, present in (
+            ("date", "date" in mapping),
+            ("amount", "amount" in mapping or ("quantity" in mapping and "unit_price" in mapping)),
+        )
+        if not present
+    ] or [SALES_FIELDS["date"], SALES_FIELDS["amount"]]
+    problem = missing_columns(
+        "sales_data", filename, found, missing,
+        needs="the date and the amount (or a quantity and a unit price)",
     )
     raise SalesReadError(
-        "could not find a header row naming a date and an amount (or a quantity "
-        f"and a unit price). The first row reads: {', '.join(first_row) or '(empty)'}"
+        problem.model_copy(
+            update={
+                "message": (
+                    f"{problem.message} Tarazu could not find a header row naming "
+                    "a date and an amount (or a quantity and a unit price)."
+                )
+            }
+        )
     )
 
 
@@ -1055,13 +1125,21 @@ _MONEY_FORMAT = "#,##0.00"
 
 
 def _sheet(workbook: Workbook, title: str, header: list[str], rows: list[list[object]]) -> None:
-    """One worksheet: a bold header, the rows, money formatted, columns sized."""
+    """One worksheet: a bold header, the rows, money formatted, columns sized.
+
+    Every string is pinned to the text type. openpyxl would otherwise store a
+    customer or product name beginning with `=` as a formula, and those names
+    are whatever the client's export said.
+    """
     sheet = workbook.create_sheet(title=title)
     sheet.append(header)
     for cell in sheet[1]:
         cell.font = Font(bold=True)
     for row in rows:
         sheet.append(row)
+        for cell in sheet[sheet.max_row]:
+            if isinstance(cell.value, str):
+                cell.data_type = "s"
     for column_index, name in enumerate(header, start=1):
         letter = get_column_letter(column_index)
         longest = max(

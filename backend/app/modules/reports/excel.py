@@ -4,6 +4,13 @@ One sheet for the summary and one per section, with the same rows the PDF
 carries. Cells are written as text exactly as the content builder produced
 them, so nothing in the workbook is a formula and nothing can be recomputed
 by opening it.
+
+**Every string is written as text, structurally.** openpyxl treats a string
+that begins with `=` as a formula, and a party name or narration is whatever
+the client's bookkeeper typed — `=HYPERLINK(...)` in a ledger cell would
+otherwise become a live formula in the auditor's workbook. `_text` writes the
+cell and pins its type to text, so the workbook can only ever *show* what the
+documents said.
 """
 
 from __future__ import annotations
@@ -14,8 +21,10 @@ import zipfile
 from datetime import datetime
 
 from openpyxl import Workbook
+from openpyxl.cell.cell import Cell
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.worksheet import Worksheet
 
 from app.modules.reports.content import ReportContent, TableSection
 from app.modules.reports.urdu import URDU_HEADING
@@ -28,6 +37,14 @@ _LABEL_FONT = Font(bold=True, color="6B7A8A")
 _WRAP = Alignment(wrap_text=True, vertical="top")
 
 _INVALID_SHEET_CHARS = re.compile(r"[\[\]:*?/\\]")
+
+
+def _text(sheet: Worksheet, row: int, column: int, value: object) -> Cell:
+    """Write a cell whose string can never be read back as a formula."""
+    cell = sheet.cell(row=row, column=column, value=value)
+    if isinstance(value, str):
+        cell.data_type = "s"
+    return cell
 
 
 def _sheet_title(title: str, used: set[str]) -> str:
@@ -45,15 +62,15 @@ def _sheet_title(title: str, used: set[str]) -> str:
 def _write_section(workbook: Workbook, section: TableSection, used: set[str]) -> None:
     sheet = workbook.create_sheet(_sheet_title(section.title, used))
     row = 1
-    sheet.cell(row=row, column=1, value=section.title).font = Font(bold=True, size=13)
+    _text(sheet, row, 1, section.title).font = Font(bold=True, size=13)
     row += 1
     if section.note:
-        sheet.cell(row=row, column=1, value=section.note).alignment = _WRAP
+        _text(sheet, row, 1, section.note).alignment = _WRAP
         row += 1
     row += 1
 
     for index, column in enumerate(section.columns, start=1):
-        cell = sheet.cell(row=row, column=index, value=column)
+        cell = _text(sheet, row, index, column)
         cell.fill = _HEAD_FILL
         cell.font = _HEAD_FONT
         cell.alignment = _WRAP
@@ -62,10 +79,10 @@ def _write_section(workbook: Workbook, section: TableSection, used: set[str]) ->
 
     for values in section.rows:
         for index, value in enumerate(values, start=1):
-            sheet.cell(row=row, column=index, value=value).alignment = _WRAP
+            _text(sheet, row, index, value).alignment = _WRAP
         row += 1
     if not section.rows:
-        sheet.cell(row=row, column=1, value="Nothing to report.")
+        _text(sheet, row, 1, "Nothing to report.")
 
     weights = section.widths or [1.0] * len(section.columns)
     for index, weight in enumerate(weights, start=1):
@@ -83,15 +100,16 @@ def _write_urdu(workbook: Workbook, content: ReportContent, used: set[str]) -> N
     """
     sheet = workbook.create_sheet(_sheet_title("Urdu summary", used))
     sheet.sheet_view.rightToLeft = True
-    sheet.cell(row=1, column=1, value=URDU_HEADING).font = Font(bold=True, size=13)
-    cell = sheet.cell(row=3, column=1, value=content.urdu_summary)
+    _text(sheet, 1, 1, URDU_HEADING).font = Font(bold=True, size=13)
+    cell = _text(sheet, 3, 1, content.urdu_summary)
     cell.alignment = Alignment(wrap_text=True, vertical="top", horizontal="right")
     sheet.column_dimensions["A"].width = 110
     sheet.row_dimensions[3].height = 150
-    sheet.cell(
-        row=6,
-        column=1,
-        value=(
+    _text(
+        sheet,
+        6,
+        1,
+        (
             "یہ خلاصہ خودکار طریقے سے اعداد و شمار سے تیار کیا گیا ہے۔ "
             "تفصیلات انگریزی صفحات میں موجود ہیں۔"
         ),
@@ -147,13 +165,14 @@ def render_excel(content: ReportContent) -> bytes:
 
     summary = workbook.active
     summary.title = _sheet_title("Summary", used)
-    summary.cell(row=1, column=1, value="Tarazu — Audit Reconciliation Report").font = Font(
+    _text(summary, 1, 1, "Tarazu — Audit Reconciliation Report").font = Font(
         bold=True, size=14
     )
-    summary.cell(
-        row=2,
-        column=1,
-        value=(
+    _text(
+        summary,
+        2,
+        1,
+        (
             f"{content.meta.client_name} · {content.meta.case_id} · "
             f"{content.meta.report_id}"
         ),
@@ -164,22 +183,20 @@ def render_excel(content: ReportContent) -> bytes:
         # into the workbook: an embedded image would break the byte-for-byte
         # reproducibility the digest on the report record depends on, and the
         # PDF is the deliverable a client looks at anyway.
-        summary.cell(row=row, column=1, value="Prepared by").font = _LABEL_FONT
-        summary.cell(row=row, column=2, value=content.branding.display_name)
+        _text(summary, row, 1, "Prepared by").font = _LABEL_FONT
+        _text(summary, row, 2, content.branding.display_name)
         row += 1
         if content.branding.contact_line:
-            summary.cell(row=row, column=1, value="Firm details").font = _LABEL_FONT
-            summary.cell(
-                row=row, column=2, value=content.branding.contact_line
-            ).alignment = _WRAP
+            _text(summary, row, 1, "Firm details").font = _LABEL_FONT
+            _text(summary, row, 2, content.branding.contact_line).alignment = _WRAP
             row += 1
         row += 1
     for label, value in content.summary:
-        summary.cell(row=row, column=1, value=label).font = _LABEL_FONT
-        summary.cell(row=row, column=2, value=value).alignment = _WRAP
+        _text(summary, row, 1, label).font = _LABEL_FONT
+        _text(summary, row, 2, value).alignment = _WRAP
         row += 1
     row += 1
-    summary.cell(row=row, column=1, value=content.closing).alignment = _WRAP
+    _text(summary, row, 1, content.closing).alignment = _WRAP
     summary.column_dimensions["A"].width = 26
     summary.column_dimensions["B"].width = 100
 

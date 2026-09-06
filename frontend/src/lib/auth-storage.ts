@@ -41,3 +41,33 @@ export function clearSession(): void {
     // Nothing to clear.
   }
 }
+
+/**
+ * Why the last session ended, when it ended on its own rather than by a
+ * sign-out click — so the login screen can say "your session ended" instead
+ * of greeting someone who was mid-task as if they had just arrived. Kept in
+ * sessionStorage: it is a note for the next screen in this tab, not a fact
+ * about the person.
+ */
+const ENDED_KEY = "tarazu.session-ended";
+
+export type SessionEndReason = "expired";
+
+export function markSessionEnded(reason: SessionEndReason): void {
+  try {
+    window.sessionStorage.setItem(ENDED_KEY, reason);
+  } catch {
+    // Storage unavailable: the login screen shows its usual greeting.
+  }
+}
+
+/** Read and clear the note, so it is shown once. */
+export function consumeSessionEndReason(): SessionEndReason | null {
+  try {
+    const reason = window.sessionStorage.getItem(ENDED_KEY);
+    if (reason) window.sessionStorage.removeItem(ENDED_KEY);
+    return reason === "expired" ? reason : null;
+  } catch {
+    return null;
+  }
+}

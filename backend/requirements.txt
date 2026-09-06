@@ -44,3 +44,9 @@ httpx>=0.27,<1.0
 
 # --- Tests -------------------------------------------------------------------
 pytest>=8.0,<9.0
+# Property-based tests over the spreadsheet readers and the upload route
+# (tests/test_fuzz_readers.py): random bytes and tables that must always end
+# in a refusal or a case, never a crash.
+hypothesis>=6.100,<7.0
+# The lint pass: `ruff check backend/app backend/tests scripts --select E9,F,PLE`.
+ruff>=0.5,<1.0

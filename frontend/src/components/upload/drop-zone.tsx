@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, FileUp, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileUp, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatFileSize } from "@/lib/format";
 
@@ -13,6 +13,7 @@ export function DropZone({
   files,
   onFiles,
   disabled,
+  error,
 }: {
   label: string;
   hint: string;
@@ -22,6 +23,11 @@ export function DropZone({
   files: File[];
   onFiles: (files: File[]) => void;
   disabled?: boolean;
+  /**
+   * The backend's refusal of what is in this slot, in one line. Marks the
+   * slot so the person can see which file to replace.
+   */
+  error?: string | null;
 }) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = React.useState(false);
@@ -70,17 +76,22 @@ export function DropZone({
           setDragOver(false);
           if (!disabled) takeFiles(event.dataTransfer.files);
         }}
+        data-invalid={error ? "true" : undefined}
         className={cn(
           "flex min-h-40 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors",
           dragOver
             ? "border-brand-600 bg-brand-50"
-            : hasFiles
-              ? "border-emerald-300 bg-emerald-50/40"
-              : "border-slate-300 bg-white hover:border-brand-600/60 hover:bg-slate-50",
+            : error
+              ? "border-rose-400 bg-rose-50/50"
+              : hasFiles
+                ? "border-emerald-300 bg-emerald-50/40"
+                : "border-slate-300 bg-white hover:border-brand-600/60 hover:bg-slate-50",
           disabled && "pointer-events-none opacity-60",
         )}
       >
-        {hasFiles ? (
+        {error ? (
+          <AlertTriangle className="h-7 w-7 text-rose-500" aria-hidden />
+        ) : hasFiles ? (
           <CheckCircle2 className="h-7 w-7 text-emerald-600" aria-hidden />
         ) : (
           <FileUp className="h-7 w-7 text-ink-400" aria-hidden />
@@ -104,6 +115,9 @@ export function DropZone({
 
       {rejected && (
         <p className="mt-1.5 text-xs text-rose-600">Not accepted: {rejected}</p>
+      )}
+      {error && !rejected && (
+        <p className="mt-1.5 text-xs font-medium text-rose-700">{error}</p>
       )}
 
       {hasFiles && (

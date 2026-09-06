@@ -562,8 +562,18 @@ def test_ledger_reads_excel_too() -> None:
 
 
 def test_a_missing_required_column_is_reported_clearly() -> None:
-    with pytest.raises(LedgerReadError, match="party_name"):
+    with pytest.raises(LedgerReadError, match="who was paid") as error:
         read_ledger("DOC-LED-003", "ledger.csv", csv_bytes("Date,Amount\n01/06/2026,100\n"))
+    # The refusal is a guide, not just a sentence: the screen lays it out.
+    problem = error.value.problem
+    assert problem.code == "missing_columns"
+    assert problem.document == "ledger"
+    assert problem.filename == "ledger.csv"
+    assert problem.found_columns == ["Date", "Amount"]
+    assert [field.name for field in problem.missing] == ["party_name"]
+    assert "Party" in problem.missing[0].accepted_headers
+    assert "Description" in problem.missing[0].accepted_headers
+    assert problem.guidance
 
 
 def test_an_unsupported_ledger_format_is_rejected() -> None:

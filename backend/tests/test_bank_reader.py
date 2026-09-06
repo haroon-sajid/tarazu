@@ -402,16 +402,11 @@ def test_an_empty_statement_is_rejected() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_the_bank_reader_imports_no_ai_client() -> None:
-    """A spreadsheet cell must never meet a model. This is the whole point.
-
-    Read off the import statements rather than grepping the text, so the module
-    docstring stays free to explain *why* it does not call Qwen.
-    """
+def _imports_of(module) -> set[str]:
+    """Read off the import statements rather than grepping the text, so the
+    module docstring stays free to explain *why* it does not call Qwen."""
     import ast
     from pathlib import Path
-
-    import app.modules.extraction.bank_reader as module
 
     tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
     imported: set[str] = set()
@@ -420,8 +415,35 @@ def test_the_bank_reader_imports_no_ai_client() -> None:
             imported.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module)
+    return imported
 
-    assert imported == {
-        "__future__", "io", "logging", "re", "datetime", "decimal",
-        "pandas", "app.shared.schemas",
+
+def test_the_bank_reader_imports_no_ai_client() -> None:
+    """A spreadsheet cell must never meet a model. This is the whole point."""
+    import app.modules.extraction.bank_reader as module
+
+    assert _imports_of(module) == {
+        "__future__", "logging", "re", "decimal",
+        "app.modules.extraction.spreadsheet", "app.shared.problems",
+        "app.shared.schemas",
+    }
+
+
+def test_the_shared_spreadsheet_plumbing_imports_no_ai_client() -> None:
+    """The plumbing both readers stand on is held to the same rule."""
+    import app.modules.extraction.spreadsheet as module
+
+    assert _imports_of(module) == {
+        "__future__", "csv", "io", "logging", "re", "dataclasses", "datetime",
+        "decimal", "typing", "pandas", "app.shared.problems", "app.shared.schemas",
+    }
+
+
+def test_the_ledger_reader_imports_no_ai_client() -> None:
+    import app.modules.extraction.ledger_reader as module
+
+    assert _imports_of(module) == {
+        "__future__", "logging", "decimal",
+        "app.modules.extraction.spreadsheet", "app.shared.problems",
+        "app.shared.schemas",
     }

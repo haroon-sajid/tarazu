@@ -27,7 +27,7 @@ from datetime import date as Date
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -81,8 +81,10 @@ __all__ = [
     "Organization",
     "OrganizationMember",
     "OrgInvitation",
+    "ProblemField",
     "ProductRevenue",
     "Provenance",
+    "ReadProblem",
     "ReadinessComponent",
     "RegionSummary",
     "ReportFormat",
@@ -97,6 +99,7 @@ __all__ = [
     "Severity",
     "SignOff",
     "StatusBreakdown",
+    "UploadSlot",
     "UserProfile",
     "ValueCorrection",
     "VerificationOutcome",
@@ -1357,6 +1360,53 @@ class Client(TarazuModel):
 
 
 # --------------------------------------------------------------------------- #
+# Upload problems
+#
+# When a file cannot be used, the person who uploaded it needs more than an
+# exception's text: which file, what it contained, what it lacked, and what to
+# do about it. Every reader that refuses a file says so in this shape, and the
+# upload screen turns it into a guide. `message` is always complete on its own,
+# so a caller that shows nothing else still tells the whole story.
+# --------------------------------------------------------------------------- #
+
+#: Which upload a problem is about. `sales_data` is the analytics export, which
+#: is uploaded on its own screen and is not one of the case's documents.
+UploadSlot = Literal["ledger", "bank_statement", "invoice", "sales_data"]
+
+
+class ProblemField(TarazuModel):
+    """One thing a file has to carry for Tarazu to read it, and why."""
+
+    #: The canonical name the readers use: `date`, `amount`, `party_name`.
+    name: str = Field(min_length=1)
+    #: What a person would call it: "Amount".
+    label: str = Field(min_length=1)
+    #: What breaks without it, in one sentence.
+    why: str = Field(min_length=1)
+    #: Header names that satisfy it, as they would be written in the file.
+    accepted_headers: list[str] = Field(default_factory=list)
+
+
+class ReadProblem(TarazuModel):
+    """Why an upload could not be used, in a shape a screen can lay out.
+
+    `code` is stable and machine-readable; `title` and `message` are for a
+    person. The lists are structure for a guide: the columns the file actually
+    had, the ones it needs, and the steps that fix it. None of them repeats a
+    number Tarazu computed — this is about the file, not the audit.
+    """
+
+    code: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    message: str = Field(min_length=1)
+    document: UploadSlot | None = None
+    filename: str | None = None
+    found_columns: list[str] = Field(default_factory=list)
+    missing: list[ProblemField] = Field(default_factory=list)
+    guidance: list[str] = Field(default_factory=list)
+
+
+# --------------------------------------------------------------------------- #
 # Background jobs
 #
 # Extraction over a real bank statement takes tens of seconds. A request should
@@ -1403,12 +1453,15 @@ class JobRecord(TarazuModel):
     finished_at: datetime | None = None
     #: Set only when `status` is `failed`. The same text the case carries.
     error: str | None = None
+    #: The failure as a guide, when the work could say what to do about it:
+    #: which document, what it lacked, how to fix it. `error` is its message.
+    problem: ReadProblem | None = None
 
     @model_validator(mode="after")
     def _failure_says_why(self) -> JobRecord:
         if self.status is JobStatus.FAILED and not self.error:
             raise ValueError("a failed job must record why it failed")
-        if self.status is not JobStatus.FAILED and self.error:
+        if self.status is not JobStatus.FAILED and (self.error or self.problem):
             raise ValueError("only a failed job may carry an error")
         return self
 

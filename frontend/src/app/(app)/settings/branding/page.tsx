@@ -234,7 +234,7 @@ export default function BrandingSettingsPage() {
           {knownNonOwner && (
             <p className="mb-6 rounded-md bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900 ring-1 ring-amber-300">
               You are signed in as a {session?.role}. The letterhead is the
-              firm's identity rather than one auditor's preference, so only an
+              firm&apos;s identity rather than one auditor&apos;s preference, so only an
               owner can save changes here. You can see what your reports carry,
               and an owner can change it.
             </p>

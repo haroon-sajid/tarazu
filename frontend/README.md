@@ -32,12 +32,21 @@ In live mode, sign up a firm (or sign in) on `/signup` or `/login`; the session
 token is held in localStorage and sent on every request. A 401 mid-session
 (token expired or revoked) signs you out and returns you to the login screen.
 
-**Type check and build:**
+**Checks and build:**
 
 ```bash
-npx tsc --noEmit
+npm run check      # typecheck + lint + unit tests, in that order
+npm run typecheck  # tsc --noEmit
+npm run lint       # ESLint with Next's core-web-vitals and TypeScript rule sets
+npm test           # vitest over src/lib/*.test.ts: the API client in fixture
+                   # mode, the fixture assistant, formatting, session storage
 npm run build      # stop the dev server first: both use .next/
 ```
+
+The unit tests run in Node with no browser and no backend; anything that needs
+`window` is stubbed inside the test. They pin the guarantees the fixture mode
+shares with the live routes — every decision explicit, none made twice, every
+rejection with a reason — so the public demo cannot drift from the product.
 
 ## UI conventions
 

@@ -37,7 +37,11 @@ pytest                                  # from the repository root
 
 The suite is hermetic: it ignores `.env` (`TARAZU_DOTENV=0`), makes no network
 call, and runs background jobs inline (`TARAZU_JOBS_INLINE=1`, set in
-`conftest.py`) so nothing has to be polled or slept on.
+`conftest.py`) so nothing has to be polled or slept on. `pytest -m "not slow"`
+skips the performance budgets in `tests/test_performance.py`. The
+property-based tests in `tests/test_fuzz_readers.py` need `hypothesis`, which
+`requirements.txt` installs; `ruff` is there for the lint pass the root README
+shows. See the root README's "Testing" section for what each file proves.
 
 ## Layout
 

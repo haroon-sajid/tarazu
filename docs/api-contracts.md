@@ -27,6 +27,17 @@ are at `http://localhost:8000/docs` once the app is running.
   and a `source` provenance. Every deterministic match carries
   `match_strength: "high" | "medium" | "low"`. See "Two confidences" below.
 - All mutating endpoints emit an audit-trail record and return it in the response.
+- **Every error body is `{"detail": "<a sentence a person can read>"}`**, and
+  `detail` is always complete on its own. A refused upload — a ledger with no
+  amount column, a statement that will not open, a sales export with no header —
+  also carries **`problem`**, the same refusal as a guide the upload screen lays
+  out: `code`, `title`, `message`, which `document` slot, the `filename`, the
+  `found_columns`, what is `missing` (each with the header names that would
+  satisfy it), and `guidance` steps. A `422` from request validation carries
+  `errors`, FastAPI's own list, beside a `detail` that says which fields are
+  missing in words. An unhandled server error is a JSON `500` with a sentence,
+  never a bare text page; the traceback stays in the log. See
+  `app/shared/problems.py` for the codes and `app/api/problems.py` for the shape.
 - Money is a JSON number. Currency is a separate ISO-4217 `currency` field
   (`"PKR"` throughout the sample data).
 - Dates are `YYYY-MM-DD`. Timestamps are RFC 3339 UTC (`2026-06-19T09:41:07Z`).
@@ -544,6 +555,15 @@ usual. **A job row is working state, never evidence**: it says how far the work
 got so a screen can show a bar, and everything that actually happened is in the
 append-only trail exactly as when the pipeline runs inside the request.
 
+A job that fails carries `status: "failed"`, `error` (the reason in a
+sentence), and **`problem`** — the same guide a refused upload answers with
+(see Conventions): which document, what went wrong, what to do. The case is
+marked `failed` with the same reason, whichever step raised, so nothing is
+ever left saying `extracting`. Because every file is read before the job is
+queued, a job fails only for what could not be known up front: the document
+reader down (`document_reader_unavailable`), a page it found nothing on
+(`no_usable_fields`), or an internal fault (`processing_failed`).
+
 ### Bank statements can be spreadsheets
 
 `POST /v1/upload` now accepts a bank statement as `.csv`, `.xlsx`, `.xlsm`, or
@@ -729,9 +749,19 @@ Accepts the three document kinds that open a case. `multipart/form-data`.
 
 | Field | Cardinality | Accepted |
 |---|---|---|
-| `bank_statement` | exactly 1 | `.pdf` |
-| `ledger` | exactly 1 | `.xlsx`, `.xls`, `.csv` |
+| `bank_statement` | exactly 1 | `.pdf`, or the internet-banking export as `.csv`, `.xlsx`, `.xlsm`, `.xls` |
+| `ledger` | exactly 1 | `.xlsx`, `.xlsm`, `.xls`, `.csv` |
 | `invoices` | 1 or more | `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp` |
+
+**Every file is read before a case exists.** The ledger and a spreadsheet
+statement go through the same deterministic readers the pipeline uses; a PDF or
+a photo is opened to prove it is one. The readers take what real exports look
+like — a header under title rows, a cover sheet before the data sheet, a
+`Debit (PKR)` / `Credit (PKR)` pair instead of one amount column, a currency
+word in a header, a Windows-encoded or semicolon-separated CSV, a party named
+only in the narration — and a file they still cannot use is refused with `422`
+and a `problem` guide (see Conventions) before any case row or job is created.
+The same bytes in the `ledger` and `bank_statement` slots are refused too.
 
 ```bash
 curl -X POST http://localhost:8000/v1/upload \
@@ -783,15 +813,18 @@ two extraction passes disagree.
 
 **Errors**
 
-| Status | When |
-|---|---|
-| `401` | No credential, or an unknown/revoked API key |
-| `403` | You belong to no organization, so there is nowhere to open the case; or the API key lacks the `write` scope |
-| `413` | A file is larger than 25 MB |
-| `415` | A file's extension is not accepted for its slot |
-| `422` | A required slot is missing, `invoices` is empty, a file is empty, or the ledger could not be read |
-| `500` | A deterministic step failed after extraction; the case is marked `failed` with the reason |
-| `502` | Qwen was unreachable. Set `DEMO_MODE=true` to run on cached extractions. |
+| Status | When | `problem.code` |
+|---|---|---|
+| `401` | No credential, an expired session, or an unknown/revoked API key | — |
+| `403` | You belong to no organization, so there is nowhere to open the case; or the API key lacks the `write` scope | — |
+| `413` | A file is larger than 25 MB | `file_too_large` |
+| `415` | A file's extension is not accepted for its slot | `unsupported_format` |
+| `422` | A required slot is missing or `invoices` is empty (`errors` beside `detail`); a file is empty (`empty_file`); a file will not open as what its extension says (`unreadable_file`); the ledger or a spreadsheet statement names no date, amount, or party/description (`missing_columns`), or has a header but no usable row under it (`no_usable_rows`); the ledger and the statement are the same file (`duplicate_file`) | as listed |
+| `500` | A step after reading failed; the case is marked `failed` with the reason, and nothing half-built is saved | `processing_failed` |
+| `502` | Qwen was unreachable or returned nothing usable; the case is marked `failed`. Set `DEMO_MODE=true` to run on cached extractions. | `document_reader_unavailable`, `no_usable_fields` |
+
+A queued upload (`?background=true`) can only meet the last two rows after it
+has answered `201`; they then land on the job — see "Uploads can be queued".
 
 ---
 
@@ -961,7 +994,7 @@ by the UI: rejecting without saying why would leave a hole in the audit trail.
 | `403` | You belong to no organization; or the API key is `read`-only and this route needs `write` |
 | `404` | No review item with that id **in your organization**. Another firm's item is `404` too, and an already-decided item of theirs is still `404`, never `409`. |
 | `409` | The item already carries a decision. Decisions are never silently overwritten. |
-| `422` | Reject called without a non-empty `reason` |
+| `422` | Reject called without a `reason`, or with one made only of whitespace (it is trimmed and must say something; 2,000 characters at most) |
 
 A refused decision writes nothing: no half-decision on the item, and no audit
 record. That holds for a cross-tenant attempt as well — the item is never
@@ -1353,7 +1386,8 @@ case or another firm's case, `413` over 25 MB, `415` for a suffix outside the
 list above, `422` for an empty file or one the reader cannot use: no header
 naming a date and an amount (or a quantity and a unit price), a delimited row
 wider than its header (an amount like `Rs. 45,900` must be quoted), or no
-usable rows. The `detail` says which.
+usable rows. The `detail` says which, and `413`, `415`, and `422` carry the
+`problem` guide (see Conventions) with `document: "sales_data"`.
 
 ### `GET /v1/cases/{case_id}/sales-data`
 

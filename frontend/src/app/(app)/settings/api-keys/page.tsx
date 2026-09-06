@@ -498,7 +498,7 @@ export default function ApiKeysSettingsPage() {
               {editing?.scopes.map((scope) => <ScopePill key={scope} scope={scope} />)}
             </span>
             <p className="mt-1.5 text-xs text-ink-400">
-              Permissions are fixed for a key's lifetime. To change them, create
+              Permissions are fixed for a key&apos;s lifetime. To change them, create
               a new key and delete this one.
             </p>
           </div>
@@ -540,7 +540,7 @@ export default function ApiKeysSettingsPage() {
             : "The key stops working immediately and its record is removed for good."}{" "}
           Audit trail entries stay in the trail, but the ones naming{" "}
           <span className="font-mono text-xs">{deleting?.key_prefix}…</span>{" "}
-          will no longer resolve to this key's name or creator.
+          will no longer resolve to this key&apos;s name or creator.
         </p>
         {deleteError && (
           <p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">

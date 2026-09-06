@@ -8,10 +8,12 @@ modules is all it does.
 The three deterministic steps — `matching.run_matching`, `rules.evaluate_flags`,
 and `rules.benford_analysis` — run on every upload. Sales analytics is not part
 of this pipeline: sales data exports are uploaded separately and analyzed on
-demand. A case that gets past extraction always ends `ready_for_review`; if one
-of the deterministic steps fails the case is marked `failed` with the reason,
-and the error is raised so the caller can report it, rather than a half-built
-review queue being saved as if it were whole.
+demand. A case that gets through always ends `ready_for_review`. If any step
+fails — a document that will not read, a reader that is down, a deterministic
+step that raises — the case is marked `failed` with the reason in plain words,
+and a `PipelineError` carrying the same reason as a `ReadProblem` is raised so
+the caller can show it, rather than a half-built review queue being saved as if
+it were whole or a case left saying `extracting` forever.
 """
 
 from __future__ import annotations
@@ -21,11 +23,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from pydantic import ValidationError
+
 from app.core.audit import Actor, record_action, record_actor_action, record_ai_action
 from app.core.repository import CaseRepository, DocumentStore, StoredDocument
 from app.modules.extraction import service as extraction
 from app.modules.matching import service as matching
 from app.modules.rules import service as rules
+from app.shared import problems
+from app.shared.problems import ReadProblemError
 from app.shared.schemas import (
     ActorType,
     AuditAction,
@@ -39,17 +45,61 @@ from app.shared.schemas import (
     Invoice,
     LedgerEntry,
     MatchResult,
+    ReadProblem,
     ReviewItem,
 )
 
 __all__ = [
+    "PipelineError",
     "PipelineOutcome",
     "RULES_CONFIG",
     "content_type_for",
+    "problem_for",
     "run_pipeline",
 ]
 
 logger = logging.getLogger(__name__)
+
+
+class PipelineError(RuntimeError):
+    """The case could not be processed. It is marked `failed`; `problem` says why.
+
+    Raised for every failure the pipeline meets, whatever raised underneath:
+    the original exception is chained as the cause, and `problem` is the same
+    refusal the upload screen shows for a file it could not read — a title, a
+    message, and what to do about it.
+    """
+
+    def __init__(self, problem: ReadProblem) -> None:
+        super().__init__(problem.message)
+        self.problem = problem
+
+
+def problem_for(error: BaseException, document: StoredDocument | None = None) -> ReadProblem:
+    """The `ReadProblem` for whatever went wrong, in the person's words.
+
+    A reader's own refusal is passed through as it is. A reader that is down,
+    a document the reader found nothing on, and a file that will not open are
+    each said for the document being read at the time; anything else is an
+    internal failure, reported with its reason so an administrator can find it
+    in the log.
+    """
+    slot = document.document_type.value if document is not None else None
+    filename = document.filename if document is not None else None
+    if isinstance(error, ReadProblemError):
+        return error.problem
+    if isinstance(error, extraction.QwenError):
+        return problems.document_reader_unavailable(slot, filename, str(error))
+    if isinstance(error, extraction.ExtractionError):
+        return problems.no_usable_fields(slot, filename)
+    if (
+        document is not None
+        and isinstance(error, ValueError)
+        and not isinstance(error, ValidationError)
+    ):
+        kind = "PDF" if document.filename.lower().endswith(".pdf") else "image"
+        return problems.unreadable_file(slot, filename, str(error), kind=kind)
+    return problems.processing_failed(f"{type(error).__name__}: {error}")
 
 #: The rule configuration handed to `rules.service.evaluate_flags`: the module's
 #: defaults, with any `RULES_*` environment overrides. Kept as a module-level
@@ -132,9 +182,12 @@ def run_pipeline(
             than only once the worker gets to it.
 
     Returns:
-        A `PipelineOutcome` describing what was produced. Extraction errors
-        propagate to the caller, which turns them into HTTP responses; a
-        failure in a deterministic step marks the case `failed` and re-raises.
+        A `PipelineOutcome` describing what was produced.
+
+    Raises:
+        PipelineError: Any step failed. The case is already marked `failed`
+            with the reason, nothing half-built was saved as a queue, and
+            `problem` on the error is the reason as a guide for the person.
     """
     progress = on_progress or _noop_progress
     config = RULES_CONFIG if rules_config is None else rules_config
@@ -155,6 +208,51 @@ def run_pipeline(
                         detail=f"{len(documents)} documents for {client_name}")
 
     outcome = PipelineOutcome(case_id=case_id, status=CaseStatus.UPLOADED)
+    #: The document under the reader when something raised, so the failure can
+    #: name the right file. A one-slot list, because the steps run in a helper.
+    reading_box: list[StoredDocument | None] = [None]
+
+    try:
+        items = _run_steps(
+            org_id, case_id, documents, actor, repository, storage, config,
+            progress, outcome, reading_box,
+        )
+    except Exception as error:
+        # Nothing half-done is left looking whole: the case says it failed and
+        # why, in the same words the person will read, and the caller gets a
+        # `PipelineError` carrying them. The trail above still records
+        # everything that did happen.
+        problem = problem_for(error, reading_box[0])
+        logger.exception("Case %s failed: %s", case_id, problem.message)
+        try:
+            repository.set_case_status(org_id, case_id, CaseStatus.FAILED, problem.message)
+        except Exception:  # noqa: BLE001 - the original failure is the one to report
+            logger.warning("Could not mark case %s as failed", case_id, exc_info=True)
+        outcome.status = CaseStatus.FAILED
+        outcome.detail = problem.message
+        raise PipelineError(problem) from error
+
+    repository.set_case_status(org_id, case_id, CaseStatus.READY_FOR_REVIEW)
+    progress(100, f"{len(items)} items ready for review")
+    outcome.review_items = items
+    outcome.status = CaseStatus.READY_FOR_REVIEW
+    return outcome
+
+
+def _run_steps(
+    org_id: str,
+    case_id: str,
+    documents: list[tuple[StoredDocument, bytes]],
+    actor: Actor,
+    repository: CaseRepository,
+    storage: DocumentStore,
+    config: dict[str, Any],
+    progress: ProgressReporter,
+    outcome: PipelineOutcome,
+    reading_box: list[StoredDocument | None],
+) -> list[ReviewItem]:
+    """Steps 1–5, in order. `reading_box[0]` names the document under the reader
+    while one is, so a failure there can be reported against the right file."""
 
     # -- 1. Store the bytes ------------------------------------------------- #
     progress(5, f"Storing {len(documents)} documents")
@@ -179,6 +277,7 @@ def run_pipeline(
 
     total_documents = max(1, len(documents))
     for index, (document, content) in enumerate(documents, start=1):
+        reading_box[0] = document
         # 15% → 65% across the documents, so a 40-invoice case still moves.
         progress(
             15 + int(50 * (index - 1) / total_documents),
@@ -244,56 +343,41 @@ def run_pipeline(
                 ),
             )
 
+    reading_box[0] = None
     outcome.ledger_entries = ledger
 
     # -- 3-5. Match, flag, and assemble — all deterministic ------------------ #
     repository.set_case_status(org_id, case_id, CaseStatus.MATCHING)
     progress(70, "Matching transactions")
-    try:
-        matches = matching.run_matching(ledger, bank, invoices)
+    matches = matching.run_matching(ledger, bank, invoices)
+    record_action(
+        repository, org_id, case_id, ActorType.SYSTEM, "matching.service",
+        AuditAction.MATCHING_COMPLETED,
+        detail=(
+            f"{len(matches)} results over {len(ledger)} ledger rows, "
+            f"{len(bank)} bank transactions, {len(invoices)} invoices"
+        ),
+    )
+
+    progress(82, "Applying audit rules")
+    flags = rules.evaluate_flags(
+        ledger, matches, config, invoices=invoices, bank=bank
+    )
+    for flag in flags:
         record_action(
-            repository, org_id, case_id, ActorType.SYSTEM, "matching.service",
-            AuditAction.MATCHING_COMPLETED,
-            detail=(
-                f"{len(matches)} results over {len(ledger)} ledger rows, "
-                f"{len(bank)} bank transactions, {len(invoices)} invoices"
-            ),
+            repository, org_id, case_id, ActorType.SYSTEM, "rules.service",
+            AuditAction.FLAG_RAISED, item_id=flag.source_row_id,
+            detail=f"{flag.rule_id} ({flag.severity.value}): {flag.explanation}",
         )
 
-        progress(82, "Applying audit rules")
-        flags = rules.evaluate_flags(
-            ledger, matches, config, invoices=invoices, bank=bank
-        )
-        for flag in flags:
-            record_action(
-                repository, org_id, case_id, ActorType.SYSTEM, "rules.service",
-                AuditAction.FLAG_RAISED, item_id=flag.source_row_id,
-                detail=f"{flag.rule_id} ({flag.severity.value}): {flag.explanation}",
-            )
+    progress(90, "Running Benford analysis")
+    repository.save_benford(org_id, case_id, rules.benford_analysis(ledger))
 
-        progress(90, "Running Benford analysis")
-        repository.save_benford(org_id, case_id, rules.benford_analysis(ledger))
-
-        progress(95, "Assembling the review queue")
-        items = build_review_items(case_id, ledger, bank, invoices, matches, flags,
-                                   outcome.extractions)
-        repository.save_review_items(org_id, case_id, items)
-    except Exception as error:
-        # Nothing half-done is left looking whole: the case says it failed and
-        # why, and the caller gets the error. The trail above still records
-        # everything that did happen.
-        detail = f"{type(error).__name__}: {error}"
-        logger.exception("Case %s failed after extraction: %s", case_id, detail)
-        repository.set_case_status(org_id, case_id, CaseStatus.FAILED, detail)
-        outcome.status = CaseStatus.FAILED
-        outcome.detail = detail
-        raise
-
-    repository.set_case_status(org_id, case_id, CaseStatus.READY_FOR_REVIEW)
-    progress(100, f"{len(items)} items ready for review")
-    outcome.review_items = items
-    outcome.status = CaseStatus.READY_FOR_REVIEW
-    return outcome
+    progress(95, "Assembling the review queue")
+    items = build_review_items(case_id, ledger, bank, invoices, matches, flags,
+                               outcome.extractions)
+    repository.save_review_items(org_id, case_id, items)
+    return items
 
 
 def build_review_items(

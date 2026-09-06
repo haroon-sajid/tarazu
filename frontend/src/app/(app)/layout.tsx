@@ -7,7 +7,7 @@
  */
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -17,11 +17,17 @@ import { Workspace } from "@/components/layout/workspace";
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { session } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
+  // Signed out — by a click, or by the token running out — goes to the login
+  // screen, which brings the person back here once they sign in again.
   React.useEffect(() => {
-    if (session === null) router.replace("/login");
-  }, [session, router]);
+    if (session !== null) return;
+    const next =
+      pathname && pathname !== "/dashboard" ? `?next=${encodeURIComponent(pathname)}` : "";
+    router.replace(`/login${next}`);
+  }, [session, router, pathname]);
 
   if (!session) {
     return (

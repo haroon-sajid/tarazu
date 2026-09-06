@@ -199,7 +199,7 @@ export default function SamplingPage() {
       <div className="mb-5">
         <h1 className="text-xl font-bold text-ink-900">Sampling</h1>
         <p className="mt-1 max-w-3xl text-sm text-ink-600">
-          Draw a subset of the case's population for substantive testing, and
+          Draw a subset of the case&apos;s population for substantive testing, and
           keep the record of how it was drawn. The selection, the totals, and
           the coverage are computed by deterministic code, never by a model,
           and every draw comes back with the seed that reproduces it.
@@ -301,7 +301,7 @@ export default function SamplingPage() {
               </p>
               <p className="mx-auto mt-1 max-w-md text-sm text-sky-800">{unavailable}</p>
               <p className="mx-auto mt-2 max-w-md text-xs text-sky-700">
-                A sample has to be drawn from the case's real population by the
+                A sample has to be drawn from the case&apos;s real population by the
                 deterministic sampling module. Inventing one in the browser
                 would produce a selection nobody could reproduce or defend, so
                 this screen waits for the backend instead.
@@ -451,7 +451,7 @@ export default function SamplingPage() {
               )}
 
               <p className="text-[11px] leading-relaxed text-ink-400">
-                Case {sample.case_id}. The draw is recorded in the case's
+                Case {sample.case_id}. The draw is recorded in the case&apos;s
                 immutable audit trail as {sample.audit_record.audit_id}, so the
                 file shows when this sample was taken and by whom.
               </p>

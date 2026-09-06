@@ -38,6 +38,7 @@ from app.shared.schemas import (
     OrgInvitation,
     OrgProfile,
     OrgRole,
+    ReadProblem,
     ReportRecord,
     ReviewItem,
     SalesDataUpload,
@@ -130,9 +131,18 @@ class HealthResponse(TarazuModel):
 
 
 class ErrorResponse(TarazuModel):
-    """FastAPI's error shape, declared so it appears in the OpenAPI schema."""
+    """Every error body: a sentence a person can read, and sometimes more.
+
+    `detail` is always present and always complete on its own. A refused upload
+    — a ledger with no amount column, a statement that will not open — also
+    carries `problem`, the same refusal as a guide: which file, what it held,
+    what it lacked, and what to do. A `422` from request validation carries
+    `errors`, FastAPI's own list, for developers.
+    """
 
     detail: str
+    problem: ReadProblem | None = None
+    errors: list[dict] | None = None
 
 
 class UploadedDocument(TarazuModel):
@@ -200,10 +210,19 @@ class RejectRequest(TarazuModel):
     """`POST /v1/review-items/{id}/reject`. A reason is mandatory.
 
     Rejecting without saying why would leave a hole in the audit trail, so the
-    reason is required by the contract rather than by the UI.
+    reason is required by the contract rather than by the UI — and a reason
+    made of spaces is no reason.
     """
 
-    reason: str = Field(min_length=1)
+    reason: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("a rejection needs a reason; say why the item is refused")
+        return stripped
 
 
 class DecisionResponse(TarazuModel):
@@ -775,6 +794,9 @@ class JobSummary(TarazuModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     error: str | None = None
+    #: The failure as a guide, when there is one: the same shape a refused
+    #: upload answers with, so the upload screen shows both the same way.
+    problem: ReadProblem | None = None
     #: True once the job has stopped, whether it worked or not.
     finished: bool = False
 
@@ -790,6 +812,7 @@ class JobSummary(TarazuModel):
             started_at=record.started_at,
             finished_at=record.finished_at,
             error=record.error,
+            problem=record.problem,
             finished=record.status.is_terminal,
         )
 

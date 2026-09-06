@@ -246,6 +246,10 @@ def current_user(
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Sign in at POST /v1/auth/login and send the access token as a Bearer header.",
+        detail=(
+            "You are not signed in, or your session has ended. Sign in again to "
+            "continue. (Integrations: send the access token from POST "
+            "/v1/auth/login as a Bearer header, or an API key as X-API-Key.)"
+        ),
         headers={"WWW-Authenticate": "Bearer"},
     )

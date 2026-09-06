@@ -112,7 +112,7 @@ what it must never do. Respect those constraints.
 - **The UI never computes.** Every number on screen is one the backend
   computed. No summing, averaging, or deriving in the browser.
 
-## Development Status (last updated 2026-08-31 — keep this section current)
+## Development Status (last updated 2026-09-06 — keep this section current)
 
 **Phases 0 and 1 of [docs/product-plan.md](docs/product-plan.md) are
 delivered.** Phase 0 ("finish the core"): a case goes from upload to a
@@ -143,12 +143,43 @@ build on are already live.
 - Tests: `pytest` from the repo root (hermetic: no `.env`, no network).
   Background jobs run inline in the suite (`TARAZU_JOBS_INLINE=1`, set in
   `conftest.py`) so nothing has to be polled or slept on.
-- Supabase: eleven migrations, `python scripts/apply_supabase_schema.py`
-  (`--check` reports which have landed). `0009-sales-data-uploads.sql` is the
-  newest, adding `sales_data_uploads` for the sales exports a case carries;
-  `0008-sales-analytics.sql` added the saved readout table plus the
-  audit-action check restated with the full merged list. Both are additive and
-  idempotent, so they are safe against live data.
+- Supabase: twelve migrations, `python scripts/apply_supabase_schema.py`
+  (`--check` reports which have landed). `0010-jobs-problem.sql` is the
+  newest, adding the nullable `jobs.problem` JSON column that carries a failed
+  upload's reason as a guide (the Supabase store writes a job without it, with
+  a warning, until the migration lands); `0009-sales-data-uploads.sql` added
+  `sales_data_uploads`; `0008-sales-analytics.sql` added the saved readout
+  table plus the audit-action check restated with the full merged list. All
+  are additive and idempotent, so they are safe against live data.
+
+**Errors are for people** (2026-09-06). Every error body is a sentence
+(`app/api/problems.py` rewrites FastAPI's validation list and the bare 500).
+A file an upload cannot use is refused *before* a case or job exists, with a
+`ReadProblem` (`app/shared/problems.py`, the one place refusals are worded)
+carried beside `detail` and, for a failure after acceptance, on the job; the
+pipeline marks the case `failed` for *every* failure, so nothing is left
+saying `extracting`. The ledger and bank readers share
+`extraction/spreadsheet.py` and take real exports: title rows, cover sheets,
+`Debit (PKR)` / `Credit (PKR)` pairs, party-in-narration, cp1252 and
+semicolon CSVs. The frontend shows the guide in a dialog
+(`components/upload/upload-problem-dialog.tsx`), marks the offending slot, and
+ends an expired session itself (timer plus a 401 anywhere) with a notice on
+the login screen and a `?next=` back to the page.
+
+**Tested at every level** (2026-09-06). Beside the feature tests: a
+public-API journey (`tests/test_journey.py`, the pre-deploy smoke test),
+domain edge cases, hardening (Excel formula injection is neutralised in both
+workbook writers — every string cell is pinned to text; upload filenames are
+reduced to a safe basename by `app/api/files.py`; the local store refuses
+paths outside its root), Hypothesis fuzzing of the readers and the upload
+route (never a `500`), and performance budgets (`-m slow`; matching runs the
+cheap date and amount checks before the fuzzy name compare, so a 3,000-row
+month reconciles in seconds rather than minutes). The PDF renderer clips a
+cell at 600 characters and renders invariantly, so a long narration cannot
+crash a report and the same content is the same bytes. The frontend has
+`npm run check` (tsc, ESLint, vitest). Root README "Testing" lists the
+commands. `npm audit` reports three high advisories in `next` 15 / `postcss`
+/ `sharp` whose fix is Next 16, a major upgrade left for the owner to decide.
 
 **Live end to end** (backend + frontend + tests): auth (signup/login/change
 password), tenancy, the **full upload pipeline** — extraction (stubbed by

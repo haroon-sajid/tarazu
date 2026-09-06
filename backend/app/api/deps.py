@@ -231,8 +231,9 @@ def _principal_from_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
-                "Your account does not belong to an organization. "
-                "Create one at POST /v1/auth/signup, or ask an owner to add you."
+                "Your account does not belong to an organization yet, so there "
+                "is no firm to work inside. Create one on the sign-up page, or "
+                "ask an owner to invite you with a join code."
             ),
         )
     return Principal(
@@ -335,7 +336,10 @@ def resolve_case_id(
     if not resolved:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No cases yet. Upload documents at POST /v1/upload to start one.",
+            detail=(
+                "No cases yet. Upload a bank statement, a ledger, and the "
+                "invoices on the Upload screen to start one."
+            ),
         )
     if repository.get_case(principal.org_id, resolved) is None:
         raise HTTPException(

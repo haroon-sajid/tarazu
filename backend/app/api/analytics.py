@@ -22,9 +22,12 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 
 from app.api.deps import Principal, get_repository, get_storage, require_read, require_write
+from app.api.files import safe_filename, suffix_of
+from app.api.problems import ProblemHTTPException, raise_for
 from app.core.audit import record_actor_action
 from app.core.repository import CaseRepository, DocumentStore
 from app.modules.analytics import service as analytics
+from app.shared import problems
 from app.shared.api import SalesDataUploadListResponse, SalesDataUploadResponse
 from app.shared.schemas import AuditAction, SalesAnalyticsResult, SalesDataUpload
 
@@ -41,12 +44,6 @@ SALES_DATA_SUFFIXES = analytics.SUPPORTED_SUFFIXES
 MAX_FILE_BYTES = 25 * 1024 * 1024
 
 _EXCEL_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-
-def _suffix(filename: str | None) -> str:
-    if not filename or "." not in filename:
-        return ""
-    return "." + filename.rsplit(".", 1)[1].lower()
 
 
 def _ensure_case_exists(
@@ -112,39 +109,34 @@ async def upload_sales_data(
     """
     _ensure_case_exists(repository, principal.org_id, case_id)
 
-    if _suffix(file.filename) not in SALES_DATA_SUFFIXES:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=(
-                f"{file.filename!r} is not a supported sales data file. "
-                f"Allowed: {', '.join(sorted(SALES_DATA_SUFFIXES))}"
-            ),
+    filename = safe_filename(file.filename)
+    if suffix_of(filename) not in SALES_DATA_SUFFIXES:
+        raise ProblemHTTPException(
+            problems.unsupported_format("sales_data", filename, sorted(SALES_DATA_SUFFIXES)),
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
         )
 
     content = await file.read()
     if len(content) > MAX_FILE_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"{file.filename!r} is larger than {MAX_FILE_BYTES // 1024 // 1024} MB.",
+        raise ProblemHTTPException(
+            problems.too_large(
+                "sales_data", filename, len(content) / 1024 / 1024,
+                MAX_FILE_BYTES // 1024 // 1024,
+            ),
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         )
     if not content:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"{file.filename!r} is empty.",
-        )
+        raise ProblemHTTPException(problems.empty_upload("sales_data", filename))
 
     sales_data_id = f"SLS-{uuid4().hex[:8]}"
-    filename = file.filename or "unnamed"
 
     # Read it now, so a file the reader cannot use is refused with the reason
-    # instead of being stored and failing every later run.
+    # instead of being stored and failing every later run. The body carries the
+    # refusal as a guide: which columns it had, which it lacks, what to do.
     try:
         analytics.read_sales_export(sales_data_id, filename, content)
     except analytics.SalesReadError as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"The sales data could not be read: {error}",
-        ) from error
+        raise raise_for(error) from error
 
     storage_path = f"{case_id}/sales-data/{sales_data_id}/{filename}"
     content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
@@ -253,10 +245,7 @@ async def run_sales_analytics(
                 upload.sales_data_id, upload.filename, content
             )
         except analytics.SalesReadError as error:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"The sales data in {upload.filename!r} could not be read: {error}",
-            ) from error
+            raise raise_for(error) from error
         records.extend(file_records)
         reports.append(report)
 
@@ -298,8 +287,8 @@ async def get_sales_analytics(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"No sales analytics for case {case_id!r} yet. Run them at "
-                f"POST /v1/cases/{case_id}/analytics."
+                f"No sales analytics for case {case_id!r} yet. Upload a sales "
+                "export on the Analytics screen and the analysis runs from it."
             ),
         )
     return result

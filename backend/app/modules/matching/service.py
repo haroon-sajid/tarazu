@@ -59,9 +59,24 @@ def party_similarity(a: str | None, b: str | None) -> int:
     shared normaliser, so "Gulberg Traders (Pvt) Ltd" and
     "IBFT GULBERG TRADERS PVT LTD" both score 100.
     """
-    if not a or not b:
+    return _similarity(_normalised(a), _normalised(b))
+
+
+def _normalised(name: str | None) -> str | None:
+    """The comparable form of a party name, or None for an absent one.
+
+    Computed once per row by `run_matching` rather than once per pair: the
+    normaliser is a handful of regex passes, and a monthly statement against a
+    monthly ledger is millions of pairs.
+    """
+    return normalise_party_name(name) if name else None
+
+
+def _similarity(normalised_a: str | None, normalised_b: str | None) -> int:
+    """`party_similarity` on names already normalised. Absent names score 0."""
+    if normalised_a is None or normalised_b is None:
         return 0
-    return int(fuzz.token_set_ratio(normalise_party_name(a), normalise_party_name(b)))
+    return int(fuzz.token_set_ratio(normalised_a, normalised_b))
 
 
 # --------------------------------------------------------------------------- #
@@ -128,19 +143,42 @@ def _is_digit_transposition(a: Decimal, b: Decimal) -> bool:
 
 
 def _score_bank_candidate(
-    ledger: LedgerEntry, bank: BankTransaction, date_tolerance_days: int
+    ledger: LedgerEntry,
+    bank: BankTransaction,
+    date_tolerance_days: int,
+    *,
+    ledger_party: str | None = None,
+    bank_party: str | None = None,
 ) -> tuple[int, str, str] | None:
     """Score a ledger/bank pair. Returns (score, rule_id, reason) or None.
 
     Higher score wins. The rule_id and reason describe the best match.
+
+    The cheap tests run first and the fuzzy party compare last, because every
+    rule below needs the pair inside the date window, and every rule but the
+    same-day mismatch needs the amounts close: a pair that fails those cannot
+    score, so its names are never compared. The result is exactly what it was
+    when every pair was compared; only the work is smaller.
+
+    `ledger_party` and `bank_party` are the names already normalised, when the
+    caller has them; otherwise they are normalised here.
     """
     if ledger.currency != bank.currency:
         return None
 
+    days = _days_between(ledger.date, bank.date)
+    if days > date_tolerance_days:
+        return None
     amount_same = _same_amount(ledger.amount, bank.amount)
     amount_close = _within_tolerance(ledger.amount, bank.amount)
-    days = _days_between(ledger.date, bank.date)
-    party_score = party_similarity(ledger.party_name, bank.description)
+    if not amount_close and days != 0:
+        return None
+
+    if ledger_party is None:
+        ledger_party = _normalised(ledger.party_name)
+    if bank_party is None:
+        bank_party = _normalised(bank.description)
+    party_score = _similarity(ledger_party, bank_party)
     party_match = party_score >= _PARTY_SIMILARITY_THRESHOLD
 
     # Rule 1: exact amount + exact date + party similar.
@@ -181,20 +219,29 @@ def _score_bank_candidate(
 
 
 def _score_invoice_candidate(
-    ledger: LedgerEntry, invoice: Invoice, date_tolerance_days: int
+    ledger: LedgerEntry,
+    invoice: Invoice,
+    date_tolerance_days: int,
+    *,
+    ledger_party: str | None = None,
+    invoice_party: str | None = None,
 ) -> tuple[int, str, str] | None:
     """Score a ledger/invoice pair. Returns (score, rule_id, reason) or None."""
     if ledger.currency != invoice.currency:
         return None
 
-    amount_same = _same_amount(ledger.amount, invoice.amount)
-    amount_close = _within_tolerance(ledger.amount, invoice.amount)
     days = _days_between(ledger.date, invoice.date)
-    party_score = party_similarity(ledger.party_name, invoice.party_name)
-    party_match = party_score >= _PARTY_SIMILARITY_THRESHOLD
-
     if days > date_tolerance_days:
         return None
+
+    amount_same = _same_amount(ledger.amount, invoice.amount)
+    amount_close = _within_tolerance(ledger.amount, invoice.amount)
+    if ledger_party is None:
+        ledger_party = _normalised(ledger.party_name)
+    if invoice_party is None:
+        invoice_party = _normalised(invoice.party_name)
+    party_score = _similarity(ledger_party, invoice_party)
+    party_match = party_score >= _PARTY_SIMILARITY_THRESHOLD
 
     # Invoice numbers cited in the ledger description are strong evidence.
     ledger_desc_ref = normalise_reference(ledger.description or "")
@@ -256,13 +303,22 @@ def run_matching(
     # ledger rows (duplicate-payment scenario).
     used_bank_ids: set[str] = set()
 
+    # Each name normalised once, not once per pair it appears in.
+    bank_parties = {transaction.bank_row_id: _normalised(transaction.description) for transaction in bank}
+    invoice_parties = {invoice.invoice_id: _normalised(invoice.party_name) for invoice in invoices}
+
     results: list[MatchResult] = []
     for entry in ledger:
+        entry_party = _normalised(entry.party_name)
         best_bank: tuple[int, BankTransaction, str, str] | None = None
         for transaction in bank:
             if transaction.bank_row_id in used_bank_ids:
                 continue
-            scored = _score_bank_candidate(entry, transaction, date_tolerance_days)
+            scored = _score_bank_candidate(
+                entry, transaction, date_tolerance_days,
+                ledger_party=entry_party,
+                bank_party=bank_parties[transaction.bank_row_id],
+            )
             if scored is None:
                 continue
             score, rule_id, reason = scored
@@ -275,7 +331,11 @@ def run_matching(
 
         best_invoice: tuple[int, Invoice, str, str] | None = None
         for invoice in invoices:
-            scored = _score_invoice_candidate(entry, invoice, date_tolerance_days)
+            scored = _score_invoice_candidate(
+                entry, invoice, date_tolerance_days,
+                ledger_party=entry_party,
+                invoice_party=invoice_parties[invoice.invoice_id],
+            )
             if scored is None:
                 continue
             score, rule_id, reason = scored
@@ -293,7 +353,7 @@ def run_matching(
                 for candidate in invoices:
                     if (
                         _same_amount(entry.amount, candidate.amount)
-                        and party_similarity(entry.party_name, candidate.party_name)
+                        and _similarity(entry_party, invoice_parties[candidate.invoice_id])
                         >= _PARTY_SIMILARITY_THRESHOLD
                     ):
                         invoice = candidate

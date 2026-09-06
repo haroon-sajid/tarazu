@@ -21,10 +21,11 @@ service role included.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import date, datetime, timezone
 
 from app.core.repository import CaseDocument, StoredDocument
-from app.core.supabase_client import SupabaseRest
+from app.core.supabase_client import SupabaseError, SupabaseRest
 from app.shared.schemas import (
     ApiKeyRecord,
     AssistantLanguage,
@@ -45,6 +46,7 @@ from app.shared.schemas import (
     OrgInvitation,
     OrgProfile,
     OrgRole,
+    ReadProblem,
     ReportRecord,
     ReviewItem,
     SalesAnalyticsResult,
@@ -55,6 +57,8 @@ from app.shared.schemas import (
 )
 
 __all__ = ["SupabaseCaseRepository"]
+
+logger = logging.getLogger(__name__)
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -845,16 +849,39 @@ class SupabaseCaseRepository:
     # -- background jobs ---------------------------------------------------- #
 
     def create_job(self, org_id: str, job: JobRecord) -> None:
-        self._rest.insert("jobs", [self._job_row(org_id, job)], upsert=True)
+        self._write_job(org_id, job)
 
     def update_job(self, org_id: str, job: JobRecord) -> None:
         # Working state, not evidence: unlike the trail and the reports, a job
         # row is meant to be rewritten as the work advances.
-        self._rest.insert("jobs", [self._job_row(org_id, job)], upsert=True)
+        self._write_job(org_id, job)
+
+    def _write_job(self, org_id: str, job: JobRecord) -> None:
+        """Upsert the row, surviving a project that predates `jobs.problem`.
+
+        Migration `0010-jobs-problem.sql` adds the column. Until it has been
+        applied, PostgREST refuses a row that names it; the job is then written
+        without its guide rather than left `running` forever, and the log says
+        which migration is owed. The `error` message still lands either way.
+        """
+        row = self._job_row(org_id, job)
+        try:
+            self._rest.insert("jobs", [row], upsert=True)
+        except SupabaseError as error:
+            if "problem" not in row or "problem" not in str(error):
+                raise
+            logger.warning(
+                "jobs.problem is not in the database yet (apply "
+                "infra/supabase/0010-jobs-problem.sql); recording job %s without "
+                "its guide: %s",
+                job.job_id, error,
+            )
+            row.pop("problem")
+            self._rest.insert("jobs", [row], upsert=True)
 
     @staticmethod
     def _job_row(org_id: str, job: JobRecord) -> dict:
-        return {
+        row = {
             "job_id": job.job_id,
             "org_id": org_id,
             "case_id": job.case_id,
@@ -868,6 +895,11 @@ class SupabaseCaseRepository:
             "finished_at": _iso(job.finished_at),
             "error": job.error,
         }
+        # Named only when there is one, so a project that has not applied the
+        # column yet keeps writing every job that did not fail.
+        if job.problem is not None:
+            row["problem"] = job.problem.model_dump(mode="json")
+        return row
 
     def get_job(self, org_id: str, job_id: str) -> JobRecord | None:
         rows = self._rest.select(
@@ -913,6 +945,11 @@ class SupabaseCaseRepository:
             started_at=row.get("started_at"),
             finished_at=row.get("finished_at"),
             error=row.get("error"),
+            problem=(
+                ReadProblem.model_validate(row["problem"])
+                if isinstance(row.get("problem"), dict)
+                else None
+            ),
         )
 
     # -- value corrections --------------------------------------------------- #

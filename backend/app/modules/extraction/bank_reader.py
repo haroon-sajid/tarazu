@@ -12,39 +12,55 @@ pandas takes them exactly, at no cost, with no reading uncertainty at all.
 So this module is the same trade `ledger_reader.py` makes, applied to the
 document where it is worth the most. Ask for the export, and the extraction risk
 on the statement disappears rather than being managed. The provenance of every
-value here is the spreadsheet row it came from (reliability rule 3), never a page
-region, because no page was ever looked at.
+value here is the spreadsheet row it came from (reliability rule 3), never a
+page region, because no page was ever looked at.
 
-This module imports pandas and the shared schemas. It must never import
-`qwen_client`, and no code here may call a model.
+Opening the file, finding the header under the bank's preamble, and reading a
+cell are shared with the ledger reader in `spreadsheet.py`. What is particular
+to a statement is here: which headers mean what, and which way the money went.
+
+This module imports pandas (through `spreadsheet.py`) and the shared schemas.
+It must never import `qwen_client`, and no code here may call a model.
 """
 
 from __future__ import annotations
 
-import io
 import logging
 import re
-from datetime import date as Date
-from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
-import pandas as pd
+from app.modules.extraction.spreadsheet import (
+    SPREADSHEET_SUFFIXES,
+    HeaderMatch,
+    cell,
+    cell_text,
+    load_tables,
+    locate_header,
+    to_date,
+    to_decimal,
+)
+from app.shared.problems import (
+    ReadProblemError,
+    empty_file,
+    missing_columns,
+    no_usable_rows,
+)
+from app.shared.schemas import BankTransaction, ProblemField, Provenance
 
-from app.shared.schemas import BankTransaction, Provenance
-
-__all__ = ["BankStatementReadError", "read_bank_statement"]
+__all__ = ["BANK_STATEMENT_FIELDS", "BankStatementReadError", "read_bank_statement"]
 
 logger = logging.getLogger(__name__)
 
 
-class BankStatementReadError(ValueError):
-    """The statement could not be read: unknown format, or a missing column."""
+class BankStatementReadError(ReadProblemError):
+    """The statement could not be read. `problem` says what to do about it."""
 
 
 #: Header aliases seen in real Pakistani internet-banking exports. Compared
-#: after normalising to lowercase with underscores, so `Txn. Date`, `TXN DATE`
-#: and `txn_date` are all the same header. Order inside a tuple is priority:
-#: the first alias present in the file wins.
+#: after normalising to lowercase with underscores and dropping a currency
+#: word, so `Txn. Date`, `TXN DATE`, and `txn_date` are all the same header
+#: and `Debit (PKR)` is `debit`. Order inside a tuple is priority: the first
+#: alias present in the file wins.
 _ALIASES: dict[str, tuple[str, ...]] = {
     "date": (
         "date", "txn_date", "transaction_date", "value_date", "posting_date",
@@ -57,27 +73,54 @@ _ALIASES: dict[str, tuple[str, ...]] = {
     ),
     "amount": (
         "amount", "transaction_amount", "txn_amount", "signed_amount", "amt",
-        "amount_pkr",
     ),
     "debit": (
         "debit", "withdrawal", "withdrawals", "debit_amount", "withdrawal_amount",
-        "dr", "money_out", "paid_out", "debit_pkr",
+        "dr", "money_out", "paid_out",
     ),
     "credit": (
         "credit", "deposit", "deposits", "credit_amount", "deposit_amount",
-        "cr", "money_in", "paid_in", "credit_pkr",
+        "cr", "money_in", "paid_in",
     ),
     "balance": (
         "balance", "running_balance", "closing_balance", "available_balance",
-        "ledger_balance", "book_balance", "balance_amount", "balance_pkr", "bal",
+        "ledger_balance", "book_balance", "balance_amount", "bal",
     ),
 }
 
-#: The numeric core of a money cell: `284,000.00`, `1 500 000`, `45,900`.
-#: Anchoring on the digits rather than stripping noise is what lets this survive
-#: `Rs. 45,900/-` — where a naive strip leaves the `.` of `Rs.` glued to the
-#: front and the `-` of `/-` glued to the back.
-_MONEY_NUMBER = re.compile(r"\d[\d,\s]*(?:\.\d+)?")
+#: What a statement has to carry, said for the person who has to add it.
+BANK_STATEMENT_FIELDS: dict[str, ProblemField] = {
+    "date": ProblemField(
+        name="date",
+        label="Date",
+        why=(
+            "Every transaction is placed by date; a row without one cannot be "
+            "set against the ledger."
+        ),
+        accepted_headers=[
+            "Date", "Txn Date", "Transaction Date", "Value Date",
+            "Posting Date", "Booking Date",
+        ],
+    ),
+    "amount": ProblemField(
+        name="amount",
+        label="Amount",
+        why=(
+            "Every match works on the amount: either one signed Amount "
+            "column, or a Debit and Credit pair."
+        ),
+        accepted_headers=[
+            "Amount", "Transaction Amount", "Debit and Credit",
+            "Withdrawal and Deposit", "Dr and Cr", "Money Out and Money In",
+        ],
+    ),
+}
+
+#: The whole requirement in one phrase, for the guide.
+_NEEDS = (
+    "the date and the amount (one signed Amount column, or a Debit and Credit "
+    "pair). A Description or Narration column is used when the export has one"
+)
 
 #: A direction marker written next to the figure. Banks state the direction in
 #: words as often as they state it with a sign: `1,500 Dr`, `Cr 2,000`. Matched
@@ -88,121 +131,40 @@ _DIRECTION = re.compile(
 )
 _OUTFLOW_WORDS = frozenset({"dr", "debit", "withdrawal"})
 
-#: Date formats these exports actually use, tried in order. Day-first comes
-#: first because Pakistani bank exports are day-first: `03/04/2026` is 3 April,
-#: not 4 March. The shapes are mutually exclusive anyway — `%d-%m-%Y` cannot
-#: read `2026-04-03`, because 2026 is not a day — so the order is a statement of
-#: intent rather than a tie-break, except between the day-first and two-digit
-#: year variants at the end.
-_DATE_FORMATS: tuple[str, ...] = (
-    "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y",
-    "%Y-%m-%d", "%Y/%m/%d",
-    "%d-%b-%Y", "%d %b %Y", "%d-%B-%Y", "%d %B %Y",
-    "%b %d, %Y", "%d/%m/%y", "%d-%m-%y", "%d-%b-%y", "%d %b %y",
+#: What the unsupported-format refusal adds, because a statement has a second
+#: route into the case that a ledger does not.
+_UNSUPPORTED_NOTE = (
+    "A statement PDF is accepted too, and goes to the document reader instead; "
+    "prefer the CSV or Excel export from internet banking where you have one, "
+    "because a spreadsheet is read exactly and a PDF has to be read by a model."
 )
 
-#: Bank exports often stamp a time onto the date (`03/04/2026 14:22`). The date
-#: is what a reconciliation works in, so the time is parsed and discarded.
-_TIME_SUFFIXES: tuple[str, ...] = ("", " %H:%M:%S", " %H:%M", " %H:%M:%S.%f")
 
-#: A year below this means a format matched by accident (`%d-%m-%Y` reading
-#: `15-06-26` as the year 26). Treated as a failed parse, not as a date.
-_EARLIEST_PLAUSIBLE_YEAR = 1900
+def _has_amount(columns: dict[str, int]) -> bool:
+    return bool({"amount", "debit", "credit"} & set(columns))
 
 
-def _is_blank(value: object) -> bool:
-    """True for the empty cell in every dialect pandas hands back.
-
-    CSV read with `keep_default_na=False` gives `""`; Excel gives `NaN`, and a
-    date column can give `NaT`. `pd.isna` covers the last two and answers False
-    for anything else, so it is safe on a string or an arbitrary object.
-    """
-    if value is None:
-        return True
-    if isinstance(value, str):
-        return not value.strip()
-    return bool(pd.isna(value))
+def _complete(columns: dict[str, int]) -> bool:
+    return "date" in columns and _has_amount(columns)
 
 
-def _normalise_header(name: object) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", str(name).strip().lower()).strip("_")
+def _missing(columns: dict[str, int]) -> list[ProblemField]:
+    missing: list[ProblemField] = []
+    if "date" not in columns:
+        missing.append(BANK_STATEMENT_FIELDS["date"])
+    if not _has_amount(columns):
+        missing.append(BANK_STATEMENT_FIELDS["amount"])
+    return missing
 
 
-def _resolve_columns(frame: pd.DataFrame) -> dict[str, str]:
-    """Map our canonical names onto whatever the bank called their columns."""
-    normalised = {_normalise_header(column): column for column in frame.columns}
-    resolved: dict[str, str] = {}
-    for canonical, aliases in _ALIASES.items():
-        for alias in aliases:
-            if alias in normalised:
-                resolved[canonical] = normalised[alias]
-                break
-
-    found = ", ".join(str(column) for column in frame.columns)
-    if "date" not in resolved:
-        raise BankStatementReadError(
-            "the bank statement is missing a date column. Expected one of: "
-            f"{', '.join(_ALIASES['date'])}. Found columns: {found}"
-        )
-    if not ({"amount", "debit", "credit"} & set(resolved)):
-        raise BankStatementReadError(
-            "the bank statement is missing an amount column: expected either a "
-            "single signed amount, or a debit/credit pair. Expected one of: "
-            f"{', '.join(_ALIASES['amount'] + _ALIASES['debit'] + _ALIASES['credit'])}. "
-            f"Found columns: {found}"
-        )
-    if "description" not in resolved:
-        # Not fatal: the figures still reconcile without a narration, and losing
-        # a whole readable statement over a header we do not recognise would be
-        # a worse trade than matching on amount and date alone.
-        logger.warning(
-            "Bank statement has no description column (found: %s). "
-            "Transactions will be described by their row id.", found
-        )
-    return resolved
-
-
-def _to_decimal(raw: object) -> Decimal | None:
-    """Parse a money cell, signed as it is *written*. Direction words are ignored.
-
-    Handles `Rs. 5,000`, `1,234.56`, `(2,000.00)`, `1,500.00-`, and the blank
-    cell an export writes on the side of a debit/credit pair it is not using.
-    """
-    if _is_blank(raw):
-        return None
-    # Anything that is not text came out of an Excel cell already typed — `int`,
-    # `float`, or one of numpy's look-alikes — and needs none of the string
-    # handling below. Going through `str()` rather than `Decimal(float)` takes
-    # the number the spreadsheet displayed instead of the binary expansion
-    # behind it: `Decimal("12750.25")`, not `12750.2500000000009094947...`.
-    if not isinstance(raw, str):
-        try:
-            return Decimal(str(raw).strip())
-        except (InvalidOperation, ValueError, TypeError):
-            return None
-
-    text = raw.strip()
-    match = _MONEY_NUMBER.search(text)
-    if not match:
-        return None
-
-    digits = match.group(0).replace(",", "").replace(" ", "").rstrip(".")
-    if not digits:
-        return None
-
-    # Accounting style writes negatives as `(1,234.00)`; a bare `-` counts when
-    # it sits before the digits, and some exports trail it instead. A trailing
-    # `/-` is the Pakistani "only" marker, not a minus sign, so the suffix
-    # counts only when it is exactly a minus once the noise is stripped.
-    prefix = text[: match.start()]
-    suffix = text[match.end():].strip()
-    negative = "(" in prefix or "-" in prefix or suffix == "-"
-
-    try:
-        value = Decimal(digits)
-    except InvalidOperation:
-        return None
-    return -value if negative else value
+def _refuse_header(
+    match: HeaderMatch | None, filename: str, first_row: list[str]
+) -> BankStatementReadError:
+    found = match.cells if match is not None else first_row
+    columns = match.columns if match is not None else {}
+    return BankStatementReadError(
+        missing_columns("bank_statement", filename, found, _missing(columns), needs=_NEEDS)
+    )
 
 
 def _direction_of(raw: object) -> int | None:
@@ -227,7 +189,7 @@ def _signed_amount(raw: object) -> Decimal | None:
     two: an export that says `1,500 Dr` means money out even where it also
     prints the figure unsigned.
     """
-    value = _to_decimal(raw)
+    value = to_decimal(raw)
     if value is None:
         return None
     direction = _direction_of(raw)
@@ -236,74 +198,15 @@ def _signed_amount(raw: object) -> Decimal | None:
     return direction * abs(value)
 
 
-def _to_date(raw: object, *, dayfirst: bool) -> Date | None:
-    """Parse a date cell, or `None` when the cell holds no date.
-
-    Tried format by format rather than column at a time, because pandas infers
-    one format from the first row and coerces the rest to `NaT`, and a real
-    export can and does mix `01/04/2026` with `15-Apr-2026` on the same sheet.
-    `pd.to_datetime` is the last resort, so anything the explicit list misses
-    still gets a chance.
-    """
-    if _is_blank(raw):
-        return None
-    # `datetime` first: both it and `pd.Timestamp` are subclasses of `date`,
-    # and Excel hands back a `Timestamp` for every date-formatted cell.
-    if isinstance(raw, datetime):
-        return raw.date()
-    if isinstance(raw, Date):
-        return raw
-
-    text = str(raw).strip()
-
-    for base in _DATE_FORMATS:
-        for suffix in _TIME_SUFFIXES:
-            try:
-                parsed = datetime.strptime(text, base + suffix)
-            except ValueError:
-                continue
-            if parsed.year >= _EARLIEST_PLAUSIBLE_YEAR:
-                return parsed.date()
-
-    fallback = pd.to_datetime(text, errors="coerce", dayfirst=dayfirst)
-    if pd.isna(fallback):
-        return None
-    return fallback.date()
-
-
-def _read_frame(content: bytes, filename: str) -> pd.DataFrame:
-    lowered = filename.lower()
-    if lowered.endswith(".csv"):
-        reader, kwargs = pd.read_csv, {"dtype": object, "keep_default_na": False}
-    elif lowered.endswith((".xlsx", ".xlsm", ".xls")):
-        reader, kwargs = pd.read_excel, {"dtype": object}
-    else:
-        raise BankStatementReadError(
-            f"unsupported bank statement format: {filename!r}. Expected .xlsx, "
-            ".xlsm, .xls, or .csv. A statement PDF goes to `extract_document` "
-            "instead — ask the client for the CSV or Excel export if you can, "
-            "because a spreadsheet is read exactly and a PDF has to be read by a model."
-        )
-
-    try:
-        return reader(io.BytesIO(content), **kwargs)
-    except Exception as error:  # pandas raises a family of unrelated types here
-        raise BankStatementReadError(
-            f"the bank statement {filename!r} could not be opened as a spreadsheet: {error}"
-        ) from error
-
-
-def _combine_debit_credit(
-    row: pd.Series, columns: dict[str, str]
-) -> Decimal | None:
+def _combine_debit_credit(row: list[object], columns: dict[str, int]) -> Decimal | None:
     """Fold a debit/credit pair into one signed amount: **money out is negative**.
 
     `abs()` on each side is deliberate. The column already states the direction,
     so an export that additionally writes its debits as `-1,500` (or as
     `1,500 Dr`) must not end up flipping the sign twice.
     """
-    debit = _to_decimal(row[columns["debit"]]) if "debit" in columns else None
-    credit = _to_decimal(row[columns["credit"]]) if "credit" in columns else None
+    debit = to_decimal(cell(row, columns.get("debit")))
+    credit = to_decimal(cell(row, columns.get("credit")))
     if debit is None and credit is None:
         return None
     return abs(credit or Decimal(0)) - abs(debit or Decimal(0))
@@ -338,6 +241,10 @@ def read_bank_statement(
     export writes with `0.00` on both sides of the pair. The count of what was
     dropped is logged rather than lost.
 
+    **Where the header is.** Found, not assumed: an export that opens with the
+    account holder, the account number, and the period is read from the row
+    that names the columns, on whichever sheet carries it.
+
     Args:
         document_id: The stored document this statement came from.
         filename: Used to pick the reader. `.xlsx`, `.xlsm`, `.xls`, or `.csv`.
@@ -349,33 +256,41 @@ def read_bank_statement(
 
     Returns:
         One `BankTransaction` per usable row, in file order. `bank_row_id` is
-        minted from the spreadsheet row (`BNK-0002` for the first data row), so
-        it is unique within the document and stable across re-reads — a
-        reference number out of the file is not used as the id, because two
-        rows of one statement can legitimately carry the same reference.
+        minted from the spreadsheet row (`BNK-0002` for the first data row under
+        a row-1 header), so it is unique within the document and stable across
+        re-reads — a reference number out of the file is not used as the id,
+        because two rows of one statement can legitimately carry the same
+        reference.
 
     Raises:
         BankStatementReadError: The format is unsupported, the file will not
-            open, a required column is absent, or no usable rows were found.
+            open, the header names no date or no amount, or no usable rows were
+            found. `problem` on the error says which, with what was found and
+            what to do about it.
     """
-    frame = _read_frame(content, filename)
-    if frame.empty:
-        raise BankStatementReadError("the bank statement has no rows")
+    tables = load_tables(
+        content, filename, slot="bank_statement", error=BankStatementReadError,
+        accepted=SPREADSHEET_SUFFIXES, unsupported_note=_UNSUPPORTED_NOTE,
+    )
+    match = locate_header(tables, _ALIASES, complete=_complete)
+    if match is None or not match.complete:
+        raise _refuse_header(match, filename, _first_row(tables))
+    if not match.data_rows:
+        raise BankStatementReadError(empty_file("bank_statement", filename))
 
-    columns = _resolve_columns(frame)
+    columns = match.columns
     # The pair states the direction; a bare `amount` beside it usually does not.
     use_pair = bool({"debit", "credit"} & set(columns))
 
     transactions: list[BankTransaction] = []
     skipped = 0
-    for position, (_index, row) in enumerate(frame.iterrows()):
-        # Spreadsheet row as a human sees it: header is row 1, data starts at 2.
-        row_number = position + 2
-        when = _to_date(row[columns["date"]], dayfirst=dayfirst)
+    for offset, row in enumerate(match.data_rows):
+        row_number = match.row_number(offset)
+        when = to_date(cell(row, columns["date"]), dayfirst=dayfirst)
         amount = (
             _combine_debit_credit(row, columns)
             if use_pair
-            else _signed_amount(row[columns["amount"]])
+            else _signed_amount(cell(row, columns["amount"]))
         )
 
         if when is None or amount is None or amount == 0:
@@ -390,21 +305,25 @@ def read_bank_statement(
                 amount=amount,
                 # The schema requires a description; the row id is the honest
                 # fallback when the export has no narration to give.
-                description=_optional(row, columns, "description") or bank_row_id,
-                balance=(
-                    _signed_amount(row[columns["balance"]])
-                    if "balance" in columns
-                    else None
-                ),
+                description=cell_text(cell(row, columns.get("description"))) or bank_row_id,
+                balance=_signed_amount(cell(row, columns.get("balance"))),
                 currency=currency,
                 source=Provenance(document_id=document_id, row_number=row_number),
             )
         )
 
     if not transactions:
+        example = ", ".join(
+            cell_text(value) or "" for value in (match.data_rows[0] if match.data_rows else [])
+        ).strip(", ")
         raise BankStatementReadError(
-            "no usable rows in the bank statement: every row was missing a date "
-            "or an amount"
+            no_usable_rows(
+                "bank_statement", filename,
+                needs="a date and a non-zero amount",
+                rows_seen=len(match.data_rows),
+                example=example or None,
+                found=match.cells,
+            )
         )
     if skipped:
         logger.info(
@@ -413,10 +332,10 @@ def read_bank_statement(
     return transactions
 
 
-def _optional(row: pd.Series, columns: dict[str, str], name: str) -> str | None:
-    if name not in columns:
-        return None
-    value = row[columns[name]]
-    if _is_blank(value):
-        return None
-    return str(value).strip()
+def _first_row(tables) -> list[str]:
+    for table in tables:
+        for row in table.rows:
+            texts = [cell_text(value) for value in row]
+            if any(texts):
+                return [text for text in texts if text]
+    return []
